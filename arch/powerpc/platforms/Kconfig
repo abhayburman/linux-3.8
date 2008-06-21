@@ -66,6 +66,11 @@ config IPIC
 	bool
 	default n
 
+config PPC_EPAPR_HV_PIC
+	bool
+	depends on PPC_EPAPR_HV
+	default n
+
 config MPIC
 	bool
 	default n
