@@ -173,6 +173,14 @@ config ENCLOSURE_SERVICES
 	  driver (SCSI/ATA) which supports enclosures
 	  or a SCSI enclosure device (SES) to use these services.
 
+config FSL_HV_MANAGER
+	tristate "Freescale hypervisor management driver"
+	depends on FSL_HYPERVISOR
+	default FSL_HYPERVISOR
+	help
+	  This driver allows applications to communicate with the Freescale
+	  Hypervisor.
+
 config SGI_XP
 	tristate "Support communication between SGI SSIs"
 	depends on NET
