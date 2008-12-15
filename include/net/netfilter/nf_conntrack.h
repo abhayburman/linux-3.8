@@ -129,6 +129,16 @@ struct nf_conn {
 		 */
 		char *app_data;
 		unsigned int app_data_len;
+		/*
+		* for l7pm
+		*
+		* matched tag from pme.  -1 before decision, 0 for unknown, tag
+		* for matched protocol */
+		unsigned int tag;
+		/* user ctx pointer */
+		void *userctx;
+		/* num of skbs sent to pm (++ when sent, -- when cb called)*/
+		unsigned int num_skb;
 	} layer7;
 #endif
 
