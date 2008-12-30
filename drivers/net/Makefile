@@ -43,6 +43,11 @@ ucc_geth_driver-objs := ucc_geth.o ucc_geth_ethtool.o
 
 obj-$(CONFIG_FSL_PQ_MDIO) += fsl_pq_mdio.o
 
+ifeq ($(CONFIG_FSL_SOC_BOOKE),y)
+  obj-$(CONFIG_BOARDNET) += fsl_pci_veth/
+  obj-$(CONFIG_CARDNET) += fsl_pci_veth/
+endif
+
 #
 # link order important here
 #
