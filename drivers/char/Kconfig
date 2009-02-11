@@ -1113,5 +1113,14 @@ config DEVPORT
 
 source "drivers/s390/char/Kconfig"
 
+config PPC_EPAPR_HV_BYTECHAN
+	tristate "Freescale hypervisor byte channel driver"
+	depends on PPC_EPAPR_HV
+	default PPC_EPAPR_HV
+	help
+	  This driver creates /dev entries for each ePAPR hypervisor byte
+	  channel, thereby allowing applications to communicate with byte
+	  channels as if they were serial ports.
+
 endmenu
 
