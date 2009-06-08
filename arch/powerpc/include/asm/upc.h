@@ -100,4 +100,6 @@ int ucc_attach_upc_tx_slot(int ucc_num, struct upc_slot_tx *ust);
 int ucc_detach_upc_tx_slot(int ucc_num, struct upc_slot_tx *ust);
 int ucc_attach_upc_rx_slot(int ucc_num, struct upc_slot_rx *usr);
 int ucc_detach_upc_rx_slot(int ucc_num, struct upc_slot_rx *usr);
+int upc_init(void);
+void upc_dump(int upc_num);
 #endif
