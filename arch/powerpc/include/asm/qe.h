@@ -476,6 +476,10 @@ enum comm_dir {
 #define QE_CR_PROTOCOL_ETHERNET		0x0C
 #define QE_CR_PROTOCOL_L2_SWITCH	0x0D
 
+/* Time stamp register */
+#define QE_CETSCR_EC	0x8000
+#define QE_CETSCR_RTE	0x0400
+
 /* BRG configuration register */
 #define QE_BRGC_ENABLE		0x00010000
 #define QE_BRGC_DIVISOR_SHIFT	1
