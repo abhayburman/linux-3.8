@@ -713,6 +713,12 @@ config FSL_GTM
 	help
 	  Freescale General-purpose Timers support
 
+config FSL_MPIC_MSG_INTS
+	bool
+	depends on MPIC
+	help
+	  Freescale MPIC based Message Interrupt support
+
 # Yes MCA RS/6000s exist but Linux-PPC does not currently support any
 config MCA
 	bool
