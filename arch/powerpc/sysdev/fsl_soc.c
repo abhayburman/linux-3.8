@@ -3,6 +3,8 @@
  *
  * Maintained by Kumar Gala (see MAINTAINERS for contact information)
  *
+ * Copyright (C) 2009 Freescale Semiconductor, Inc.
+ *
  * 2006 (c) MontaVista Software, Inc.
  * Vitaly Bordug <vbordug@ru.mvista.com>
  *
@@ -409,3 +411,96 @@ void fsl_rstcr_restart(char *cmd)
 struct platform_diu_data_ops diu_ops;
 EXPORT_SYMBOL(diu_ops);
 #endif
+#ifdef CONFIG_FSL_PME8572
+
+static const char *pme_intrs[] = { "ctrl", "ch0", "ch1", "ch2", "ch3" };
+static int __init pme_of_init(void)
+{
+	struct device_node *np;
+	unsigned int i;
+	struct platform_device *pme_dev;
+	int ret = 0;
+
+	for (np = NULL, i = 0;
+		(np = of_find_compatible_node(np, "pme", "pme8572")) != NULL;
+		i++) {
+		/* reg-space + 5 interrupt lines = 6 resources */
+		struct resource r[6];
+		int k;
+		/* Current driver only supports a single PME node. Catch it. */
+		if (i != 0) {
+			printk(KERN_ERR "fsl_soc.c: multiple PME nodes "
+			"unsupported\n");
+			goto err;
+		}
+
+		memset(r, 0, sizeof(r));
+		ret = of_address_to_resource(np, 0, &r[0]);
+		if (ret)
+			goto err;
+
+		for (k = 0; k < 5; k++) {
+			r[k + 1].name = pme_intrs[k];
+			of_irq_to_resource(np, k, &r[k + 1]);
+		}
+
+		pme_dev = platform_device_register_simple("fsl-pme",
+							i, &r[0], 6);
+		if (IS_ERR(pme_dev)) {
+			ret = PTR_ERR(pme_dev);
+			goto err;
+	}
+	}
+err:
+	return ret;
+}
+arch_initcall(pme_of_init);
+
+/* Contiguous memory carved out by platform code, this needs early "bootmem" */
+static int __pme_8572_num_pages;
+static void *__pme_8572_mem;
+static struct resource fsl_pme_8572_res = {
+	.name = "fsl_pme_8572_pages",
+	.start = 0,
+	.end = 0,
+	.flags = IORESOURCE_MEM | IORESOURCE_BUSY
+};
+
+static int __init pme_setup(char *str)
+{
+	int val;
+	if (get_option(&str, &val)) {
+		int err;
+		__pme_8572_mem = alloc_bootmem_low_pages(val << PAGE_SHIFT);
+		if (!__pme_8572_mem) {
+			printk(KERN_CRIT "fsl_pme_8572_pages: "
+				"allocation of %d pages failed\n", val);
+			return -ENOMEM;
+		}
+		 __pme_8572_num_pages = val;
+		fsl_pme_8572_res.start = (resource_size_t)__pme_8572_mem;
+		fsl_pme_8572_res.end = fsl_pme_8572_res.start +
+						(val << PAGE_SHIFT);
+		err = request_resource(&iomem_resource, &fsl_pme_8572_res);
+		if (err) {
+			panic("fsl_pme_8572_pages: resource failure");
+			return err;
+		}
+		printk(KERN_INFO "fsl_pme_8572_pages: %d pages at %p\n",
+				val, __pme_8572_mem);
+	}
+	return 1;
+}
+int fsl_pme_8572_num_pages(void)
+{
+	return __pme_8572_num_pages;
+}
+EXPORT_SYMBOL(fsl_pme_8572_num_pages);
+void *fsl_pme_8572_mem(void)
+{
+	return __pme_8572_mem;
+}
+EXPORT_SYMBOL(fsl_pme_8572_mem);
+__setup("fsl_pme_8572_pages=", pme_setup);
+
+#endif /* CONFIG_FSL_PME8572 */

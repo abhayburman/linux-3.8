@@ -540,6 +540,15 @@
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
 		};
 
+		/* PME (pattern-matcher) */
+		pme@10000 {
+			device_type = "pme";
+			compatible = "pme8572";
+			reg = <0x10000 0x5000>;
+			interrupts = <0x39 0x2 0x40 0x2 0x41 0x2 0x42 0x2 0x43 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		mpic: pic@40000 {
 			interrupt-controller;
 			#address-cells = <0>;
