@@ -466,5 +466,14 @@ config FSL_PME_FREELISTB
 	  0 through 7, and 0xc0-0xc7 indicates an enabled *master*
 	  mapping to freelist 0 through 7. Here "master" indicates that
 	  the channel virtual freelist should seed the freelist.
+config FSL_TLU
+	tristate "Freescale table lookup unit"
+	depends on MPC85xx_DS || MPC85xx_MDS
+	default m
+	help
+	  If the underlying powerpc platform supports table lookup units
+	  (currently the 8572 or 8568 SoC), then this driver will configure
+	  the TLU hardware and provide kernel driver.
+
 
 endif # MISC_DEVICES

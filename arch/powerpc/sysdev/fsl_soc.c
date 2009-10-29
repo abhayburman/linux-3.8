@@ -32,7 +32,7 @@
 #include <linux/fsl_devices.h>
 #include <linux/fs_enet_pd.h>
 #include <linux/fs_uart_pd.h>
-
+#include <linux/bootmem.h>
 #include <asm/system.h>
 #include <asm/atomic.h>
 #include <asm/io.h>
