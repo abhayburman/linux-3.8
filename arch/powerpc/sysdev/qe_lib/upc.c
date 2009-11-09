@@ -188,7 +188,7 @@ int upc_slot_ep_rec_pri_sel(int slot_num, int ep_num,
 int upc_slot_ep_rate_sel(int slot_num, int ep_num,
 				int sub_rate, struct upc *upc_regs)
 {
-	u32 value, shift;
+	u32 shift;
 	u32 *reg;
 
 	if (ep_num < 15) {
@@ -296,7 +296,6 @@ int _ucc_detach_upc_tx_slot(int ucc_num, struct upc_slot_tx *ust,
 				struct upc_private *upc_priv)
 {
 	u32 *reg;
-	u32 value;
 
 	if ((ust->slot < 0) || ust->slot > UPC_SLOT_MAX_NUM - 1) {
 		printk(KERN_ERR"%s: illegal UPC Tx device number\n",
@@ -370,7 +369,6 @@ int _ucc_detach_upc_rx_slot(int ucc_num, struct upc_slot_rx *usr,
 				struct upc_private *upc_priv)
 {
 	u32 *reg;
-	u32 value;
 
 	if ((usr->slot < 0) || usr->slot > UPC_SLOT_MAX_NUM - 1) {
 		printk(KERN_ERR"%s: illegal UPC Rx device number\n",
