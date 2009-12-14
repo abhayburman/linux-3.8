@@ -528,6 +528,28 @@
 			device_type = "open-pic";
 		};
 
+		message@41400 {
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			interrupts = <
+				0xb0 2
+				0xb1 2
+				0xb2 2
+				0xb3 2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		message@42400 {
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			interrupts = <
+				0xb4 2
+				0xb5 2
+				0xb6 2
+				0xb7 2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		msi@41600 {
 			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
