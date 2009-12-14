@@ -574,6 +574,7 @@
 	};
 
 	pci0: pcie@ffe09000 {
+		cell-index = <1>;
 		compatible = "fsl,mpc8548-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -610,6 +611,7 @@
 	};
 
 	pci1: pcie@ffe0a000 {
+		cell-index = <2>;
 		compatible = "fsl,mpc8548-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
