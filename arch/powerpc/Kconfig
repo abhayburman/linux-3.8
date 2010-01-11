@@ -724,7 +724,7 @@ config FSL_MPIC_MSG_INTS
 
 config FSL_PME8572
 	bool
-	depends on PPC_85xx
+	depends on FSL_PME
 	default y
 
 # Yes MCA RS/6000s exist but Linux-PPC does not currently support any

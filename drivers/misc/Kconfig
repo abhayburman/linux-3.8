@@ -360,7 +360,7 @@ source "drivers/misc/iwmc3200top/Kconfig"
 
 config FSL_PME
 	tristate "Freescale hardware pattern-matcher"
-	depends on FSL_PME8572
+	depends on (PPC_85xx && !PHYS_64BIT)
 	default y
 	help
 	  If the underlying powerpc platform supports pattern-matching
