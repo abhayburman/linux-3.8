@@ -168,6 +168,13 @@
 			compatible = "fsl,elbc-fcm-nand";
 			reg = <0x6 0x0 0x40000>;
 		};
+
+		ngpixis@3,0 {
+			compatible = "fsl,p2020ds-fpga";
+			reg = <0x3 0 0x30>;
+			interrupt-parent = <&mpic>;
+			interrupts = <0 0>;
+		};
 	};
 
 	soc@ffe00000 {

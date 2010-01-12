@@ -201,6 +201,30 @@ static void __init mpc85xx_ds_setup_arch(void)
 	printk("MPC85xx DS board from Freescale Semiconductor\n");
 }
 
+static irqreturn_t event_isr(int irq, void *dev_id)
+{
+
+	printk(KERN_INFO "MPC85xxDS: Event button been pushed.\n");
+	return IRQ_HANDLED;
+}
+
+static int __init p2020ds_ngpixis_init(void)
+{
+	int event_irq, ret;
+	struct device_node *np;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,p2020ds-fpga");
+	if (np) {
+		event_irq = irq_of_parse_and_map(np, 0);
+		ret = request_irq(event_irq, event_isr, 0, "event", NULL);
+		if (ret)
+			printk(KERN_ERR "Can't request board event int\n");
+		of_node_put(np);
+	}
+	return 0;
+}
+machine_device_initcall(p2020_ds, p2020ds_ngpixis_init);
+
 /*
  * Called very early, device-tree isn't unflattened
  */
