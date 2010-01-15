@@ -668,7 +668,7 @@ config NEED_SG_DMA_LENGTH
 
 config GENERIC_ISA_DMA
 	bool
-	depends on PPC64 || POWER4 || 6xx && !CPM2
+	depends on PPC64 || PPC32 || POWER4 || 6xx && !CPM2
 	default y
 
 config PPC_INDIRECT_PCI
