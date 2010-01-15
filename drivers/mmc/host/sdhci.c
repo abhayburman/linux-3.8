@@ -2,7 +2,7 @@
  *  linux/drivers/mmc/host/sdhci.c - Secure Digital Host Controller Interface driver
  *
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
- *  Copyright (C) 2009 Freescale Semiconductor Inc.
+ *  Copyright (C) 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -951,6 +951,9 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		flags |= SDHCI_CMD_INDEX;
 	if (cmd->data)
 		flags |= SDHCI_CMD_DATA;
+
+	if (host->mrq->data && (cmd == host->mrq->data->stop))
+		flags = flags | SDHCI_CMD_ABORT;
 
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
 }
