@@ -389,6 +389,11 @@
 			phy_type = "ulpi";
 		};
 
+		ptp_timer: ptimer@24e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0x24e00 0xb0>;
+		};
+
 		enet0: ethernet@24000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -404,6 +409,7 @@
 			tbi-handle = <&tbi0>;
 			phy-handle = <&phy0>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -448,6 +454,7 @@
 			tbi-handle = <&tbi1>;
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -477,6 +484,7 @@
 			tbi-handle = <&tbi2>;
 			phy-handle = <&phy2>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 
 			mdio@520 {
 				#address-cells = <1>;
