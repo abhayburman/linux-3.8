@@ -1387,6 +1387,9 @@ struct gfar_cpu_dev {
 	struct fsl_msg_unit *msg_virtual_rx;
 	char int_name[GFAR_INT_NAME_MAX];
 	int enabled;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	struct gfar_skb_handler sh;
+#endif
 };
 
 extern int rcv_pkt_steering;

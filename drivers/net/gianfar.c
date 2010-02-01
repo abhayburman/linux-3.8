@@ -1204,11 +1204,27 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 	struct gfar_private *priv;
 	int amount_pull;
 	struct shared_buffer *buf = &per_cpu(gfar_cpu_dev, !cpu).tx_queue;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	struct gfar_skb_handler *sh = &cpu_dev->sh;
+	unsigned long flags;
+#endif
+
 	while (budget--) {
 		if (atomic_read(&buf->buff_cnt) == 0) {
 			break;
 		} else {
 			skb = buf->buffer[buf->out];
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+			if (sh->recycle_count > 0) {
+				spin_lock_irqsave(&sh->lock, flags);
+				buf->buffer[buf->out] = sh->recycle_queue;
+				sh->recycle_queue = buf->buffer[buf->out]->next;
+				sh->recycle_count--;
+				spin_unlock_irqrestore(&sh->lock, flags);
+			} else {
+				buf->buffer[buf->out] = NULL;
+			}
+#endif
 			buf->out = (buf->out + 1) % GFAR_CPU_BUFF_SIZE;
 			atomic_dec(&buf->buff_cnt);
 
@@ -1325,6 +1341,9 @@ void gfar_cpu_dev_init(void)
 		hrtimer_init(&cpu_dev->intr_coalesce_timer, CLOCK_MONOTONIC,
 			 HRTIMER_MODE_ABS);
 		cpu_dev->intr_coalesce_timer.function = gfar_cpu_timer_handle;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+		gfar_reset_skb_handler(&cpu_dev->sh);
+#endif
 
 		cpu_dev->enabled = 1;
 	}
@@ -1377,6 +1396,11 @@ int distribute_packet(struct net_device *dev,
 	unsigned char *eth;
 	struct shared_buffer *buf;
 	ktime_t time;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	struct gfar_skb_handler *sh;
+	struct sk_buff *new_skb;
+	unsigned long flags;
+#endif
 
 	skb_data = skb->data;
 	skb_len = skb->len;
@@ -1406,6 +1430,25 @@ int distribute_packet(struct net_device *dev,
 		kfree_skb(skb);    /* buffer full, drop packet */
 		return 0;
 	}
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	sh = &cpu_dev->sh;
+	if (sh->recycle_count < sh->recycle_max) {
+		if (buf->buffer[buf->in] != NULL)
+			new_skb = buf->buffer[buf->in];
+		else
+			new_skb = gfar_new_skb(dev);
+
+		/* put the obtained/allocated skb into
+		current cpu's recycle buffer */
+		if (new_skb) {
+			spin_lock_irqsave(&sh->lock, flags);
+			new_skb->next = sh->recycle_queue;
+			sh->recycle_queue = new_skb;
+			sh->recycle_count++;
+			spin_unlock_irqrestore(&sh->lock, flags);
+		}
+	}
+#endif
 
 	/* inform other cpu which dev this skb was received on */
 	skb->dev = dev;
@@ -4267,8 +4310,13 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 #endif
 
 	if (skb->truesize == priv->skbuff_truesize) {
-		sh = per_cpu_ptr(priv->rx_queue[qindex]->local_sh,
-						smp_processor_id());
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+		if (rcv_pkt_steering && priv->sps)
+			sh = &__get_cpu_var(gfar_cpu_dev).sh;
+		else
+#endif
+			sh = per_cpu_ptr(priv->rx_queue[qindex]->local_sh,
+							smp_processor_id());
 		/* loosly checking */
 		if (likely(sh->recycle_count < sh->recycle_max)) {
 			if (!atomic_dec_and_test(&skb->users))
@@ -4619,6 +4667,10 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	struct sk_buff *local_head;
 	unsigned long flags;
 	struct gfar_skb_handler *local_sh;
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	struct sk_buff *local_tail;
+	int temp;
+#endif
 #endif
 
 	/* Get the first full descriptor */
@@ -4632,22 +4684,33 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				priv->padding;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-	local_sh = per_cpu_ptr(rx_queue->local_sh, smp_processor_id());
-	if (local_sh->recycle_queue) {
-		local_head = local_sh->recycle_queue;
-		free_skb = local_sh->recycle_count;
-		local_sh->recycle_queue = NULL;
-		local_sh->recycle_count = 0;
-	} else {
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (rcv_pkt_steering && priv->sps) {
 		local_head = NULL;
 		free_skb = 0;
-	}
-	/* global skb_handler for this device */
-	sh = &rx_queue->skb_handler;
-	if (sh->recycle_count == 0 &&
-		priv->skb_handler.recycle_count > 0)
-		sh = &priv->skb_handler;
+		sh = &__get_cpu_var(gfar_cpu_dev).sh;
+	} else {
 #endif
+		local_sh = per_cpu_ptr(rx_queue->local_sh, smp_processor_id());
+		if (local_sh->recycle_queue) {
+			local_head = local_sh->recycle_queue;
+			free_skb = local_sh->recycle_count;
+			local_sh->recycle_queue = NULL;
+			local_sh->recycle_count = 0;
+		} else {
+			local_head = NULL;
+			free_skb = 0;
+		}
+		/* global skb_handler for this device */
+		sh = &rx_queue->skb_handler;
+
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	}
+#endif
+#endif
+	if (sh->recycle_count == 0 &&
+			priv->skb_handler.recycle_count > 0)
+			sh = &priv->skb_handler;
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
 		struct sk_buff *newskb;
@@ -4751,11 +4814,41 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	}
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-	if (free_skb) {
-		/* return to local_sh for next time */
-		local_sh->recycle_queue = local_head;
-		local_sh->recycle_count = free_skb;
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (rcv_pkt_steering && priv->sps) {
+		if (free_skb > 0) {
+			/* return left over skb to cpu's recycle buffer */
+			if (sh->recycle_max >= (sh->recycle_count + free_skb)) {
+				temp = free_skb - 1;
+				local_tail = local_head;
+				while (temp--)
+					local_tail = local_tail->next;
+
+				local_tail->next = sh->recycle_queue;
+				sh->recycle_queue = local_head;
+				sh->recycle_count += free_skb;
+			} else {
+				/* free the left over skbs if recycle buffer
+				cant accomodate */
+				temp = free_skb;
+				while (temp--) {
+					local_tail = local_head;
+					local_head = local_head->next;
+					if (local_tail)
+						dev_kfree_skb_any(local_tail);
+				}
+			}
+		}
+	} else {
+#endif
+		if (free_skb) {
+			/* return to local_sh for next time */
+			local_sh->recycle_queue = local_head;
+			local_sh->recycle_count = free_skb;
+		}
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
 	}
+#endif
 	priv->extra_stats.rx_skbr += howmany_reuse;
 #endif
 
