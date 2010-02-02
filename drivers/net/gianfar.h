@@ -1220,7 +1220,11 @@ struct gfar_priv_rx_q {
 struct gfar_priv_grp {
 	spinlock_t grplock __attribute__ ((aligned (SMP_CACHE_BYTES)));
 #ifdef CONFIG_GIANFAR_TXNAPI
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	struct napi_struct napi_tx[NR_CPUS];
+#else
 	struct napi_struct napi_tx;
+#endif
 	struct napi_struct napi_rx;
 #else
 	struct	napi_struct napi;
@@ -1243,6 +1247,10 @@ struct gfar_priv_grp {
 	char int_name_tx[GFAR_INT_NAME_MAX];
 	char int_name_rx[GFAR_INT_NAME_MAX];
 	char int_name_er[GFAR_INT_NAME_MAX];
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	struct fsl_msg_unit *msg_virtual_tx[NR_CPUS];
+	char int_name_vtx[NR_CPUS][GFAR_INT_NAME_MAX];
+#endif
 };
 
 /* Struct stolen almost completely (and shamelessly) from the FCC enet source
