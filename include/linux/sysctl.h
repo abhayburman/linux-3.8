@@ -275,6 +275,7 @@ enum
 	NET_CORE_AEVENT_ETIME=20,
 	NET_CORE_AEVENT_RSEQTH=21,
 	NET_CORE_WARNINGS=22,
+	RCV_PKT_STEERING = 23,
 };
 
 /* /proc/sys/net/ethernet */

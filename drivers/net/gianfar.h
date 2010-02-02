@@ -1352,7 +1352,37 @@ struct gfar_private {
 	unsigned int skbuff_truesize;
 	struct gfar_skb_handler skb_handler;
 #endif
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	int sps; /*flag for s/w packet steering */
+#endif
 };
+
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+#define INTR_COALESCE_CNT 22
+#define INTR_COALESCE_TIMEOUT 32000 /* in nSecs */
+#define GFAR_CPU_BUFF_SIZE 64
+
+/* producer-consumer buffer for inter cpu packet transfer */
+struct shared_buffer {
+	struct sk_buff *buffer[GFAR_CPU_BUFF_SIZE];
+	int in;
+	int out;
+	atomic_t buff_cnt;
+};
+
+struct gfar_cpu_dev {
+	struct net_device dev;
+	struct napi_struct napi;
+	struct shared_buffer tx_queue;
+	int intr_coalesce_cnt;
+	struct hrtimer intr_coalesce_timer;
+	struct fsl_msg_unit *msg_virtual_rx;
+	char int_name[GFAR_INT_NAME_MAX];
+	int enabled;
+};
+
+extern int rcv_pkt_steering;
+#endif
 
 extern unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
 extern unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];

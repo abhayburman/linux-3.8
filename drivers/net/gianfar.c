@@ -96,6 +96,9 @@
 #include <linux/phy_fixed.h>
 #include <linux/of.h>
 #include <net/xfrm.h>
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+#include <asm/fsl_msg.h>
+#endif
 
 #ifdef CONFIG_NET_GIANFAR_FP
 #include <linux/if_arp.h>
@@ -564,6 +567,10 @@ static void gfar_init_mac(struct net_device *ndev)
 
 }
 
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+DEFINE_PER_CPU(struct gfar_cpu_dev, gfar_cpu_dev);
+#endif
+
 static struct net_device_stats *gfar_get_stats(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
@@ -772,6 +779,9 @@ static int gfar_of_init(struct of_device *ofdev, struct net_device **pdev)
 	const u32 *stash_idx;
 	unsigned int num_tx_qs, num_rx_qs;
 	u32 *tx_queues, *rx_queues;
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	int sps;
+#endif
 
 	if (!np || !of_device_is_available(np))
 		return -ENODEV;
@@ -786,6 +796,14 @@ static int gfar_of_init(struct of_device *ofdev, struct net_device **pdev)
 		printk(KERN_ERR "Cannot do alloc_etherdev, aborting\n");
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if ((num_online_cpus() == 2) &&
+		(!of_device_is_compatible(np, "fsl,etsec2"))) {
+		printk(KERN_INFO "ETSEC: IPS Enabled\n");
+		sps = 1;
+	}
+#endif
 
 	rx_queues = (u32 *)of_get_property(np, "fsl,num_rx_queues", NULL);
 	num_rx_qs = rx_queues ? *rx_queues : 1;
@@ -805,6 +823,9 @@ static int gfar_of_init(struct of_device *ofdev, struct net_device **pdev)
 	priv = netdev_priv(dev);
 	priv->node = ofdev->dev.of_node;
 	priv->ndev = dev;
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	priv->sps = sps;
+#endif
 
 	dev->num_tx_queues = num_tx_qs;
 	dev->real_num_tx_queues = num_tx_qs;
@@ -1131,6 +1152,246 @@ static int get_cpu_number(unsigned char *eth_pkt, int len)
 
 	return cpu_online(cpu) ? cpu : -1;
 }
+
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+static int gfar_cpu_poll(struct napi_struct *napi, int budget)
+{
+	struct gfar_cpu_dev *cpu_dev = &__get_cpu_var(gfar_cpu_dev);
+	struct sk_buff *skb = NULL;
+	int cpu = smp_processor_id();
+	int rx_cleaned = 0;
+	struct net_device *dev;
+	struct gfar_private *priv;
+	int amount_pull;
+	struct shared_buffer *buf = &per_cpu(gfar_cpu_dev, !cpu).tx_queue;
+
+	while (budget--) {
+		if (atomic_read(&buf->buff_cnt) == 0) {
+			break;
+		} else {
+			skb = buf->buffer[buf->out];
+			buf->out = (buf->out + 1) % GFAR_CPU_BUFF_SIZE;
+			atomic_dec(&buf->buff_cnt);
+
+			dev = skb->dev;
+			priv = netdev_priv(dev);
+
+			if (priv->ptimer_present)
+				amount_pull =
+				(gfar_uses_fcb(priv) ? GMAC_FCB_LEN : 0);
+			else
+				amount_pull =
+				(gfar_uses_fcb(priv) ? GMAC_FCB_LEN : 0) +
+					priv->padding;
+
+			gfar_process_frame(dev, skb, amount_pull);
+
+			rx_cleaned++;
+		}
+	}
+
+	if (budget > 0) {
+		napi_complete(napi);
+		fsl_enable_msg(cpu_dev->msg_virtual_rx);
+	}
+
+	return rx_cleaned;
+}
+
+static irqreturn_t gfar_cpu_receive(int irq, void *dev_id)
+{
+	unsigned long flags;
+	struct gfar_cpu_dev *cpu_dev = &__get_cpu_var(gfar_cpu_dev);
+
+	/* clear the status bit */
+	setbits32(cpu_dev->msg_virtual_rx->msr,
+		 (1 << cpu_dev->msg_virtual_rx->msg_num));
+
+	local_irq_save(flags);
+	if (napi_schedule_prep(&cpu_dev->napi)) {
+		/* disable irq */
+		clrbits32(cpu_dev->msg_virtual_rx->mer,
+			(1 << cpu_dev->msg_virtual_rx->msg_num));
+		__napi_schedule(&cpu_dev->napi);
+	}
+	local_irq_restore(flags);
+
+	return IRQ_HANDLED;
+}
+
+void gfar_cpu_setup(struct net_device *dev)
+{
+	return;
+}
+
+static enum hrtimer_restart gfar_cpu_timer_handle(struct hrtimer *timer)
+{
+	struct gfar_cpu_dev *this_cpu_dev = &__get_cpu_var(gfar_cpu_dev);
+	struct gfar_cpu_dev *other_cpu_dev =
+		&per_cpu(gfar_cpu_dev, !smp_processor_id());
+
+	if (timer == &this_cpu_dev->intr_coalesce_timer) {
+		fsl_send_msg(other_cpu_dev->msg_virtual_rx, 0x1);
+		this_cpu_dev->intr_coalesce_cnt = 0;
+	} else {
+		fsl_send_msg(this_cpu_dev->msg_virtual_rx, 0x1);
+		other_cpu_dev->intr_coalesce_cnt = 0;
+	}
+
+	return HRTIMER_NORESTART;
+}
+
+void gfar_cpu_dev_init(void)
+{
+	int err = -1;
+	int i = 0;
+	int j;
+	struct gfar_cpu_dev *cpu_dev;
+
+	for_each_possible_cpu(i) {
+		cpu_dev = &per_cpu(gfar_cpu_dev, i);
+		cpu_dev->enabled = 0;
+
+		init_dummy_netdev(&cpu_dev->dev);
+		netif_napi_add(&cpu_dev->dev,
+			&cpu_dev->napi, gfar_cpu_poll, GFAR_DEV_WEIGHT);
+
+		cpu_dev->msg_virtual_rx = fsl_get_msg_unit();
+		if (IS_ERR(cpu_dev->msg_virtual_rx)) {
+			printk(KERN_WARNING
+				"%s: fsl_get_msg_unit returned error %ld!\n",
+				__func__, IS_ERR(cpu_dev->msg_virtual_rx));
+			goto msg_fail;
+		}
+
+		sprintf(cpu_dev->int_name, "cpu%d_vrx", i);
+		err = request_irq(cpu_dev->msg_virtual_rx->irq,
+			gfar_cpu_receive, 0, cpu_dev->int_name, NULL);
+		if (err < 0) {
+			printk(KERN_WARNING "Can't request msg IRQ %d\n",
+				cpu_dev->msg_virtual_rx->irq);
+			goto irq_fail;
+		}
+		fsl_enable_msg(cpu_dev->msg_virtual_rx);
+
+		for (j = 0; j < GFAR_CPU_BUFF_SIZE; j++)
+			cpu_dev->tx_queue.buffer[j] = NULL;
+
+		cpu_dev->tx_queue.in = 0;
+		cpu_dev->tx_queue.out = 0;
+		cpu_dev->tx_queue.buff_cnt.counter = 0;
+
+		napi_enable(&cpu_dev->napi);
+
+		cpu_dev->intr_coalesce_cnt = 0;
+		hrtimer_init(&cpu_dev->intr_coalesce_timer, CLOCK_MONOTONIC,
+			 HRTIMER_MODE_ABS);
+		cpu_dev->intr_coalesce_timer.function = gfar_cpu_timer_handle;
+
+		cpu_dev->enabled = 1;
+	}
+	return;
+
+irq_fail:
+	fsl_release_msg_unit(cpu_dev->msg_virtual_rx);
+
+msg_fail:
+	netif_napi_del(&cpu_dev->napi);
+
+	for (j = 0; j < i; j++) {
+		cpu_dev = &per_cpu(gfar_cpu_dev, j);
+
+		cpu_dev->enabled = 0;
+		napi_disable(&cpu_dev->napi);
+		free_irq(cpu_dev->msg_virtual_rx->irq, NULL);
+		fsl_release_msg_unit(cpu_dev->msg_virtual_rx);
+		netif_napi_del(&cpu_dev->napi);
+	}
+}
+
+void gfar_cpu_dev_exit(void)
+{
+	int i = 0;
+	struct gfar_cpu_dev *cpu_dev;
+
+	for_each_possible_cpu(i) {
+		cpu_dev = &per_cpu(gfar_cpu_dev, i);
+
+		hrtimer_cancel(&cpu_dev->intr_coalesce_timer);
+		napi_disable(&cpu_dev->napi);
+		free_irq(cpu_dev->msg_virtual_rx->irq, NULL);
+		fsl_release_msg_unit(cpu_dev->msg_virtual_rx);
+		netif_napi_del(&cpu_dev->napi);
+	}
+}
+
+int distribute_packet(struct net_device *dev,
+			struct sk_buff *skb,
+			int amount_pull)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+	struct gfar_cpu_dev *cpu_dev;
+	int target_cpu;
+	int current_cpu = smp_processor_id();
+	unsigned char *skb_data;
+	unsigned int skb_len;
+	unsigned int eth_hdr_offset = 0;
+	unsigned char *eth;
+	struct shared_buffer *buf;
+	ktime_t time;
+
+	skb_data = skb->data;
+	skb_len = skb->len;
+
+	if (amount_pull)
+		eth_hdr_offset += amount_pull;
+	if (priv->ptimer_present)
+		eth_hdr_offset += 8;
+
+	if (eth_hdr_offset > skb_len)
+		return -1;
+
+	eth = skb_data + eth_hdr_offset;
+	target_cpu = get_cpu_number(eth, skb_len - eth_hdr_offset);
+	if (-1 == target_cpu)
+		return -1;
+
+	if (target_cpu == current_cpu)
+		return -1;
+
+	cpu_dev = &__get_cpu_var(gfar_cpu_dev);
+	if (!cpu_dev->enabled)
+		return -1;
+
+	buf = &cpu_dev->tx_queue;
+	if (atomic_read(&buf->buff_cnt) == GFAR_CPU_BUFF_SIZE) {
+		kfree_skb(skb);    /* buffer full, drop packet */
+		return 0;
+	}
+
+	/* inform other cpu which dev this skb was received on */
+	skb->dev = dev;
+	buf->buffer[buf->in] = skb;
+	buf->in = (buf->in + 1) % GFAR_CPU_BUFF_SIZE;
+	atomic_inc(&buf->buff_cnt);
+
+	/* raise other core's msg intr */
+	if (0 == cpu_dev->intr_coalesce_cnt++) {
+		time = ktime_set(0, 0);
+		time = ktime_add_ns(time, INTR_COALESCE_TIMEOUT);
+		hrtimer_start(&cpu_dev->intr_coalesce_timer,
+			time, HRTIMER_MODE_ABS);
+	} else {
+		if (cpu_dev->intr_coalesce_cnt == INTR_COALESCE_CNT) {
+			cpu_dev->intr_coalesce_cnt = 0;
+			hrtimer_cancel(&cpu_dev->intr_coalesce_timer);
+			fsl_send_msg(per_cpu
+			(gfar_cpu_dev, target_cpu).msg_virtual_rx, 0x1);
+		}
+	}
+	return 0;
+}
+#endif
 
 /* Set up the ethernet device structure, private data,
  * and anything else we need before we start */
@@ -4180,6 +4441,9 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	int amount_pull;
 	int howmany = 0;
 	struct gfar_private *priv = netdev_priv(dev);
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	int ret;
+#endif
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	int howmany_reuse = 0;
 	struct gfar_skb_handler *sh;
@@ -4273,8 +4537,27 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				skb_put(skb, pkt_len);
 				rx_queue->stats.rx_bytes += pkt_len;
 				skb_record_rx_queue(skb, rx_queue->qindex);
-				gfar_process_frame(dev, skb, amount_pull);
 
+				if (in_irq() || irqs_disabled())
+					printk("Interrupt problem!\n");
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+				/* Process packet here or send it to other cpu
+				   for processing based on packet headers
+				   hash value
+				 */
+				if (rcv_pkt_steering && priv->sps) {
+					ret = distribute_packet(dev,
+							skb, amount_pull);
+					if (ret)
+						gfar_process_frame(dev,
+							skb, amount_pull);
+				} else {
+					gfar_process_frame(dev,
+						skb, amount_pull);
+				}
+#else
+				gfar_process_frame(dev, skb, amount_pull);
+#endif
 			} else {
 				if (netif_msg_rx_err(priv))
 					printk(KERN_WARNING
@@ -4915,11 +5198,17 @@ static struct of_platform_driver gfar_driver = {
 
 static int __init gfar_init(void)
 {
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	gfar_cpu_dev_init();
+#endif
 	return of_register_platform_driver(&gfar_driver);
 }
 
 static void __exit gfar_exit(void)
 {
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	gfar_cpu_dev_exit();
+#endif
 	of_unregister_platform_driver(&gfar_driver);
 }
 

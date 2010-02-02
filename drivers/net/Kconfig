@@ -2461,6 +2461,28 @@ config 1588_MUX_eTSEC2
 	  Eth2 will not work if this is selected.
 	  This is needed when user want to use external clock, PPn signals etc
 
+config GIANFAR_L2SRAM
+	bool "Selecting L2sram bd allocation"
+	depends on (GIANFAR && MPC85xx)
+	select FSL_85XX_CACHE_SRAM if MPC85xx
+	help
+	  This option supports BD alloc in L2SRAM.
+
+config NET_GIANFAR_FP
+	default y
+	bool "Fast Path routing"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	  Fast path routing. To enable,
+	  $ echo 1 > /proc/sys/net/core/netdev_fastroute
+
+config GFAR_SW_PKT_STEERING
+        default n
+        bool "Enables packet steering between cpus (EXPERIMENTAL)"
+        depends on GIANFAR_TXNAPI && FSL_MPIC_MSG_INTS
+        help
+          Selecting this option enables packet steering between cpus
+
 config UCC_GETH
 	tristate "Freescale QE Gigabit Ethernet"
 	depends on QUICC_ENGINE

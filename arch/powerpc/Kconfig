@@ -719,6 +719,7 @@ config FSL_GTM
 config FSL_MPIC_MSG_INTS
 	bool
 	depends on MPIC
+	default y
 	help
 	  Freescale MPIC based Message Interrupt support
 

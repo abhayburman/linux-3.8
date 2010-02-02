@@ -82,6 +82,10 @@ static int rps_sock_flow_sysctl(ctl_table *table, int write,
 extern int netdev_fastroute;
 #endif
 
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+extern int rcv_pkt_steering;
+#endif
+
 static struct ctl_table net_core_table[] = {
 #ifdef CONFIG_NET
 	{
@@ -102,6 +106,15 @@ static struct ctl_table net_core_table[] = {
 	{
 		.procname	= "netdev_fastroute",
 		.data		= &netdev_fastroute,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec
+	},
+#endif
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	{
+		.procname	= "rcv_pkt_steering",
+		.data		= &rcv_pkt_steering,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec

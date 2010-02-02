@@ -280,6 +280,11 @@ int netdev_fastroute_obstacles;
 EXPORT_SYMBOL(netdev_fastroute_obstacles);
 #endif
 
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+int rcv_pkt_steering;
+EXPORT_SYMBOL(rcv_pkt_steering);
+#endif
+
 #ifdef CONFIG_LOCKDEP
 /*
  * register_netdevice() inits txq->_xmit_lock and sets lockdep class
