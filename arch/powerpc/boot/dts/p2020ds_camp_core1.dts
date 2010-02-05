@@ -153,6 +153,20 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		crypto@30000 {
+			compatible = "fsl,sec3.0", "fsl,sec2.4", "fsl,sec2.2",
+				     "fsl,sec2.1", "fsl,sec2.0";
+			reg = <0x30000 0x10000>;
+			interrupts = <45 2 58 2>;
+			interrupt-parent = <&mpic>;
+			fsl,num-channels = <4>;
+			fsl,channel-fifo-len = <24>;
+			fsl,exec-units-mask = <0x9fe>;
+			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,multi-host-mode = "secondary";
+			fsl,channel-remap = <0x3>;
+		};
+
 		mpic: pic@40000 {
 			interrupt-controller;
 			#address-cells = <0>;
@@ -161,7 +175,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			18 16 3 42 45 58	/* MEM L2 mdio serial crypto */
+			18 16 3 42 45		/* MEM L2 mdio serial */
 			29 30 34 35 36 40	/* eth0 eth1*/
 			24 25 20 21 22 23	/* pci0 pci1 dma1 */
 			43 28 72		/* i2c usb esdhc */
