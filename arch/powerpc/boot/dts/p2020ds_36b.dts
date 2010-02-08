@@ -168,6 +168,13 @@
 			compatible = "fsl,elbc-fcm-nand";
 			reg = <0x6 0x0 0x40000>;
 		};
+
+		ngpixis@3,0 {
+			compatible = "fsl,p2020ds-fpga";
+			reg = <0x3 0 0x30>;
+			interrupt-parent = <&mpic>;
+			interrupts = <0 0>;
+		};
 	};
 
 	soc@fffe00000 {
@@ -218,15 +225,6 @@
 			interrupts = <43 2>;
 			interrupt-parent = <&mpic>;
 			dfsrr;
-		};
-
-		esdhc@2e000 {
-			compatible = "fsl,p2020-esdhc", "fsl,esdhc";
-			reg = <0x2e000 0x1000>;
-			interrupts = <72 0x2>;
-			interrupt-parent = <&mpic>;
-			fsl,sdhci-adjust-timeout;
-			clock-frequency = <0>;
 		};
 
 		serial0: serial@4500 {
@@ -520,6 +518,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,channel-remap = <0x3>;
 		};
 
 		mpic: pic@40000 {
@@ -529,6 +528,40 @@
 			reg = <0x40000 0x40000>;
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc";
+			reg = <0xe0070 0x14>;
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		message@41400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			interrupts = <
+				0xb0 2
+				0xb1 2
+				0xb2 2
+				0xb3 2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		message@42400 {
+			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			interrupts = <
+				0xb4 2
+				0xb5 2
+				0xb6 2
+				0xb7 2>;
+			interrupt-parent = <&mpic>;
 		};
 
 		msi@41600 {
@@ -548,10 +581,20 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p2020-guts";
+			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
+	};
+
+	rapidio0: rapidio@fffec0000 {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "fsl,rapidio-delta";
+		reg = <0xf 0xffec0000 0 0x20000>;
+		ranges = <0 0 0 0xa0000000 0xc 0x10000000>;
+		interrupt-parent = <&mpic>;
+		interrupts = <48 2 49 2 50 2 53 2 54 2 55 2 56 2>;
 	};
 
 	pci0: pcie@fffe08000 {
