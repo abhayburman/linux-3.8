@@ -1245,10 +1245,8 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 		}
 	}
 
-	if (budget > 0) {
+	if (budget > 0)
 		napi_complete(napi);
-		fsl_enable_msg(cpu_dev->msg_virtual_rx);
-	}
 
 	return rx_cleaned;
 }
@@ -1262,12 +1260,9 @@ static irqreturn_t gfar_cpu_receive(int irq, void *dev_id)
 	setbits32(cpu_dev->msg_virtual_rx->msr,
 		 (1 << cpu_dev->msg_virtual_rx->msg_num));
 	local_irq_save(flags);
-	if (napi_schedule_prep(&cpu_dev->napi)) {
-		/* disable irq */
-		clrbits32(cpu_dev->msg_virtual_rx->mer,
-			(1 << cpu_dev->msg_virtual_rx->msg_num));
+	if (napi_schedule_prep(&cpu_dev->napi))
 		__napi_schedule(&cpu_dev->napi);
-	}
+
 	local_irq_restore(flags);
 
 	return IRQ_HANDLED;
