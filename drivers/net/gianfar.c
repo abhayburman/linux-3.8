@@ -1206,21 +1206,20 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 	struct shared_buffer *buf = &per_cpu(gfar_cpu_dev, !cpu).tx_queue;
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	struct gfar_skb_handler *sh = &cpu_dev->sh;
-	unsigned long flags;
 #endif
 
 	while (budget--) {
+		smp_rmb();
 		if (atomic_read(&buf->buff_cnt) == 0) {
 			break;
 		} else {
 			skb = buf->buffer[buf->out];
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 			if (sh->recycle_count > 0) {
-				spin_lock_irqsave(&sh->lock, flags);
 				buf->buffer[buf->out] = sh->recycle_queue;
 				sh->recycle_queue = buf->buffer[buf->out]->next;
+				buf->buffer[buf->out]->next = NULL;
 				sh->recycle_count--;
-				spin_unlock_irqrestore(&sh->lock, flags);
 			} else {
 				buf->buffer[buf->out] = NULL;
 			}
@@ -1394,7 +1393,6 @@ int distribute_packet(struct net_device *dev,
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	struct gfar_skb_handler *sh;
 	struct sk_buff *new_skb;
-	unsigned long flags;
 #endif
 
 	skb_data = skb->data;
@@ -1421,8 +1419,8 @@ int distribute_packet(struct net_device *dev,
 		return -1;
 
 	buf = &cpu_dev->tx_queue;
-	if (atomic_read(&buf->buff_cnt) == GFAR_CPU_BUFF_SIZE) {
-		kfree_skb(skb);    /* buffer full, drop packet */
+	if (atomic_read(&buf->buff_cnt) == (GFAR_CPU_BUFF_SIZE - 1)) {
+		dev_kfree_skb_any(skb);    /* buffer full, drop packet */
 		return 0;
 	}
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
@@ -1436,11 +1434,9 @@ int distribute_packet(struct net_device *dev,
 		/* put the obtained/allocated skb into
 		current cpu's recycle buffer */
 		if (new_skb) {
-			spin_lock_irqsave(&sh->lock, flags);
 			new_skb->next = sh->recycle_queue;
 			sh->recycle_queue = new_skb;
 			sh->recycle_count++;
-			spin_unlock_irqrestore(&sh->lock, flags);
 		}
 	}
 #endif
@@ -1449,6 +1445,7 @@ int distribute_packet(struct net_device *dev,
 	skb->dev = dev;
 	buf->buffer[buf->in] = skb;
 	buf->in = (buf->in + 1) % GFAR_CPU_BUFF_SIZE;
+	smp_wmb();
 	atomic_inc(&buf->buff_cnt);
 
 	/* raise other core's msg intr */
