@@ -1255,9 +1255,9 @@ static irqreturn_t gfar_cpu_receive(int irq, void *dev_id)
 	unsigned long flags;
 	struct gfar_cpu_dev *cpu_dev = &__get_cpu_var(gfar_cpu_dev);
 
-	/* clear the status bit */
-	setbits32(cpu_dev->msg_virtual_rx->msr,
-		 (1 << cpu_dev->msg_virtual_rx->msg_num));
+	/* clear the interrupt by reading message */
+	fsl_clear_msg(cpu_dev->msg_virtual_rx);
+
 	local_irq_save(flags);
 	if (napi_schedule_prep(&cpu_dev->napi))
 		__napi_schedule(&cpu_dev->napi);
@@ -1471,9 +1471,8 @@ static irqreturn_t gfar_virtual_transmit(int irq, void *grp_id)
 	int cpu = smp_processor_id();
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
 
-	/* clear the status bit */
-	setbits32(grp->msg_virtual_tx[cpu]->msr,
-		(1 << grp->msg_virtual_tx[cpu]->msg_num));
+	/* clear the interrupt by reading the message */
+	fsl_clear_msg(grp->msg_virtual_tx[cpu]);
 
 	local_irq_save(flags);
 	if (napi_schedule_prep(&grp->napi_tx[cpu]))
