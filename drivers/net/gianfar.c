@@ -1295,6 +1295,7 @@ void gfar_cpu_dev_init(void)
 	int i = 0;
 	int j;
 	struct gfar_cpu_dev *cpu_dev;
+	struct cpumask cpumask_msg_intrs;
 
 	for_each_possible_cpu(i) {
 		cpu_dev = &per_cpu(gfar_cpu_dev, i);
@@ -1320,6 +1321,10 @@ void gfar_cpu_dev_init(void)
 				cpu_dev->msg_virtual_rx->irq);
 			goto irq_fail;
 		}
+		cpumask_clear(&cpumask_msg_intrs);
+		cpumask_set_cpu(i, &cpumask_msg_intrs);
+		irq_set_affinity(cpu_dev->msg_virtual_rx->irq,
+					&cpumask_msg_intrs);
 		fsl_enable_msg(cpu_dev->msg_virtual_rx);
 
 		for (j = 0; j < GFAR_CPU_BUFF_SIZE; j++)
@@ -1470,9 +1475,16 @@ static irqreturn_t gfar_virtual_transmit(int irq, void *grp_id)
 	unsigned long flags;
 	int cpu = smp_processor_id();
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
+	int cpus = num_online_cpus();
+	int i;
 
-	/* clear the interrupt by reading the message */
-	fsl_clear_msg(grp->msg_virtual_tx[cpu]);
+	for (i = 0; i < cpus; i++)
+		/* clear the interrupt */
+		/* although only one virtual tx intr is enabled at a time,
+		 * we are clearing virtual tx intr of all cpus, to ensure
+		 * this intr is cleared even if user sets wrong affinity
+		 */
+		fsl_clear_msg(grp->msg_virtual_tx[i]);
 
 	local_irq_save(flags);
 	if (napi_schedule_prep(&grp->napi_tx[cpu]))
@@ -2802,6 +2814,7 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	int i, j;
 	int cpus = num_online_cpus();
+	struct cpumask cpumask_msg_intrs;
 #endif
 
 	/* If the device has multiple interrupts, register for
@@ -2865,6 +2878,10 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 				}
 				goto vtx_irq_fail;
 			}
+			cpumask_clear(&cpumask_msg_intrs);
+			cpumask_set_cpu(i, &cpumask_msg_intrs);
+			irq_set_affinity(grp->msg_virtual_tx[i]->irq,
+						&cpumask_msg_intrs);
 			fsl_enable_msg(grp->msg_virtual_tx[i]);
 		}
 	}
