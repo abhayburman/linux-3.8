@@ -285,6 +285,11 @@
 			};
 		};
 
+		ptp_timer: ptimer@24e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0x24e00 0xb0>;
+		};
+
 		enet2: ethernet@26000 {
 			cell-index = <2>;
 			device_type = "network";
@@ -297,6 +302,7 @@
 			tbi-handle = <&tbi2>;
 			phy-handle = <&phy2>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 		};
 
 		mdio@26520 {
