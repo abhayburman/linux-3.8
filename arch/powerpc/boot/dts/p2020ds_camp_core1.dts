@@ -50,7 +50,7 @@
 		#address-cells = <2>;
 		#size-cells = <1>;
 		compatible = "fsl,elbc", "simple-bus";
-		reg = <0 0xffe05000 0 0x1000>;
+		reg = <0xffe05000 0x1000>;
 		interrupts = <19 2>;
 		interrupt-parent = <&mpic>;
 
