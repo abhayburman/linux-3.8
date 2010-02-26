@@ -369,6 +369,7 @@
 			43 28 72		/* i2c usb esdhc */
 			0x9 0xa			/* pci slot */
 			0x6 0x7 0xe 0x5		/* Audio elgacy SATA */
+			48 49 50 53 54 55 56	/* rapidio */
 			>;
 		};
 	};
