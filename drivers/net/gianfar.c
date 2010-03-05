@@ -3904,6 +3904,13 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 	int oldsize = priv->rx_buffer_size;
 	int frame_size = new_mtu + ETH_HLEN;
 
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (rcv_pkt_steering && priv->sps) {
+		printk(KERN_ERR "Can't change mtu with rcv_pkt_steering on\n");
+		return -EINVAL;
+	}
+#endif
+
 	if (priv->vlgrp)
 		frame_size += VLAN_HLEN;
 
