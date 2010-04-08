@@ -191,5 +191,11 @@ config P5020_DS
 
 endif # FSL_SOC_BOOKE
 
+config FSL_HYPERVISOR
+	bool
+	select PPC_EPAPR_HV
+	help
+	  This options enables support for Freescale Hypervisor
+
 config TQM85xx
 	bool
