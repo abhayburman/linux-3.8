@@ -149,14 +149,14 @@
 			};
 
 			partition@a00000 {
-				/* 7MB for JFFS2 based Root file System */
-				reg = <0x00a00000 0x00700000>;
+				/* 15MB for JFFS2 based Root file System */
+				reg = <0x00a00000 0x00f00000>;
 				label = "NAND (RW) JFFS2 Root File System";
 			};
 
-			partition@1100000 {
-				/* 15MB for JFFS2 based Root file System */
-				reg = <0x01100000 0x00f00000>;
+			partition@1900000 {
+				/* 7MB for Writable User Area */
+				reg = <0x01900000 0x00700000>;
 				label = "NAND (RW) Writable User area";
 			};
 		};
