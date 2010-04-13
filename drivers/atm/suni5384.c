@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006-2009 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2006-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Dave Liu (daveliu@freescale.com)
  *         Tony Li (tony.li@freescale.com)
@@ -235,12 +235,14 @@ static int suni_stop(struct atm_dev *dev)
 {
 	struct suni_priv **walk;
 	unsigned long flags;
+	spin_lock_irqsave(&sunis_lock, flags);
+	if (PRIV(dev)) {
+		/* let SAR driver worry about stopping interrupts */
+		for (walk = &sunis; *walk != PRIV(dev);
+			walk = &(*walk)->next);
+		*walk = (*walk)->next;
+	}
 
-	/* let SAR driver worry about stopping interrupts */
-	spin_lock_irqsave(&sunis_lock,flags);
-	for (walk = &sunis; *walk != PRIV(dev);
-		walk = &(*walk)->next);
-	*walk = (*walk)->next;
 	if (!sunis) del_timer_sync(&poll_timer);
 	spin_unlock_irqrestore(&sunis_lock,flags);
 
