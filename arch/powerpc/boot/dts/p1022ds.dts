@@ -415,6 +415,13 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		display@10000 {
+			compatible = "fsl,diu", "fsl,p1022-diu";
+			reg = <0x10000 1000>;
+			interrupts = <64 2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		mpic: pic@40000 {
 			interrupt-controller;
 			#address-cells = <0>;
