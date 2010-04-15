@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2005-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Xiaobo Xie <X.Xie@freescale.com>
  *	Roy Zang <tie-fei.zang@freescale.com>
@@ -143,7 +143,7 @@ static int card_open(struct net_device *dev)
 	struct card_priv *tp = netdev_priv(dev);
 
 	/*Clear the message intr from host*/
-	fsl_msg_clear_message(tp->pci_agent_dev->msg_host2ep);
+	fsl_clear_msg(tp->pci_agent_dev->msg_host2ep);
 
 	if (host_open) {
 		netif_carrier_on(dev);
@@ -152,8 +152,7 @@ static int card_open(struct net_device *dev)
 		printk(KERN_INFO"%s is up\n", dev->name);
 	} else
 		/*Do not know if host is Open, Ping it.*/
-		fsl_msg_trig_message_intr(
-			tp->pci_agent_dev->msg_ep2host,	AGENT_UP);
+		fsl_send_msg(tp->pci_agent_dev->msg_ep2host, AGENT_UP);
 
 	retval = request_irq(dev->irq, card_interrupt, 0,
 					dev->name, dev);
@@ -177,9 +176,9 @@ static int card_release(struct net_device *dev)
 	synchronize_irq(dev->irq);
 	free_irq(dev->irq, dev);
 	tp->share_mem->hstatus = 0; /*clear the pending data for host*/
-	fsl_msg_clear_message(pci_dev->msg_ep2host);
+	fsl_clear_msg(pci_dev->msg_ep2host);
 	if (host_open) {
-		fsl_msg_trig_message_intr(pci_dev->msg_ep2host, AGENT_DOWN);
+		fsl_send_msg(pci_dev->msg_ep2host, AGENT_DOWN);
 		host_open = 0;
 	}
 
@@ -251,7 +250,7 @@ static irqreturn_t card_interrupt(int irq, void *dev_id)
 	spin_lock(&priv->lock);
 	shmem = (struct share_mem *) priv->share_mem;
 
-	fsl_msg_read_message(priv->pci_agent_dev->msg_host2ep, &statusword);
+	fsl_read_msg(priv->pci_agent_dev->msg_host2ep, &statusword);
 
 	if (statusword & HOST_SENT) {
 		if (!link_up) {
@@ -268,8 +267,7 @@ static irqreturn_t card_interrupt(int irq, void *dev_id)
 			netif_carrier_on(dev);
 			netif_start_queue(dev);
 			link_up = 1;
-			fsl_msg_trig_message_intr(
-				priv->pci_agent_dev->msg_ep2host, AGENT_UP);
+			fsl_send_msg(priv->pci_agent_dev->msg_ep2host, AGENT_UP);
 			host_open = 1;
 		}
 	} else if (statusword & HOST_DOWN) {
@@ -339,7 +337,7 @@ static int card_tx(struct sk_buff *skb, struct net_device *dev)
 	priv->stats.tx_packets++;
 	priv->stats.tx_bytes += priv->tx_packetlen;
 
-	fsl_msg_trig_message_intr(priv->pci_agent_dev->msg_ep2host, AGENT_SENT);
+	fsl_send_msg(priv->pci_agent_dev->msg_ep2host, AGENT_SENT);
 
 	dev_kfree_skb(priv->cur_tx_skb);
 
@@ -358,11 +356,10 @@ static void card_tx_timeout(struct net_device *dev)
 
 	priv->stats.tx_errors++;
 
-	fsl_msg_clear_message(priv->pci_agent_dev->msg_ep2host);
+	fsl_clear_msg(priv->pci_agent_dev->msg_ep2host);
 
 	/*Try to kick the other side when timeout*/
-	fsl_msg_trig_message_intr(
-			priv->pci_agent_dev->msg_ep2host, AGENT_UP);
+	fsl_send_msg(priv->pci_agent_dev->msg_ep2host, AGENT_UP);
 
 	netif_wake_queue(dev);
 	return;
@@ -499,8 +496,8 @@ static int cardnet_priv_init(struct net_device *dev)
 	setup_agent_shmem_inb_win(pci_agent_dev);
 
 	/*Request message interrupt resource*/
-	msg_unit_host2ep = fsl_msg_get_message_unit();
-	msg_unit_ep2host = fsl_msg_get_message_unit();
+	msg_unit_host2ep = fsl_get_msg_unit();
+	msg_unit_ep2host = fsl_get_msg_unit();
 	if (!msg_unit_host2ep || !msg_unit_ep2host ||
 		(msg_unit_host2ep->requested == false) ||
 		(msg_unit_ep2host->requested == false)) {
@@ -509,11 +506,11 @@ static int cardnet_priv_init(struct net_device *dev)
 			goto err_out1;
 	}
 
-	fsl_msg_enable_message(msg_unit_host2ep);
-	fsl_msg_enable_message(msg_unit_ep2host);
+	fsl_enable_msg(msg_unit_host2ep);
+	fsl_enable_msg(msg_unit_ep2host);
 
 	/*Set the message for ep2host routing to irq_out*/
-	fsl_msg_set_message_ep(msg_unit_ep2host);
+	fsl_msg_route_int_to_irqout(msg_unit_ep2host);
 
 	priv->share_mem->msg_group_host2ep =
 		msg_unit_host2ep->msg_group_addr_offset;
@@ -589,8 +586,8 @@ static __exit void card_cleanup(void)
 	iounmap(pci_dev->pci_agent_regs);
 	kfree(tp->pci_agent_dev);
 
-	fsl_msg_release_message_unit(pci_dev->msg_ep2host);
-	fsl_msg_release_message_unit(pci_dev->msg_host2ep);
+	fsl_release_msg_unit(pci_dev->msg_ep2host);
+	fsl_release_msg_unit(pci_dev->msg_host2ep);
 
 	unregister_netdev(card_devs);
 	free_netdev(card_devs);

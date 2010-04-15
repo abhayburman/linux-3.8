@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2009 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2005-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Xiaobo Xie <r63061@freescale.com>
  *	Roy Zang <tie-fei.zang@freescale.com>
@@ -120,7 +120,7 @@ static int boardnet_open(struct net_device *dev)
 	int retval;
 
 	/*Clear the message intr from host*/
-	fsl_msg_clear_message(&msg_unit_ep2host);
+	fsl_clear_msg(&msg_unit_ep2host);
 
 	if (agent_open) {
 		netif_carrier_on(dev);
@@ -133,7 +133,7 @@ static int boardnet_open(struct net_device *dev)
 		 * otherwise, both keep link_down.
 		 * If the agent was removed. The host also should remove.
 		 */
-		fsl_msg_trig_message_intr(&msg_unit_host2ep, HOST_UP);
+		fsl_send_msg(&msg_unit_host2ep, HOST_UP);
 
 
 	retval = request_irq(dev->irq, boardnet_interrupt, 0,
@@ -157,10 +157,10 @@ static int boardnet_release(struct net_device *dev)
 
 	synchronize_irq(dev->irq);
 	free_irq(dev->irq, dev);
-	fsl_msg_clear_message(&msg_unit_host2ep);
+	fsl_clear_msg(&msg_unit_host2ep);
 	shmem->astatus = 0; /*clear the pending data for agent*/
 	if (agent_open) {
-		fsl_msg_trig_message_intr(&msg_unit_host2ep, HOST_DOWN);
+		fsl_send_msg(&msg_unit_host2ep, HOST_DOWN);
 		agent_open = 0;
 	}
 
@@ -261,7 +261,7 @@ static irqreturn_t boardnet_interrupt(int irq, void *dev_id)
 	/* Lock the device */
 	spin_lock(&priv->lock);
 
-	fsl_msg_read_message(&msg_unit_ep2host, &statusword);
+	fsl_read_msg(&msg_unit_ep2host, &statusword);
 
 	if (statusword & AGENT_SENT) {
 		if (!link_up) {
@@ -279,7 +279,7 @@ static irqreturn_t boardnet_interrupt(int irq, void *dev_id)
 			/*Sometimes, agent only send a mesage but
 			 *did not really up.
 			 */
-			fsl_msg_trig_message_intr(&msg_unit_host2ep, HOST_UP);
+			fsl_send_msg(&msg_unit_host2ep, HOST_UP);
 			agent_open = 1;
 		}
 	} else if (statusword & AGENT_DOWN) {
@@ -350,7 +350,7 @@ static void boardnet_hw_tx(char *buf, int len, struct net_device *dev)
 	/* Set the flag, indicating the peer that the packet has been sent */
 	shmem->astatus = HOST_SENT;
 
-	fsl_msg_trig_message_intr(&msg_unit_host2ep, HOST_SENT);
+	fsl_send_msg(&msg_unit_host2ep, HOST_SENT);
 
 	dev_kfree_skb(priv->skb);
 	return;
@@ -406,10 +406,10 @@ static void boardnet_tx_timeout(struct net_device *dev)
 
 	priv->stats.tx_errors++;
 
-	fsl_msg_clear_message(&msg_unit_host2ep);
+	fsl_clear_msg(&msg_unit_host2ep);
 
 	/*When timeout, try to kick the EP*/
-	fsl_msg_trig_message_intr(&msg_unit_host2ep, HOST_UP);
+	fsl_send_msg(&msg_unit_host2ep, HOST_UP);
 
 	netif_wake_queue(dev);
 	return;
@@ -699,6 +699,8 @@ static struct pci_device_id boardnet_id_table[] = {
 	* Class_id, Class
 	* Driver_data
 	*/
+	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_P1021E, PCI_ANY_ID,
+			PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
 	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_MPC8568E, PCI_ANY_ID,
 			PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
 	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_MPC8536E, PCI_ANY_ID,
