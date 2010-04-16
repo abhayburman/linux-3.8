@@ -554,6 +554,11 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc", "fsl,p2020-pmc";
+			reg = <0xe0070 0x20>;
+		};
+
 		msi@41600 {
 			compatible = "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
@@ -571,7 +576,7 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p2020-guts";
+			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
