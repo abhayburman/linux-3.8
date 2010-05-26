@@ -376,5 +376,7 @@ extern int call_handle_irq(int irq, void *p1,
 
 extern void do_IRQ(struct pt_regs *regs);
 
+int irq_choose_cpu(const cpumask_t *mask);
+
 #endif /* _ASM_IRQ_H */
 #endif /* __KERNEL__ */

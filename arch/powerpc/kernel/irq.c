@@ -8,6 +8,8 @@
  *  Adapted for Power Macintosh by Paul Mackerras
  *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
  *
+ * Copyright 2010 Freescale Semiconductor Inc.
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version
@@ -1222,3 +1224,43 @@ static int __init setup_noirqdistrib(char *str)
 
 __setup("noirqdistrib", setup_noirqdistrib);
 #endif /* CONFIG_PPC64 */
+
+#ifdef CONFIG_SMP
+int irq_choose_cpu(const cpumask_t *mask)
+{
+	int cpuid;
+
+	if (cpumask_equal(mask, cpu_all_mask)) {
+		static int irq_rover;
+		static DEFINE_RAW_SPINLOCK(irq_rover_lock);
+		unsigned long flags;
+
+		/* Round-robin distribution... */
+do_round_robin:
+		raw_spin_lock_irqsave(&irq_rover_lock, flags);
+
+		while (!cpu_online(irq_rover)) {
+			if (++irq_rover >= NR_CPUS)
+				irq_rover = 0;
+		}
+		cpuid = irq_rover;
+		do {
+			if (++irq_rover >= NR_CPUS)
+				irq_rover = 0;
+		} while (!cpu_online(irq_rover));
+
+		raw_spin_unlock_irqrestore(&irq_rover_lock, flags);
+	} else {
+		cpuid = cpumask_first_and(mask, cpu_online_mask);
+		if (cpuid >= nr_cpu_ids)
+			goto do_round_robin;
+	}
+
+	return get_hard_smp_processor_id(cpuid);
+}
+#else
+int irq_choose_cpu(const cpumask_t *mask)
+{
+	return hard_smp_processor_id();
+}
+#endif
