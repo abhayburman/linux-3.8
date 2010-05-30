@@ -29,6 +29,12 @@ config PPC_NATIVE
 	  a hypervisor. This option is not user-selectable but should
 	  be selected by all platforms that need it.
 
+config PPC_EPAPR_HV
+	bool
+	depends on BOOKE
+	help
+	  Support for running under ePAPR specified hypervisor environment
+
 config PPC_OF_BOOT_TRAMPOLINE
 	bool "Support booting from Open Firmware or yaboot"
 	depends on 6xx || PPC64
