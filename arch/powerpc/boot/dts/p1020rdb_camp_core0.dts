@@ -116,6 +116,7 @@
 			reg = <0x7000 0x1000>;
 			interrupts = <59 0x2>;
 			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
 			mode = "cpu";
 
 			fsl_m25p80@0 {
@@ -124,9 +125,7 @@
 				compatible = "fsl,espi-flash";
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
-				modal = "s25sl128b";
-				spi-max-frequency = <45000000>;
-				mode = <0>;
+				spi-max-frequency = <40000000>;
 
 				partition@0 {
 					/* 512KB for u-boot Bootloader Image */
