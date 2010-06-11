@@ -96,6 +96,7 @@ static int sdhci_of_resume(struct of_device *ofdev)
 {
 	struct sdhci_host *host = dev_get_drvdata(&ofdev->dev);
 
+	host->ops->enable_dma(host);
 	return mmc_resume_host(host->mmc);
 }
 
