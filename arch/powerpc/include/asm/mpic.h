@@ -488,5 +488,8 @@ void mpic_set_clk_ratio(struct mpic *mpic, u32 clock_ratio);
 /* Enable/Disable EPIC serial interrupt mode */
 void mpic_set_serial_int(struct mpic *mpic, int enable);
 
+/* Allow/Disallow the irq routing to IRQ_OUT under EP mode */
+extern void mpic_irq_set_ep(unsigned int irq, unsigned int ep);
+
 #endif /* __KERNEL__ */
 #endif	/* _ASM_POWERPC_MPIC_H */

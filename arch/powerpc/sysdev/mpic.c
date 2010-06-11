@@ -1,10 +1,11 @@
 /*
- *  arch/powerpc/kernel/mpic.c
+ *  arch/powerpc/sysdev/mpic.c
  *
  *  Driver for interrupt controllers following the OpenPIC standard, the
- *  common implementation beeing IBM's MPIC. This driver also can deal
+ *  common implementation being IBM's MPIC. This driver also can deal
  *  with various broken implementations of this HW.
  *
+ *  Copyright 2006, 2008-2010 Freescale Semiconductor, Inc.
  *  Copyright (C) 2004 Benjamin Herrenschmidt, IBM Corp.
  *
  *  This file is subject to the terms and conditions of the GNU General Public
@@ -1401,6 +1402,36 @@ void mpic_irq_set_priority(unsigned int irq, unsigned int pri)
 		mpic_irq_write(src, MPIC_INFO(IRQ_VECTOR_PRI),
 			       reg | (pri << MPIC_VECPRI_PRIORITY_SHIFT));
 	}
+	raw_spin_unlock_irqrestore(&mpic_lock, flags);
+}
+
+/*
+ * Sets the External Interrrupt Destination Register when the device
+ * is configured as an EP and is used to interrupt the host.
+ *
+ * EIDRx[EP] = 1 => Irq is not routed to IRQ_OUT
+ * EIDRx[EP] = 0 => Irq is routed to IRQ_OUT for external service
+ *
+ * IRQ_OUT is always level low sensitive.
+ */
+void mpic_irq_set_ep(unsigned int irq, unsigned int ep)
+{
+	struct mpic *mpic = mpic_find(irq);
+	unsigned int src = mpic_irq_to_hw(irq);
+	unsigned long flags;
+	u32 reg;
+
+	BUG_ON(!mpic);
+
+	raw_spin_lock_irqsave(&mpic_lock, flags);
+	reg = mpic_irq_read(src, MPIC_INFO(IRQ_DESTINATION));
+
+	mpic_irq_write(src, MPIC_INFO(IRQ_DESTINATION),
+	       (reg & ~(1 << 31)) | (ep << 31));
+
+	if (ep)
+		mpic_set_irq_type(irq, IRQ_TYPE_LEVEL_LOW);
+
 	raw_spin_unlock_irqrestore(&mpic_lock, flags);
 }
 
