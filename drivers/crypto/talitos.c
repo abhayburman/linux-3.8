@@ -67,6 +67,8 @@
 #define MAP_ARRAY(chan_no)	(3 << (chan_no * 2))
 #define MAP_ARRAY_DONE(chan_no)	(1 << (chan_no * 2))
 
+#define MAX_IPSEC_RECYCLE_DESC 64
+#define MAX_DESC_LEN   160
 
 /* descriptor pointer entry */
 struct talitos_ptr {
@@ -155,6 +157,12 @@ struct talitos_private {
 	u8 core_num_chan[MAX_GROUPS];
 	/* channels numbers of channels mapped to a core */
 	u8 core_chan_no[MAX_GROUPS][MAX_CHAN] ____cacheline_aligned;
+	/* pointer to the cache pool */
+	struct kmem_cache *netcrypto_cache;
+	/* pointer to edescriptor recycle queue */
+	struct talitos_edesc *edesc_rec_queue[NR_CPUS][MAX_IPSEC_RECYCLE_DESC];
+	/* index in edesc recycle queue */
+	u8 curr_edesc[MAX_GROUPS];
 
 	/* request callback napi */
 	struct napi_struct *done_task;
@@ -194,6 +202,34 @@ struct talitos_edesc {
 #define TALITOS_FTR_SRC_LINK_TBL_LEN_INCLUDES_EXTENT 0x00000001
 #define TALITOS_FTR_HW_AUTH_CHECK 0x00000002
 #define TALITOS_FTR_SHA224_HWINIT 0x00000004
+
+struct talitos_edesc *crypto_edesc_alloc(int len, int flags,
+					struct talitos_private *priv)
+{
+	u32 smp_processor_id = smp_processor_id();
+	u32 current_edesc = priv->curr_edesc[smp_processor_id];
+	if (unlikely(current_edesc == 0)) {
+		return kmem_cache_alloc(priv->netcrypto_cache,
+					GFP_KERNEL | flags);
+	} else {
+		 priv->curr_edesc[smp_processor_id] = current_edesc - 1;
+		return priv->edesc_rec_queue[smp_processor_id]
+					[current_edesc - 1];
+	}
+}
+void crypto_edesc_free(struct talitos_edesc *edesc,
+			struct talitos_private *priv)
+{
+	u32 smp_processor_id = smp_processor_id();
+	u32 current_edesc = priv->curr_edesc[smp_processor_id];
+	if (unlikely(current_edesc == (MAX_IPSEC_RECYCLE_DESC - 1))) {
+		kmem_cache_free(priv->netcrypto_cache, edesc);
+	} else {
+		priv->edesc_rec_queue[smp_processor_id][current_edesc] =
+								edesc;
+		priv->curr_edesc[smp_processor_id] = current_edesc + 1;
+	}
+}
 
 static inline unsigned int get_chan_remap(struct talitos_private *priv)
 {
@@ -964,6 +1000,7 @@ static void ipsec_esp_encrypt_done(struct device *dev,
 	struct talitos_edesc *edesc;
 	struct scatterlist *sg;
 	void *icvdata;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	edesc = container_of(desc, struct talitos_edesc, desc);
 
@@ -978,7 +1015,7 @@ static void ipsec_esp_encrypt_done(struct device *dev,
 		       icvdata, ctx->authsize);
 	}
 
-	kfree(edesc);
+	crypto_edesc_free(edesc, priv);
 
 	aead_request_complete(areq, err);
 }
@@ -993,6 +1030,7 @@ static void ipsec_esp_decrypt_swauth_done(struct device *dev,
 	struct talitos_edesc *edesc;
 	struct scatterlist *sg;
 	void *icvdata;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	edesc = container_of(desc, struct talitos_edesc, desc);
 
@@ -1011,7 +1049,7 @@ static void ipsec_esp_decrypt_swauth_done(struct device *dev,
 			     ctx->authsize, ctx->authsize) ? -EBADMSG : 0;
 	}
 
-	kfree(edesc);
+	crypto_edesc_free(edesc, priv);
 
 	aead_request_complete(req, err);
 }
@@ -1022,6 +1060,7 @@ static void ipsec_esp_decrypt_hwauth_done(struct device *dev,
 {
 	struct aead_request *req = context;
 	struct talitos_edesc *edesc;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	edesc = container_of(desc, struct talitos_edesc, desc);
 
@@ -1032,7 +1071,7 @@ static void ipsec_esp_decrypt_hwauth_done(struct device *dev,
 		     DESC_HDR_LO_ICCR1_PASS))
 		err = -EBADMSG;
 
-	kfree(edesc);
+	crypto_edesc_free(edesc, priv);
 
 	aead_request_complete(req, err);
 }
@@ -1091,6 +1130,7 @@ static int ipsec_esp(struct talitos_edesc *edesc, struct aead_request *areq,
 	unsigned int ivsize = crypto_aead_ivsize(aead);
 	int sg_count, ret;
 	int sg_link_tbl_len;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	/* hmac key */
 	map_single_talitos_ptr(dev, &desc->ptr[0], ctx->authkeylen, &ctx->key,
@@ -1190,7 +1230,7 @@ static int ipsec_esp(struct talitos_edesc *edesc, struct aead_request *areq,
 	ret = talitos_submit(dev, desc, callback, areq);
 	if (ret != -EINPROGRESS) {
 		ipsec_esp_unmap(dev, edesc, areq);
-		kfree(edesc);
+		crypto_edesc_free(edesc, priv);
 	}
 	return ret;
 }
@@ -1288,6 +1328,7 @@ static struct talitos_edesc *talitos_edesc_alloc(struct device *dev,
 	struct talitos_edesc *edesc;
 	int src_nents, dst_nents, alloc_len, dma_len;
 	int src_chained, dst_chained = 0;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 	gfp_t flags = cryptoflags & CRYPTO_TFM_REQ_MAY_SLEEP ? GFP_KERNEL :
 		      GFP_ATOMIC;
 
@@ -1326,7 +1367,7 @@ static struct talitos_edesc *talitos_edesc_alloc(struct device *dev,
 		alloc_len += icv_stashing ? authsize : 0;
 	}
 
-	edesc = kmalloc(alloc_len, GFP_DMA | flags);
+	edesc = crypto_edesc_alloc(alloc_len, GFP_DMA | flags, priv);
 	if (!edesc) {
 		dev_err(dev, "could not allocate edescriptor\n");
 		return ERR_PTR(-ENOMEM);
@@ -1491,12 +1532,13 @@ static void ablkcipher_done(struct device *dev,
 {
 	struct ablkcipher_request *areq = context;
 	struct talitos_edesc *edesc;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	edesc = container_of(desc, struct talitos_edesc, desc);
 
 	common_nonsnoop_unmap(dev, edesc, areq);
 
-	kfree(edesc);
+	crypto_edesc_free(edesc, priv);
 
 	areq->base.complete(&areq->base, err);
 }
@@ -1515,6 +1557,7 @@ static int common_nonsnoop(struct talitos_edesc *edesc,
 	unsigned int cryptlen = areq->nbytes;
 	unsigned int ivsize;
 	int sg_count, ret;
+	struct talitos_private *priv = dev_get_drvdata(dev);
 
 	/* first DWORD empty */
 	desc->ptr[0].len = 0;
@@ -1597,7 +1640,7 @@ static int common_nonsnoop(struct talitos_edesc *edesc,
 	ret = talitos_submit(dev, desc, callback, areq);
 	if (ret != -EINPROGRESS) {
 		common_nonsnoop_unmap(dev, edesc, areq);
-		kfree(edesc);
+		crypto_edesc_free(edesc, priv);
 	}
 	return ret;
 }
@@ -2424,6 +2467,7 @@ static int talitos_remove(struct of_device *ofdev)
 
 	dev_set_drvdata(dev, NULL);
 
+	kmem_cache_destroy(priv->netcrypto_cache);
 	kfree(priv);
 
 	return 0;
@@ -2700,6 +2744,9 @@ static int talitos_probe(struct of_device *ofdev,
 			}
 		}
 	}
+	priv->netcrypto_cache = kmem_cache_create("netcrypto_cache",
+						MAX_DESC_LEN, 0,
+					SLAB_HWCACHE_ALIGN, NULL);
 
 	return 0;
 
