@@ -1,7 +1,7 @@
 /*
  * P2020 DS Device Tree Source
  *
- * Copyright 2009 Freescale Semiconductor Inc.
+ * Copyright 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -489,6 +489,18 @@
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
+	};
+
+	rapidio0: rapidio@ffec0000 {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "fsl,rapidio-delta";
+		reg = <0 0xffec0000 0 0x20000>;
+		ranges = <0 0 0 0xa0000000 0 0x10000000>;
+		interrupt-parent = <&mpic>;
+		/* err_irq bell_outb_irq bell_inb_irq
+			msg1_tx_irq msg1_rx_irq msg2_tx_irq msg2_rx_irq */
+		interrupts = <48 2 49 2 50 2 53 2 54 2 55 2 56 2>;
 	};
 
 	pci0: pcie@ffe08000 {

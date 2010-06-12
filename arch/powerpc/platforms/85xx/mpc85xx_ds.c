@@ -4,7 +4,7 @@
  * Author Xianghua Xiao (x.xiao@freescale.com)
  * Roy Zang <tie-fei.zang@freescale.com>
  * 	- Add PCI/PCI Exprees support
- * Copyright 2007 Freescale Semiconductor Inc.
+ * Copyright 2007-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -222,6 +222,7 @@ static struct of_device_id __initdata mpc85xxds_ids[] = {
 	{ .compatible = "soc", },
 	{ .compatible = "simple-bus", },
 	{ .compatible = "gianfar", },
+	{ .compatible = "fsl,rapidio-delta", },
 	{},
 };
 
