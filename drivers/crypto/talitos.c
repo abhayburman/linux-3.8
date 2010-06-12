@@ -50,6 +50,8 @@
 #include <crypto/hash.h>
 #include <crypto/internal/hash.h>
 #include <crypto/scatterwalk.h>
+#include <linux/etherdevice.h>
+#include <linux/ip.h>
 
 #include "talitos.h"
 
@@ -154,8 +156,8 @@ struct talitos_private {
 	/* channels numbers of channels mapped to a core */
 	u8 core_chan_no[MAX_GROUPS][MAX_CHAN] ____cacheline_aligned;
 
-	/* request callback tasklet */
-	struct tasklet_struct *done_task;
+	/* request callback napi */
+	struct napi_struct *done_task;
 
 	/* list of registered algorithms */
 	struct list_head alg_list;
@@ -397,15 +399,17 @@ static int talitos_submit(struct device *dev, struct talitos_desc *desc,
 /*
  * process what was done, notify callback of error if not
  */
-static void flush_channel(struct talitos_channel *chan, int error, int reset_ch)
+static int flush_channel(struct talitos_channel *chan, int error,
+			int reset_ch, int weight)
 {
 	struct talitos_private *priv = chan->priv;
 	struct device *dev = &priv->ofdev->dev;
 	struct talitos_request *request, saved_req;
 	int tail, status;
+	u8 count = 0;
 
 	tail = chan->tail;
-	while (chan->fifo[tail].desc) {
+	while (chan->fifo[tail].desc && (count < weight)) {
 		request = &chan->fifo[tail];
 
 		/* descriptors with their done bits set don't get the error */
@@ -436,33 +440,48 @@ static void flush_channel(struct talitos_channel *chan, int error, int reset_ch)
 		chan->submit_count -= 1;
 		saved_req.callback(dev, saved_req.desc, saved_req.context,
 				   status);
+		count++;
 		/* channel may resume processing in single desc error case */
 		if (error && !reset_ch && status == error)
-			return;
+			return 0;
 		tail = chan->tail;
 	}
-
+return count;
 }
 
 /*
  * process completed requests for channels that have done status
  */
-static void talitos_done(unsigned long data)
+static int talitos_done(struct napi_struct *napi, int budget)
 {
 	u8 smp_processor_id = smp_processor_id();
-	struct device *dev = (struct device *)data;
+	struct device *dev = &napi->dev->dev;
 	struct talitos_private *priv = dev_get_drvdata(dev);
-	u8 ch;
+	u8 ch, num_chan;
+	u8 budget_per_channel = 0, work_done = 0, ret = 1;
 
-	if (priv->core_num_chan[smp_processor_id] > 0)
-		for (ch = 0; ch < priv->core_num_chan[smp_processor_id]; ch++)
-			flush_channel(priv->chan +
-				priv->core_chan_no[smp_processor_id][ch], 0, 0);
-	/* At this point, all completed channels have been processed.
-	 * Unmask done interrupts for channels completed later on.
-	 */
-	setbits32(priv->reg + TALITOS_IMR, TALITOS_IMR_INIT);
-	setbits32(priv->reg + TALITOS_IMR_LO, TALITOS_IMR_LO_INIT);
+	if (priv->core_num_chan[smp_processor_id] > 0) {
+		num_chan =  priv->core_num_chan[smp_processor_id];
+		budget_per_channel = budget/num_chan;
+		for (ch = 0; ch < num_chan; ch++)
+			work_done += flush_channel(priv->chan +
+					priv->core_chan_no[smp_processor_id][ch]
+					, 0, 0, budget_per_channel);
+		if (work_done < budget) {
+			napi_complete(per_cpu_ptr(priv->done_task,
+						smp_processor_id));
+			/* At this point, all completed channels have been
+			 * processed.
+			 * Unmask done intrpts for channels completed later on.
+			 */
+			setbits32(priv->reg + TALITOS_IMR, TALITOS_IMR_INIT);
+			setbits32(priv->reg + TALITOS_IMR_LO,
+				TALITOS_IMR_LO_INIT);
+			ret = 0;
+		}
+		return ret;
+	}
+	return 0;
 }
 
 /*
@@ -604,7 +623,7 @@ static void handle_error(struct talitos_channel *chan, u32 isr, u32 isr_lo)
 	if (v_lo & TALITOS_CCPSR_LO_SRL)
 		dev_err(dev, "scatter return/length error\n");
 
-	flush_channel(chan, error, reset_ch);
+	flush_channel(chan, error, reset_ch, priv->fifo_len);
 
 	if (reset_ch) {
 		reset_channel(dev, chan->id);
@@ -628,7 +647,7 @@ static void handle_error(struct talitos_channel *chan, u32 isr, u32 isr_lo)
 		        "ISR 0x%08x_%08x\n", isr, isr_lo);
 
 		/* purge request queues */
-		flush_channel(chan, -EIO, 1);
+		flush_channel(chan, -EIO, 1, priv->fifo_len);
 
 		/* reset and reinitialize the device */
 		if (reset_dev)
@@ -679,9 +698,13 @@ static irqreturn_t talitos_interrupt(int irq, void *data)
 			if (likely(isr &  intr_mask)) {
 				/* mask further done interrupts.  */
 				clrbits32(priv->reg + TALITOS_IMR, intr_mask);
-				/* Schdeule  respective tasklet */
-				tasklet_schedule(per_cpu_ptr(priv->done_task,
-					smp_processor_id));
+				/* Schdeule  respective napi */
+				if (napi_schedule_prep(
+					per_cpu_ptr(priv->done_task,
+						smp_processor_id)))
+					__napi_schedule(
+						per_cpu_ptr(priv->done_task,
+						smp_processor_id));
 			}
 		}
 	} else {
@@ -2391,8 +2414,10 @@ static int talitos_remove(struct of_device *ofdev)
 		irq_dispose_mapping(priv->irq_0);
 	}
 
-	for_each_possible_cpu(i)
-		tasklet_kill(per_cpu_ptr(priv->done_task, i));
+	for_each_possible_cpu(i) {
+		napi_disable(per_cpu_ptr(priv->done_task, i));
+		netif_napi_del(per_cpu_ptr(priv->done_task, i));
+	}
 	free_percpu(priv->done_task); /* Alloc PER CPU structure */
 
 	iounmap(priv->reg);
@@ -2469,6 +2494,7 @@ static void update_chanmap(struct talitos_private *priv, unsigned int map)
 static int talitos_probe(struct of_device *ofdev,
 			 const struct of_device_id *match)
 {
+	struct net_device *net_dev;
 	struct device *dev = &ofdev->dev;
 	struct device_node *np = ofdev->dev.of_node;
 	struct talitos_private *priv;
@@ -2479,16 +2505,23 @@ static int talitos_probe(struct of_device *ofdev,
 	priv = kzalloc(sizeof(struct talitos_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+	net_dev = alloc_percpu(struct net_device);
+	for_each_possible_cpu(i) {
+		(per_cpu_ptr(net_dev, i))->dev = *dev;
+		INIT_LIST_HEAD(&per_cpu_ptr(net_dev, i)->napi_list);
+	}
 
 	dev_set_drvdata(dev, priv);
 
 	priv->ofdev = ofdev;
 	priv->dev = dev;
 	/* Alloc PER CPU structure */
-	priv->done_task = alloc_percpu(struct tasklet_struct);
+	priv->done_task = alloc_percpu(struct napi_struct);
 	for_each_possible_cpu(i) {
-		tasklet_init(per_cpu_ptr(priv->done_task, i),
-		talitos_done, (unsigned long)dev);
+		netif_napi_add(per_cpu_ptr(net_dev, i),
+			per_cpu_ptr(priv->done_task, i),
+			talitos_done, TALITOS_NAPI_WEIGHT);
+		napi_enable(per_cpu_ptr(priv->done_task, i));
 	}
 
 	INIT_LIST_HEAD(&priv->alg_list);
