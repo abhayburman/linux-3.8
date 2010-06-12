@@ -201,6 +201,7 @@ static void __init mpc85xx_ds_setup_arch(void)
 	printk("MPC85xx DS board from Freescale Semiconductor\n");
 }
 
+#ifdef CONFIG_P2020DS_EVENT_IRQ
 static irqreturn_t event_isr(int irq, void *dev_id)
 {
 
@@ -224,6 +225,7 @@ static int __init p2020ds_ngpixis_init(void)
 	return 0;
 }
 machine_device_initcall(p2020_ds, p2020ds_ngpixis_init);
+#endif
 
 /*
  * Called very early, device-tree isn't unflattened

@@ -146,6 +146,16 @@ config SBC8560
 	help
 	  This option enables support for the Wind River SBC8560 board
 
+config P2020DS_EVENT_IRQ
+	bool "Freescale P2020DS Event button handler"
+	depends on MPC85xx_DS
+	default n
+	help
+	  Response to the EVENT button on the P2020DS board, can be used
+	  as a wakeup source for power management.  Note: The interrupt
+	  is conflicting with intx interrupt on PCIE slot2.  Enable this
+	  only when the PCIE slot2 is using MSI or not used.
+
 config P4080_DS
 	bool "Freescale P4080 DS"
 	select DEFAULT_UIMAGE
