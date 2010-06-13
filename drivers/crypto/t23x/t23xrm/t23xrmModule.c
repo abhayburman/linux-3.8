@@ -107,7 +107,7 @@ static int t23x_probe(struct of_device *ofdev,
 
     dev = &ofdev->dev;
     dev_set_drvdata(dev, devinst);
-    dn = ofdev->node;
+    dn = ofdev->dev.of_node;
 
     devinst->regs = of_iomap(dn, 0);
     if (devinst->regs == NULL) {
@@ -213,8 +213,11 @@ static struct of_device_id t23x_match[] = {
 MODULE_DEVICE_TABLE(of, t23x_match);
 
 static struct of_platform_driver t23x_driver = {
-	.name        = "t32x",
-	.match_table = t23x_match,
+	.driver = {
+		.name	= "t32x",
+		.owner	= THIS_MODULE,
+		.of_match_table = t23x_match,
+	},
 	.probe       = t23x_probe,
 	.remove      = __devexit_p(t23x_remove),
 };
