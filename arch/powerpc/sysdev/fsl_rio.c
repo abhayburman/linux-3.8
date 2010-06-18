@@ -1525,9 +1525,12 @@ int fsl_rio_setup(struct of_device *dev)
 #ifdef CONFIG_E500
 	saved_mcheck_exception = ppc_md.machine_check_exception;
 	ppc_md.machine_check_exception = fsl_rio_mcheck_exception;
-#endif
-	/* Ensure that RFXE is set */
-	mtspr(SPRN_HID1, (mfspr(SPRN_HID1) | 0x20000));
+
+#ifndef CONFIG_PPC_E500MC
+	/* Ensure that RFXE is set on e500 v1/v2 */
+	mtspr(SPRN_HID1, (mfspr(SPRN_HID1) | HID1_RFXE));
+#endif /* !PPC_E500MC */
+#endif /* E500 */
 
 	return 0;
 err:
