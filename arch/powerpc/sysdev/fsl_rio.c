@@ -248,7 +248,8 @@ static int fsl_rio_mcheck_exception(struct pt_regs *regs)
 	const struct exception_table_entry *entry = NULL;
 	unsigned long reason = mfspr(SPRN_MCSR);
 
-	if (reason & MCSR_BUS_RBERR) {
+	/* covers both e500v1/v2 and e500mc */
+	if (reason & (MCSR_BUS_RBERR | MCSR_LD)) {
 		reason = in_be32((u32 *)(rio_regs_win + RIO_LTLEDCSR));
 		if (reason & (RIO_LTLEDCSR_IER | RIO_LTLEDCSR_PRT)) {
 			/* Check if we are prepared to handle this fault */
