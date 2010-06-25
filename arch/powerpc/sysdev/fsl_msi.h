@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2008 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright 2007-2008, 2010 Freescale Semiconductor, Inc.
  *
  * Author: Tony Li <tony.li@freescale.com>
  *	   Jason Jin <Jason.jin@freescale.com>
@@ -22,6 +22,7 @@
 #define FSL_PIC_IP_MASK	0x0000000F
 #define FSL_PIC_IP_MPIC	0x00000001
 #define FSL_PIC_IP_IPIC	0x00000002
+#define FSL_PIC_IP_VMPIC 0x00000003
 
 struct fsl_msi {
 	struct irq_host *irqhost;
@@ -37,6 +38,7 @@ struct fsl_msi {
 	struct msi_bitmap bitmap;
 
 	struct list_head list;          /* support multiple MSI banks */
+	int msi_node_phndl;
 };
 
 #endif /* _POWERPC_SYSDEV_FSL_MSI_H */
