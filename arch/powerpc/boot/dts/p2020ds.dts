@@ -410,6 +410,8 @@
 			phy-handle = <&phy0>;
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -455,6 +457,8 @@
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -485,6 +489,8 @@
 			phy-handle = <&phy2>;
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
+			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 
 			mdio@520 {
 				#address-cells = <1>;
@@ -523,6 +529,13 @@
 			fsl,channel-remap = <0x3>;
 		};
 
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		mpic: pic@40000 {
 			interrupt-controller;
 			#address-cells = <0>;
@@ -557,6 +570,16 @@
 		power@e0070{
 			compatible = "fsl,mpc8548-pmc", "fsl,p2020-pmc";
 			reg = <0xe0070 0x20>;
+
+			etsec1_clk: soc-clk@24{
+				fsl,pmcdr-mask = <0x00000080>;
+			};
+			etsec2_clk: soc-clk@25{
+				fsl,pmcdr-mask = <0x00000040>;
+			};
+			etsec3_clk: soc-clk@26{
+				fsl,pmcdr-mask = <0x00000020>;
+			};
 		};
 
 		msi@41600 {
