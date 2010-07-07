@@ -529,8 +529,8 @@
 		};
 
 		crypto@30000 {
-			compatible = "fsl,sec3.0", "fsl,sec2.4", "fsl,sec2.2",
-				     "fsl,sec2.1", "fsl,sec2.0";
+			compatible = "fsl,sec3.1", "fsl,sec3.0", "fsl,sec2.4",
+				     "fsl,sec2.2", "fsl,sec2.1", "fsl,sec2.0";
 			reg = <0x30000 0x10000>;
 			interrupts = <45 2 58 2>;
 			interrupt-parent = <&mpic>;
@@ -538,6 +538,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x9fe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,channel-remap = <0x3>;
 		};
 
 		/* PME (pattern-matcher) */
