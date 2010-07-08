@@ -46,6 +46,13 @@
 #define PMUXCR_TDM_ENABLE 0x00800000
 
 #endif
+
+#ifdef CONFIG_P1022_DS
+
+#define PMUXCR_OFFSET 0xE0060
+#define PMUXCR_TDM_ENABLE 0x00014800
+
+#endif
 /* TDM data register offset */
 #define TDM_TDR_OFFSET 0x108
 #define TDM_RDR_OFFSET 0x100
