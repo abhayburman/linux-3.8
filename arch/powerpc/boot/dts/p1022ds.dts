@@ -173,6 +173,40 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		spi@7000 {
+			cell-index = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "fsl,espi";
+			reg = <0x7000 0x1000>;
+			interrupts = <59 0x2>;
+			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
+			mode = "cpu";
+
+			legerity@0{
+				compatible = "fsl,espi-slic";
+				reg = <1>;
+				linux,modalias = "legerity";
+				spi-max-frequency = <8000000>;
+				ch1-rx-slot = <0>;
+				ch1-tx-slot = <0>;
+				ch2-rx-slot = <2>;
+				ch2-tx-slot = <2>;
+			};
+
+			legerity@1{
+				compatible = "fsl,espi-slic";
+				reg = <2>;
+				linux,modalias = "legerity";
+				spi-max-frequency = <8000000>;
+				ch1-rx-slot = <4>;
+				ch1-tx-slot = <4>;
+				ch2-rx-slot = <6>;
+				ch2-tx-slot = <6>;
+			};
+		};
+
 		dma@c300 {
 			#address-cells = <1>;
 			#size-cells = <1>;
