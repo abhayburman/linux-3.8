@@ -133,6 +133,9 @@
 #define PCI_EDE_PERR_MASK	(PCI_EDE_TGT_PERR | PCI_EDE_MST_PERR | \
 				PCI_EDE_ADDR_PERR)
 
+#define PCI_ERR_CAP_DR_DIS_MST		0x40
+#define PCI_ERR_EN_DIS_MST		(~0x40)
+
 struct mpc85xx_mc_pdata {
 	char *name;
 	int edac_idx;
@@ -150,8 +153,11 @@ struct mpc85xx_l2_pdata {
 struct mpc85xx_pci_pdata {
 	char *name;
 	int edac_idx;
-	void __iomem *pci_vbase;
 	int irq;
+	struct ccsr_pci *pci_reg;
+	u8 pcie_flag;
+	u32 orig_pci_err_dr;
+	u32 orig_pci_err_en;
 };
 
 #endif
