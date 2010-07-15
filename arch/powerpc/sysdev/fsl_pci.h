@@ -74,18 +74,36 @@ struct ccsr_pci {
  */
 	struct pci_inbound_window_regs piw[4];
 
-	__be32	pex_err_dr;		/* 0x.e00 - PCI/PCIE error detect register */
-	u8	res21[4];
-	__be32	pex_err_en;		/* 0x.e08 - PCI/PCIE error interrupt enable register */
-	u8	res22[4];
-	__be32	pex_err_disr;		/* 0x.e10 - PCI/PCIE error disable register */
-	u8	res23[12];
-	__be32	pex_err_cap_stat;	/* 0x.e20 - PCI/PCIE error capture status register */
+/* Merge PCI/PCI Express error management registers */
+	__be32	pex_err_dr;	/* 0x.e00 - PCI/PCIE error detect register */
+	__be32	pex_err_cap_dr;	/* 0x.e04 */
+				/* - PCI error capture disabled register */
+				/* - PCIE has no this register */
+	__be32	pex_err_en;	/* 0x.e08 */
+				/* - PCI/PCIE error interrupt enable register*/
+	__be32	pex_err_attrib;	/* 0x.e0c */
+				/* - PCI error attributes capture register */
+				/* - PCIE has no this register */
+	__be32	pex_err_disr;	/* 0x.e10 */
+				/* - PCI error address capture register */
+				/* - PCIE error disable register */
+	__be32	pex_err_ext_addr; /* 0x.e14 */
+				/* - PCI error extended addr capture register*/
+				/* - PCIE has no this register */
+	__be32	pex_err_dl;	/* 0x.e18 */
+				/* - PCI error data low capture register */
+				/* - PCIE has no this register */
+	__be32	pex_err_dh;	/* 0x.e1c */
+				/* - PCI error data high capture register */
+				/* - PCIE has no this register */
+	__be32	pex_err_cap_stat; /* 0x.e20 */
+				  /* - PCI gasket timer register */
+				  /* - PCIE error capture status register */
 	u8	res24[4];
-	__be32	pex_err_cap_r0;		/* 0x.e28 - PCIE error capture register 0 */
-	__be32	pex_err_cap_r1;		/* 0x.e2c - PCIE error capture register 0 */
-	__be32	pex_err_cap_r2;		/* 0x.e30 - PCIE error capture register 0 */
-	__be32	pex_err_cap_r3;		/* 0x.e34 - PCIE error capture register 0 */
+	__be32	pex_err_cap_r0;	/* 0x.e28 - PCIE error capture register 0 */
+	__be32	pex_err_cap_r1;	/* 0x.e2c - PCIE error capture register 1 */
+	__be32	pex_err_cap_r2;	/* 0x.e30 - PCIE error capture register 2 */
+	__be32	pex_err_cap_r3;	/* 0x.e34 - PCIE error capture register 3 */
 };
 
 extern int fsl_add_bridge(struct device_node *dev, int is_primary);
