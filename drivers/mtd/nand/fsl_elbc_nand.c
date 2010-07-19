@@ -819,7 +819,7 @@ static int __devinit fsl_elbc_nand_probe(struct of_device *dev,
 #endif
 	int ret;
 	int bank;
-	struct device_node *node = dev->node;
+	struct device_node *node = dev->dev.of_node;
 
 	if (!fsl_lbc_ctrl_dev || !fsl_lbc_ctrl_dev->regs)
 		return -ENODEV;
@@ -838,7 +838,7 @@ static int __devinit fsl_elbc_nand_probe(struct of_device *dev,
 		    (in_be32(&lbc->bank[bank].br) & BR_MSEL) == BR_MS_FCM &&
 		    (in_be32(&lbc->bank[bank].br) &
 		     in_be32(&lbc->bank[bank].or) & BR_BA)
-		     == res.start)
+		     == convert_lbc_address(res.start))
 			break;
 
 	if (bank >= MAX_BANKS) {
