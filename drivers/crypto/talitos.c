@@ -2772,6 +2772,16 @@ static int talitos_probe(struct of_device *ofdev,
 			dev_info(dev, "hwrng\n");
 	}
 
+	priv->netcrypto_cache = kmem_cache_create("netcrypto_cache",
+						MAX_DESC_LEN, 0,
+					SLAB_HWCACHE_ALIGN, NULL);
+	if (!priv->netcrypto_cache) {
+		printk(KERN_ERR "%s: failed to create block cache\n",
+				__func__);
+		err = -ENOMEM;
+		goto err_out;
+	}
+
 	/* register crypto algorithms the device supports */
 	for (i = 0; i < ARRAY_SIZE(driver_algs); i++) {
 		if (hw_supports(dev, driver_algs[i].desc_hdr_template)) {
@@ -2808,9 +2818,6 @@ static int talitos_probe(struct of_device *ofdev,
 			}
 		}
 	}
-	priv->netcrypto_cache = kmem_cache_create("netcrypto_cache",
-						MAX_DESC_LEN, 0,
-					SLAB_HWCACHE_ALIGN, NULL);
 
 	return 0;
 
