@@ -83,16 +83,12 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 				reg = <0xB0000 0x1000>;
-				fsl,rx-err-int-map = <0xAA>;
-				fsl,tx-int-map = <0xAA>;
 				interrupts = <29 2 30 2 34 2>;
 			};
 			queue-group@1{
 				#address-cells = <1>;
 				#size-cells = <1>;
 				reg = <0xB4000 0x1000>;
-				fsl,rx-err-int-map = <0x55>;
-				fsl,tx-int-map = <0x55>;
 				interrupts = <17 2 18 2 24 2>;
 			};
 		};
