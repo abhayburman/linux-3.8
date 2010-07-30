@@ -180,6 +180,7 @@ void __init p1022_ds_pic_init(void)
 	struct mpic *mpic;
 	struct resource r;
 	struct device_node *np;
+	unsigned long root = of_get_flat_dt_root();
 
 	np = of_find_node_by_type(NULL, "open-pic");
 	if (np == NULL) {
@@ -193,11 +194,19 @@ void __init p1022_ds_pic_init(void)
 		return;
 	}
 
-	mpic = mpic_alloc(np, r.start,
-			  MPIC_PRIMARY | MPIC_WANTS_RESET |
-			  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
-			  MPIC_SINGLE_DEST_CPU,
+	if (of_flat_dt_is_compatible(root, "fsl,P1022DS-CAMP")) {
+		mpic = mpic_alloc(np, r.start,
+			MPIC_PRIMARY |
+			MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS,
 			0, 256, " OpenPIC  ");
+	} else {
+		mpic = mpic_alloc(np, r.start,
+			MPIC_PRIMARY | MPIC_WANTS_RESET |
+			MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
+			MPIC_SINGLE_DEST_CPU,
+			0, 256, " OpenPIC  ");
+	}
+
 	BUG_ON(mpic == NULL);
 	of_node_put(np);
 
