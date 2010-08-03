@@ -46,9 +46,6 @@ struct epapr_entry {
 	u32	r6_l;
 };
 
-/* hold epapr parameter table address */
-static phys_addr_t epapr_tbl[NR_CPUS];
-
 /* access per cpu vars from generic smp.c */
 DECLARE_PER_CPU(int, cpu_state);
 
@@ -71,6 +68,7 @@ smp_85xx_mach_cpu_die(void)
 }
 #endif
 
+#ifdef CONFIG_HOTPLUG_CPU
 static void __cpuinit
 smp_85xx_reset_core(int nr)
 {
@@ -135,66 +133,109 @@ smp_85xx_unmap_bootpg(void)
 	iounmap(bootpg_ptr);
 	return 0;
 }
+#endif
 
 static void __cpuinit
 smp_85xx_kick_cpu(int nr)
 {
 	unsigned long flags;
-	const u64 *cpu_rel_addr;
+	phys_addr_t cpu_rel_addr;
 	__iomem struct epapr_entry *epapr;
-	struct device_node *np;
 	int n = 0;
+	int ioremappable;
 
 	WARN_ON (nr < 0 || nr >= NR_CPUS);
 
 	pr_debug("smp_85xx_kick_cpu: kick CPU #%d\n", nr);
 
-	np = of_get_cpu_node(nr, NULL);
-	cpu_rel_addr = of_get_property(np, "cpu-release-addr", NULL);
-
-	if (cpu_rel_addr == NULL) {
-		printk(KERN_ERR "No cpu-release-addr for cpu %d\n", nr);
-		return;
-	}
-	/* FIXME: following part doesn't care 36-bit addr mode. */
-	if (epapr_tbl[nr] == 0)
-		epapr_tbl[nr] = PAGE_MASK | (u32)*cpu_rel_addr;
-	else {
-		epapr_tbl[nr] = ((u32)&__spin_table - PAGE_OFFSET + nr * 0x20)
-								| PAGE_MASK;
-		pr_debug("cpu_release_addr=%08x, __spin_table=%p, nr=%08x\n",
-					(u32)epapr_tbl[nr], &__spin_table, nr );
-	}
-
-	local_irq_save(flags);
-
 	if (system_state < SYSTEM_RUNNING) {
-		epapr = ioremap(epapr_tbl[nr], sizeof(struct epapr_entry));
-		out_be32(&epapr->pir, nr);
-		out_be32(&epapr->addr_l, __pa(__early_start));
+		/* booting, using __spin_table from u-boot */
+		struct device_node *np;
+		const u64 *prop;
+
+		np = of_get_cpu_node(nr, NULL);
+		if (np == NULL)
+			return;
+
+		prop = of_get_property(np, "cpu-release-addr", NULL);
+		if (prop == NULL) {
+			of_node_put(np);
+			printk(KERN_ERR "No cpu-release-addr for cpu %d\n", nr);
+			return;
+		}
+		cpu_rel_addr = (phys_addr_t)*prop;
+		of_node_put(np);
+
+		/*
+		 * A secondary core could be in a spinloop in the bootpage
+		 * (0xfffff000), somewhere in highmem, or somewhere in lowmem.
+		 * The bootpage and highmem can be accessed via ioremap(), but
+		 * we need to directly access the spinloop if its in lowmem.
+		 */
+		ioremappable = cpu_rel_addr > virt_to_phys(high_memory);
+
+		if (ioremappable)
+			epapr = ioremap(cpu_rel_addr,
+						sizeof(struct epapr_entry));
+		else
+			epapr = phys_to_virt(cpu_rel_addr);
+
+
 	} else {
+#ifdef CONFIG_HOTPLUG_CPU
+		/* hotplug, using __spin_table from kernel */
+		cpu_rel_addr = (__pa(&__spin_table) + nr *
+					sizeof(struct epapr_entry));
+		pr_debug("cpu-release-addr=%llx, __spin_table=%p, nr=%x\n",
+					(unsigned long long)cpu_rel_addr,
+					&__spin_table, nr);
+
 		smp_85xx_map_bootpg(__pa(__secondary_start_page));
-		epapr = ioremap(epapr_tbl[nr], sizeof(struct epapr_entry));
+
+		/* remap the 0xFFFFF000 page as non-cacheable */
+		ioremappable = 1;
+		epapr = ioremap(cpu_rel_addr | PAGE_MASK, sizeof(struct epapr_entry));
+
 		smp_85xx_reset_core(nr);
 
 		/* wait until core(nr) is ready... */
 		while ((in_be32(&epapr->addr_l) != 1) && (++n < 1000))
 			udelay(100);
 
-		out_be32(&epapr->pir, nr);
-		out_be32(&epapr->addr_l, __pa(__early_start));
+		if (n == 1000) {
+			pr_err("timeout waiting for core%d to reset\n",
+					nr);
+			return;
+		}
+#else
+		pr_err("runtime kick cpu not supported\n");
+		return;
+#endif
 	}
+
+	local_irq_save(flags);
+
+	out_be32(&epapr->pir, nr);
+	out_be32(&epapr->addr_l, __pa(__early_start));
+
+	if (!ioremappable)
+		flush_dcache_range((ulong)epapr,
+				(ulong)epapr + sizeof(struct epapr_entry));
 
 	/* Wait a bit for the CPU to ack. */
 	n = 0;
 	while ((__secondary_hold_acknowledge != nr) && (++n < 1000))
-		mdelay(100);
-
-	smp_85xx_unmap_bootpg();
-	/* require dcache flush for cpu-release-addr ? */
+		mdelay(1);
 
 	local_irq_restore(flags);
-	iounmap(epapr);
+
+	if (ioremappable)
+		iounmap(epapr);
+
+#ifdef CONFIG_HOTPLUG_CPU
+	if (system_state >= SYSTEM_RUNNING)
+		smp_85xx_unmap_bootpg();
+#endif
 
 	pr_debug("waited %d msecs for CPU #%d.\n", n, nr);
 }
@@ -206,9 +247,6 @@ void __init mpc85xx_smp_init(void)
 {
 	struct device_node *np;
 	int i;
-
-	for (i = 0; i < NR_CPUS; i++)
-		epapr_tbl[i] = 0;
 
 	np = of_find_node_by_type(NULL, "open-pic");
 	if (np) {

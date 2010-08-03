@@ -194,9 +194,6 @@ __secondary_start_page:
 
 	.align L1_CACHE_SHIFT
 	.globl __spin_table
-/*__spin_table_loc:
-	.space 544 - (__spin_table_loc - __secondary_start_page)
-*/
 __spin_table:
 	.space NR_CPUS*ENTRY_SIZE
 
