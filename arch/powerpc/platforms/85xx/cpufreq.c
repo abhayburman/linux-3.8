@@ -218,7 +218,7 @@ static struct cpufreq_driver mpc85xx_cpufreq_driver = {
 
 static int __init mpc85xx_cpufreq_init(void)
 {
-	if (!machine_is_compatible("fsl,P1022DS"))
+	if (!of_machine_is_compatible("fsl,P1022DS"))
 		return -ENODEV;
 
 	porpllsr = ioremap(get_immrbase() + PORPLLSR, 4);
