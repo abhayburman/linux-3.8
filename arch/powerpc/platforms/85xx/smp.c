@@ -49,7 +49,7 @@ struct epapr_entry {
 /* access per cpu vars from generic smp.c */
 DECLARE_PER_CPU(int, cpu_state);
 
-#if defined(CONFIG_HOTPLUG_CPU) && defined(CONFIG_PM)
+#ifdef CONFIG_HOTPLUG_CPU
 static void __cpuinit
 smp_85xx_mach_cpu_die(void)
 {
@@ -66,9 +66,7 @@ smp_85xx_mach_cpu_die(void)
 		mpc85xx_cpu_down();
 	}
 }
-#endif
 
-#ifdef CONFIG_HOTPLUG_CPU
 static void __cpuinit
 smp_85xx_reset_core(int nr)
 {
@@ -255,14 +253,12 @@ void __init mpc85xx_smp_init(void)
 		smp_85xx_ops.setup_cpu = smp_mpic_setup_cpu;
 		smp_85xx_ops.message_pass = smp_mpic_message_pass;
 		smp_85xx_ops.kick_cpu = smp_85xx_kick_cpu;
-#if defined(CONFIG_HOTPLUG_CPU)
+#ifdef CONFIG_HOTPLUG_CPU
 		smp_85xx_ops.give_timebase = smp_generic_give_timebase;
 		smp_85xx_ops.take_timebase = smp_generic_take_timebase;
 		smp_85xx_ops.cpu_disable   = generic_cpu_disable;
 		smp_85xx_ops.cpu_die	= generic_cpu_die;
-#ifdef CONFIG_PM
 		ppc_md.cpu_die		= smp_85xx_mach_cpu_die;
-#endif
 #endif
 	}
 
