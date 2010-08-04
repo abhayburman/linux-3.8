@@ -180,7 +180,7 @@ smp_85xx_kick_cpu(int nr)
 		else
 			epapr = phys_to_virt(cpu_rel_addr);
 
-
+		local_irq_save(flags);
 	} else {
 #ifdef CONFIG_HOTPLUG_CPU
 		/* hotplug, using __spin_table from kernel */
@@ -189,6 +189,9 @@ smp_85xx_kick_cpu(int nr)
 		pr_debug("cpu-release-addr=%llx, __spin_table=%p, nr=%x\n",
 					(unsigned long long)cpu_rel_addr,
 					&__spin_table, nr);
+
+		/* prevent bootpage from being accessed by others */
+		local_irq_save(flags);
 
 		smp_85xx_map_bootpg(__pa(__secondary_start_page));
 
@@ -212,8 +215,6 @@ smp_85xx_kick_cpu(int nr)
 		return;
 #endif
 	}
-
-	local_irq_save(flags);
 
 	out_be32(&epapr->pir, nr);
 	out_be32(&epapr->addr_l, __pa(__early_start));
