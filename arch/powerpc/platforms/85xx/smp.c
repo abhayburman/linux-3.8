@@ -195,7 +195,7 @@ smp_85xx_kick_cpu(int nr)
 
 		/* remap the 0xFFFFF000 page as non-cacheable */
 		ioremappable = 1;
-		epapr = ioremap(cpu_rel_addr | PAGE_MASK, sizeof(struct epapr_entry));
+		epapr = ioremap(cpu_rel_addr | 0xfffff000, sizeof(struct epapr_entry));
 
 		smp_85xx_reset_core(nr);
 
