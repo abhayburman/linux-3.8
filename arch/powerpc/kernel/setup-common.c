@@ -691,11 +691,6 @@ static int ppc_dflt_bus_notify(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-static struct notifier_block ppc_dflt_plat_bus_notifier = {
-	.notifier_call = ppc_dflt_bus_notify,
-	.priority = INT_MAX,
-};
-
 static struct notifier_block ppc_dflt_of_bus_notifier = {
 	.notifier_call = ppc_dflt_bus_notify,
 	.priority = INT_MAX,
@@ -703,7 +698,6 @@ static struct notifier_block ppc_dflt_of_bus_notifier = {
 
 static int __init setup_bus_notifier(void)
 {
-	bus_register_notifier(&platform_bus_type, &ppc_dflt_plat_bus_notifier);
 	bus_register_notifier(&of_platform_bus_type, &ppc_dflt_of_bus_notifier);
 
 	return 0;
