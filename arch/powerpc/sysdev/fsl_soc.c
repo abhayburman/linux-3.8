@@ -3,7 +3,7 @@
  *
  * Maintained by Kumar Gala (see MAINTAINERS for contact information)
  *
- * Copyright (C) 2009 Freescale Semiconductor, Inc.
+ * Copyright (C) 2009-2010 Freescale Semiconductor, Inc.
  *
  * 2006 (c) MontaVista Software, Inc.
  * Vitaly Bordug <vbordug@ru.mvista.com>
@@ -279,6 +279,7 @@ static int __init fsl_usb_of_init(void)
 		if (ret)
 			goto unreg_mph;
 		i++;
+		usb_dev_mph = NULL;
 	}
 
 	for_each_compatible_node(np, NULL, "fsl-usb2-dr") {
@@ -357,6 +358,8 @@ static int __init fsl_usb_of_init(void)
 				goto unreg_dr;
 		}
 		i++;
+		usb_dev_dr_host = NULL;
+		usb_dev_dr_client = NULL;
 	}
 	return 0;
 
