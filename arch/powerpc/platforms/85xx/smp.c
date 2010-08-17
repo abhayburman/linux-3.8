@@ -245,7 +245,6 @@ struct smp_ops_t smp_85xx_ops = {
 void __init mpc85xx_smp_init(void)
 {
 	struct device_node *np;
-	int i;
 
 	np = of_find_node_by_type(NULL, "open-pic");
 	if (np) {
