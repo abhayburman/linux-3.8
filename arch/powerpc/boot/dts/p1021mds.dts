@@ -315,6 +315,7 @@
 			reg = <0x22000 0x1000>;
 			interrupt-parent = <&mpic>;
 			interrupts = <28 0x2>;
+			dr_mode = "host";
 			phy_type = "ulpi";
 		};
 
