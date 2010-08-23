@@ -21,17 +21,17 @@
 #include <linux/of_platform.h>
 #include <linux/pm.h>
 #include <linux/interrupt.h>
-
+#include <asm/fsl_pixis.h>
 #include <sysdev/fsl_soc.h>
 
 struct pmc_regs {
 	__be32 devdisr;
-	__be32 :32;
-	__be32 :32;
-	__be32 :32;
+	__be32:32;
+	__be32:32;
+	__be32:32;
 	__be32 pmcsr;
-	__be32 :32;
-	__be32 :32;
+	__be32:32;
+	__be32:32;
 	__be32 pmcdr;
 };
 static struct device *pmc_dev;
@@ -124,6 +124,9 @@ static int pmc_suspend_enter(suspend_state_t state)
 	case PM_SUSPEND_STANDBY:
 		local_irq_disable();
 
+		/* Start the power monitor using FPGA */
+		pixis_start_pm_sleep();
+
 		setbits32(&pmc_regs->pmcsr, PMCSR_SLP);
 
 		/* At this point, the CPU is asleep. */
@@ -133,6 +136,8 @@ static int pmc_suspend_enter(suspend_state_t state)
 		if (ret)
 			dev_err(pmc_dev,
 				"timeout waiting for SLP bit to be cleared\n");
+		/* Stop the power monitor using FPGA */
+		pixis_stop_pm_sleep();
 
 		return 0;
 
@@ -169,12 +174,11 @@ static int pmc_probe(struct of_device *ofdev, const struct of_device_id *id)
 		if (!pmc_regs)
 			return -ENOMEM;
 
-		if (of_device_is_compatible(np, "fsl,mpc8536-pmc")) {
+		if (of_device_is_compatible(np, "fsl,mpc8536-pmc"))
 			has_deep_sleep = 1;
-		}
-		if (of_device_is_compatible(np, "fsl,p1022-pmc")) {
+
+		if (of_device_is_compatible(np, "fsl,p1022-pmc"))
 			has_lossless = 1;
-		}
 
 		of_node_put(node);
 	}
