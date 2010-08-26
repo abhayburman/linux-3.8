@@ -183,6 +183,22 @@ config P4080_DS
 	help
 	  This option enables support for the P4080 DS board
 
+config FSL_CORENET_DS_HV
+	bool "Freescale Hypervisor - P4080, P3041, P5020 DS"
+	select DEFAULT_UIMAGE
+	select PPC_FSL_BOOK3E
+	select PPC_E500MC
+	select PHYS_64BIT
+	select SWIOTLB
+	select MPC8xxx_GPIO
+	select HAS_RAPIDIO
+	select FSL_CORENET_DS_MDIO if PHYLIB
+	select HAS_FSL_PME
+	select PPC_EPAPR_HV_PIC
+	select FSL_HYPERVISOR
+	help
+	  This option enables support for the Freescale Hypervisor on the P4080, P3041, and P5020 DS boards
+
 endif # PPC32
 
 config P5020_DS
