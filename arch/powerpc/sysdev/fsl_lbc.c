@@ -340,6 +340,91 @@ err:
 	return ret;
 }
 
+#ifdef CONFIG_SUSPEND
+static struct fsl_lbc_regs lbc_saveed_regs;
+#define COUNT_OF_BANK_P1022 8
+#define COUNT_OF_BANKS COUNT_OF_BANK_P1022
+
+/* save lbc registers */
+static int fsl_lbc_suspend(struct of_device *ofdev, pm_message_t state)
+{
+	struct fsl_lbc_ctrl *ctrl = dev_get_drvdata(&ofdev->dev);
+	struct fsl_lbc_regs __iomem *lbc = ctrl->regs;
+	int i;
+
+	for (i = 0; i < COUNT_OF_BANKS; i++) {
+		lbc_saveed_regs.bank[i].br =
+			in_be32(&lbc->bank[i].br);
+		lbc_saveed_regs.bank[i].or =
+			in_be32(&lbc->bank[i].or);
+	}
+	lbc_saveed_regs.mar = in_be32(&lbc->mar);
+	lbc_saveed_regs.mamr = in_be32(&lbc->mamr);
+	lbc_saveed_regs.mbmr = in_be32(&lbc->mbmr);
+	lbc_saveed_regs.mcmr = in_be32(&lbc->mcmr);
+	lbc_saveed_regs.mrtpr = in_be32(&lbc->mrtpr);
+	lbc_saveed_regs.mdr = in_be32(&lbc->mdr);
+	lbc_saveed_regs.lsor = in_be32(&lbc->lsor);
+	lbc_saveed_regs.lsdmr = in_be32(&lbc->lsdmr);
+	lbc_saveed_regs.lurt = in_be32(&lbc->lurt);
+	lbc_saveed_regs.lsrt = in_be32(&lbc->lsrt);
+	lbc_saveed_regs.ltedr = in_be32(&lbc->ltedr);
+	lbc_saveed_regs.lteir = in_be32(&lbc->lteir);
+	lbc_saveed_regs.lteatr = in_be32(&lbc->lteatr);
+	lbc_saveed_regs.ltear = in_be32(&lbc->ltear);
+	lbc_saveed_regs.lbcr = in_be32(&lbc->lbcr);
+	lbc_saveed_regs.lcrr = in_be32(&lbc->lcrr);
+	lbc_saveed_regs.fmr = in_be32(&lbc->fmr);
+	lbc_saveed_regs.fir = in_be32(&lbc->fir);
+	lbc_saveed_regs.fcr = in_be32(&lbc->fcr);
+	lbc_saveed_regs.fbar = in_be32(&lbc->fbar);
+	lbc_saveed_regs.fpar = in_be32(&lbc->fpar);
+	lbc_saveed_regs.fbcr = in_be32(&lbc->fbcr);
+
+	return 0;
+}
+
+/* restore lbc registers */
+static int fsl_lbc_resume(struct of_device *ofdev)
+{
+	struct fsl_lbc_ctrl *ctrl = dev_get_drvdata(&ofdev->dev);
+	struct fsl_lbc_regs __iomem *lbc = ctrl->regs;
+	int i;
+
+	for (i = 0; i < COUNT_OF_BANKS; i++) {
+		out_be32(&lbc->bank[i].br,
+				lbc_saveed_regs.bank[i].br);
+		out_be32(&lbc->bank[i].or,
+				lbc_saveed_regs.bank[i].or);
+	}
+
+	out_be32(&lbc->mar, lbc_saveed_regs.mar);
+	out_be32(&lbc->mamr, lbc_saveed_regs.mamr);
+	out_be32(&lbc->mbmr, lbc_saveed_regs.mbmr);
+	out_be32(&lbc->mcmr, lbc_saveed_regs.mcmr);
+	out_be32(&lbc->mrtpr, lbc_saveed_regs.mrtpr);
+	out_be32(&lbc->mdr, lbc_saveed_regs.mdr);
+	out_be32(&lbc->lsor, lbc_saveed_regs.lsor);
+	out_be32(&lbc->lsdmr, lbc_saveed_regs.lsdmr);
+	out_be32(&lbc->lurt, lbc_saveed_regs.lurt);
+	out_be32(&lbc->lsrt, lbc_saveed_regs.lsrt);
+	out_be32(&lbc->ltedr, lbc_saveed_regs.ltedr);
+	out_be32(&lbc->lteir, lbc_saveed_regs.lteir);
+	out_be32(&lbc->lteatr, lbc_saveed_regs.lteatr);
+	out_be32(&lbc->ltear, lbc_saveed_regs.ltear);
+	out_be32(&lbc->lbcr, lbc_saveed_regs.lbcr);
+	out_be32(&lbc->lcrr, lbc_saveed_regs.lcrr);
+	out_be32(&lbc->fmr, lbc_saveed_regs.fmr);
+	out_be32(&lbc->fir, lbc_saveed_regs.fir);
+	out_be32(&lbc->fcr, lbc_saveed_regs.fcr);
+	out_be32(&lbc->fbar, lbc_saveed_regs.fbar);
+	out_be32(&lbc->fpar, lbc_saveed_regs.fpar);
+	out_be32(&lbc->fbcr, lbc_saveed_regs.fbcr);
+
+	return 0;
+}
+#endif /* CONFIG_SUSPEND */
+
 static const struct of_device_id fsl_lbc_match[] = {
 	{
 		.compatible = "fsl,elbc",
@@ -364,6 +449,10 @@ static struct of_platform_driver fsl_lbc_ctrl_driver = {
 	},
 	.probe       = fsl_lbc_ctrl_probe,
 	.remove      = __devexit_p(fsl_lbc_ctrl_remove),
+#ifdef CONFIG_SUSPEND
+	.suspend     = fsl_lbc_suspend,
+	.resume      = fsl_lbc_resume,
+#endif
 };
 
 static int __init fsl_lbc_init(void)
