@@ -532,7 +532,7 @@
 
 		power@e0070{
 			compatible = "fsl,mpc8548-pmc";
-			reg = <0xe0070 0x14>;
+			reg = <0xe0070 0x20>;
 		};
 
 		timer@41100 {
