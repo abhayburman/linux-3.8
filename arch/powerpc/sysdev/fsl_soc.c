@@ -232,7 +232,7 @@ static int __init fsl_usb_of_init(void)
 	struct device_node *np;
 	unsigned int i = 0;
 	struct platform_device *usb_dev_mph = NULL, *usb_dev_dr_host = NULL,
-		*usb_dev_dr_client = NULL;
+		*usb_dev_dr_client = NULL, *usb_dev_dr_otg = NULL;
 	int ret;
 
 	for_each_compatible_node(np, NULL, "fsl-usb2-mph") {
@@ -319,6 +319,12 @@ static int __init fsl_usb_of_init(void)
 			}
 		} else if (prop && !strcmp(prop, "otg")) {
 			usb_data.operating_mode = FSL_USB2_DR_OTG;
+			usb_dev_dr_otg = platform_device_register_simple(
+					"fsl-usb2-otg", i, r, 2);
+			if (IS_ERR(usb_dev_dr_otg)) {
+				ret = PTR_ERR(usb_dev_dr_otg);
+				goto err;
+			}
 			usb_dev_dr_host = platform_device_register_simple(
 					"fsl-ehci", i, r, 2);
 			if (IS_ERR(usb_dev_dr_host)) {
@@ -348,6 +354,16 @@ static int __init fsl_usb_of_init(void)
 						fsl_usb2_platform_data))))
 				goto unreg_dr;
 		}
+		if (usb_dev_dr_otg) {
+			usb_dev_dr_otg->dev.coherent_dma_mask = 0xffffffffUL;
+			usb_dev_dr_otg->dev.dma_mask =
+				&usb_dev_dr_otg->dev.coherent_dma_mask;
+			ret = platform_device_add_data(usb_dev_dr_otg,
+					&usb_data,
+					sizeof(struct fsl_usb2_platform_data));
+			if (ret)
+				goto unreg_dr;
+		}
 		if (usb_dev_dr_client) {
 			usb_dev_dr_client->dev.coherent_dma_mask = 0xffffffffUL;
 			usb_dev_dr_client->dev.dma_mask = &usb_dev_dr_client->
@@ -368,6 +384,8 @@ unreg_dr:
 		platform_device_unregister(usb_dev_dr_host);
 	if (usb_dev_dr_client)
 		platform_device_unregister(usb_dev_dr_client);
+	if (usb_dev_dr_otg)
+		platform_device_unregister(usb_dev_dr_otg);
 unreg_mph:
 	if (usb_dev_mph)
 		platform_device_unregister(usb_dev_mph);
