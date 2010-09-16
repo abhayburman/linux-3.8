@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2009 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2007-2010 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Tony Li <tony.li@freescale.com>
  *         Dave Liu <DaveLiu@freescale.com>
@@ -728,7 +728,7 @@ void dump_bd_pool(bd_pool_t * bd_pool, int flag)
 	fua_dump("\tfrees 0x%x\n", bd_pool->frees);
 }
 
-struct qe_bd *alloc_bds(bd_pool_t *bd_pool, int number)
+static struct qe_bd *alloc_bds(bd_pool_t *bd_pool, int number)
 {
 	int i, j;
 	struct qe_bd *head;
@@ -774,7 +774,7 @@ struct qe_bd *alloc_bds(bd_pool_t *bd_pool, int number)
 	return head;
 }
 
-void free_bds(bd_pool_t *bd_pool, struct qe_bd *head, int number)
+static void free_bds(bd_pool_t *bd_pool, struct qe_bd *head, int number)
 {
 	int i;
 
@@ -2212,9 +2212,9 @@ void handle_intr(struct fua_private *fua_priv)
 	int event;
 	unsigned long flags;
 
-	spin_lock_irqsave(fua_priv->lock, flags);
+	spin_lock_irqsave(&fua_priv->lock, flags);
 	event = fua_priv->intr_event;
-	spin_unlock_irqrestore(fua_priv->lock, flags);
+	spin_unlock_irqrestore(&fua_priv->lock, flags);
 
 	if (event & UCCE_ATM_TIRU) {
 		/* only occur in transmit internal rate mode */
@@ -2542,7 +2542,7 @@ static int fua_getsockopt(struct atm_vcc *vcc, int level, int optname,
 }
 
 static int fua_setsockopt(struct atm_vcc *vcc, int level, int optname,
-				void *optval, int optlen)
+				void *optval, unsigned int optlen)
 {
 	return -EINVAL;
 }
