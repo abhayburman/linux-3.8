@@ -1,5 +1,6 @@
 /*
  * Freescale USB device/endpoint management registers
+ * Copyright (C) 2010 Freescale Semiconductor, Inc. All rights reserved.
  */
 #ifndef __FSL_USB2_UDC_H
 #define __FSL_USB2_UDC_H
@@ -581,4 +582,10 @@ static inline void fsl_udc_clk_release(void)
 }
 #endif
 
+#endif
+
+#if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)
+/* Get platform resource from OTG driver */
+extern struct resource *otg_get_resources(void);
+extern int is_otg;
 #endif
