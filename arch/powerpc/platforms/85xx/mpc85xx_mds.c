@@ -275,6 +275,14 @@ static void __init mpc85xx_mds_setup_arch(void)
 
 		for_each_node_by_name(ucc, "ucc")
 			par_io_of_config(ucc);
+
+#if defined CONFIG_ATM_UCC
+{
+		struct device_node *upc;
+		for_each_node_by_name(upc, "upc")
+			par_io_of_config(upc);
+}
+#endif
 	}
 
 	if (bcsr_regs) {
