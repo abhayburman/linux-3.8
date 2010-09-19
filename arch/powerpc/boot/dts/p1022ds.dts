@@ -57,7 +57,8 @@
 
 		ranges = <0x0 0x0 0x0 0xe8000000 0x08000000
 			  0x1 0x0 0x0 0xe0000000 0x08000000
-			  0x2 0x0 0x0 0xffdf0000 0x00008000>;
+			  0x2 0x0 0x0 0xffa00000 0x00040000
+			  0x3 0x0 0x0 0xffdf0000 0x00008000>;
 
 		nor@0,0 {
 			#address-cells = <1>;
@@ -67,38 +68,85 @@
 			bank-width = <2>;
 			device-width = <1>;
 
-			ramdisk@0 {
+			partition@0 {
 				reg = <0x0 0x03000000>;
+				label = "ramdisk-nor";
 				read-only;
 			};
 
-			diagnostic@3000000 {
+			partition@3000000 {
 				reg = <0x03000000 0x00e00000>;
+				label = "diagnostic-nor";
 				read-only;
 			};
 
-			dink@3e00000 {
+			partition@3e00000 {
 				reg = <0x03e00000 0x00200000>;
+				label = "dink-nor";
 				read-only;
 			};
 
-			kernel@4000000 {
+			partition@4000000 {
 				reg = <0x04000000 0x00400000>;
+				label = "kernel-nor";
 				read-only;
 			};
 
-			jffs2@4400000 {
+			partition@4400000 {
 				reg = <0x04400000 0x03b00000>;
+				label = "jffs2-nor";
 			};
 
-			dtb@7f00000 {
+			partition@7f00000 {
 				reg = <0x07f00000 0x00080000>;
+				label = "dtb-nor";
 				read-only;
 			};
 
-			u-boot@7f80000 {
+			partition@7f80000 {
 				reg = <0x07f80000 0x00080000>;
+				label = "u-boot-nor";
 				read-only;
+			};
+		};
+
+		nand@2,0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "fsl,elbc-fcm-nand";
+			reg = <0x2 0x0 0x40000>;
+
+			partition@0 {
+				reg = <0x0 0x02000000>;
+				label = "u-boot-nand";
+				read-only;
+			};
+
+			partition@2000000 {
+				reg = <0x02000000 0x10000000>;
+				label = "jffs2-nand";
+			};
+
+			partition@12000000 {
+				reg = <0x12000000 0x10000000>;
+				label = "ramdisk-nand";
+				read-only;
+			};
+
+			partition@22000000 {
+				reg = <0x22000000 0x04000000>;
+				label = "kernel-nand";
+			};
+
+			partition@26000000 {
+				reg = <0x26000000 0x01000000>;
+				label = "dtb-nand";
+				read-only;
+			};
+
+			partition@27000000 {
+				reg = <0x27000000 0x19000000>;
+				label = "reserved-nand";
 			};
 		};
 	};
@@ -120,7 +168,7 @@
 		ecm@1000 {
 			compatible = "fsl,p1022-ecm", "fsl,ecm";
 			reg = <0x1000 0x1000>;
-			interrupts = <17 2>;
+			interrupts = <16 2>;
 			interrupt-parent = <&mpic>;
 		};
 
@@ -128,7 +176,7 @@
 			compatible = "fsl,p1022-memory-controller";
 			reg = <0x2000 0x1000>;
 			interrupt-parent = <&mpic>;
-			interrupts = <24 2>;
+			interrupts = <16 2>;
 		};
 
 		i2c@3000 {
@@ -142,6 +190,20 @@
 			dfsrr;
 		};
 
+		ssi@15000 {
+			compatible = "fsl,p1022-ssi";
+			cell-index = <0>;
+			reg = <0x15000 0x100>;
+			interrupt-parent = <&mpic>;
+			interrupts = <75 2>;
+			fsl,mode = "i2s-slave";
+			codec-handle = <&wm8776>;
+			fsl,playback-dma = <&dma00>;
+			fsl,capture-dma = <&dma01>;
+			fsl,fifo-depth = <15>;
+			fsl,ssi-asynchronous = <1>;
+		};
+
 		i2c@3100 {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -151,6 +213,37 @@
 			interrupts = <43 2>;
 			interrupt-parent = <&mpic>;
 			dfsrr;
+			rtc@68{
+				compatible = "dallas,ds3232";
+				reg = <0x68>;
+				interrupts = <16 0x2>;
+				interrupt-parent = <&mpic>;
+			};
+			adt7461@4c{
+				compatible = "adi,adt7461";
+				reg = <0x4c>;
+			};
+			zl6100@21{
+				compatible = "intersil,zl6100";
+				reg = <0x21>;
+			};
+			zl6100@24{
+				compatible = "intersil,zl6100";
+				reg = <0x24>;
+			};
+			zl6100@26{
+				compatible = "intersil,zl6100";
+				reg = <0x26>;
+			};
+			zl6100@29{
+				compatible = "intersil,zl6100";
+				reg = <0x29>;
+			};
+			wm8776:codec@1a {
+				compatible = "wolfson,wm8776";
+				reg = <0x1a>;
+				clock-frequency = <0xbb8000>;
+			};
 		};
 
 		serial0: serial@4500 {
@@ -204,6 +297,46 @@
 				ch1-tx-slot = <4>;
 				ch2-rx-slot = <6>;
 				ch2-tx-slot = <6>;
+			};
+		};
+
+		spi@7000 {
+			cell-index = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "fsl,espi";
+			reg = <0x7000 0x1000>;
+			interrupts = <59 0x2>;
+			interrupt-parent = <&mpic>;
+			espi,num-ss-bits = <4>;
+			mode = "cpu";
+
+			fsl_m25p80@0 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "fsl,espi-flash";
+				reg = <0>;
+				linux,modalias = "fsl_m25p80";
+				spi-max-frequency = <40000000>; /* input clock */
+				partition@0 {
+					label = "u-boot-spi";
+					reg = <0x00000000 0x00100000>;
+					read-only;
+				};
+				partition@100000 {
+					label = "kernel-spi";
+					reg = <0x00100000 0x00500000>;
+					read-only;
+				};
+				partition@600000 {
+					label = "dtb-spi";
+					reg = <0x00600000 0x00100000>;
+					read-only;
+				};
+				partition@700000 {
+					label = "file system-spi";
+					reg = <0x00700000 0x00900000>;
+				};
 			};
 		};
 
@@ -278,15 +411,15 @@
 			reg = <0x21300 0x4>;
 			ranges = <0x0 0x21100 0x200>;
 			cell-index = <0>;
-			dma-channel@0 {
-				compatible = "fsl,eloplus-dma-channel";
+			dma00: dma-channel@0 {
+				compatible = "fsl,ssi-dma-channel";
 				reg = <0x0 0x80>;
 				cell-index = <0>;
 				interrupt-parent = <&mpic>;
 				interrupts = <20 2>;
 			};
-			dma-channel@80 {
-				compatible = "fsl,eloplus-dma-channel";
+			dma01: dma-channel@80 {
+				compatible = "fsl,ssi-dma-channel";
 				reg = <0x80 0x80>;
 				cell-index = <1>;
 				interrupt-parent = <&mpic>;
@@ -425,15 +558,16 @@
 		};
 
 		crypto@30000 {
-			compatible = "fsl,sec3.1", "fsl,sec3.0", "fsl,sec2.4",
-				     "fsl,sec2.2", "fsl,sec2.1", "fsl,sec2.0";
+			compatible = "fsl,sec3.3", "fsl,sec3.1", "fsl,sec3.0",
+				     "fsl,sec2.4", "fsl,sec2.2", "fsl,sec2.1",
+				     "fsl,sec2.0";
 			reg = <0x30000 0x10000>;
 			interrupts = <45 2 58 2>;
 			interrupt-parent = <&mpic>;
 			fsl,num-channels = <4>;
 			fsl,channel-fifo-len = <24>;
-			fsl,exec-units-mask = <0xbfe>;
-			fsl,descriptor-types-mask = <0x3ab0ebf>;
+			fsl,exec-units-mask = <0x97c>;
+			fsl,descriptor-types-mask = <0x3a30abf>;
 			fsl,multi-host-mode = "dual";
 			fsl,channel-remap = <0x3>;
 		};
@@ -489,6 +623,22 @@
 			device_type = "open-pic";
 		};
 
+		message@41400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			cell-index = <1>;
+			interrupts = <0xb0 2 0xb1 2 0xb2 2 0xb3 2>;
+			interrupt-parent = < &mpic >;
+		};
+
+		message@42400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			cell-index = <2>;
+			interrupts = <0xb4 2 0xb5 2 0xb6 2 0xb7 2>;
+			interrupt-parent = < &mpic >;
+		};
+
 		msi@41600 {
 			compatible = "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
@@ -513,6 +663,7 @@
 	};
 
 	pci0: pcie@ffe09000 {
+		cell-index = <2>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -524,7 +675,7 @@
 			  0x1000000 0x0 0x00000000 0 0xffc10000 0x0 0x10000>;
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
-		interrupts = <33 2>;
+		interrupts = <16 2>;
 		interrupt-map-mask = <0xf800 0 0 7>;
 		interrupt-map = <
 			/* IDSEL 0x0 */
@@ -549,6 +700,7 @@
 	};
 
 	pci1: pcie@ffe0a000 {
+		cell-index = <1>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -560,7 +712,7 @@
 			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
-		interrupts = <32 2>;
+		interrupts = <16 2>;
 		interrupt-map-mask = <0xf800 0 0 7>;
 		interrupt-map = <
 			/* IDSEL 0x0 */
@@ -586,6 +738,7 @@
 
 
 	pci2: pcie@ffe0b000 {
+		cell-index = <3>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -597,7 +750,7 @@
 			  0x1000000 0x0 0x00000000 0 0xffc00000 0x0 0x10000>;
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
-		interrupts = <34 2>;
+		interrupts = <16 2>;
 		interrupt-map-mask = <0xf800 0 0 7>;
 		interrupt-map = <
 			/* IDSEL 0x0 */
