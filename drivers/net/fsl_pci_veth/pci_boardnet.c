@@ -729,6 +729,10 @@ static struct pci_device_id boardnet_id_table[] = {
 	 PCI_ANY_ID, PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
 	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_P1022,
 	 PCI_ANY_ID, PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
+	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_P1013E,
+	 PCI_ANY_ID, PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
+	{PCI_VENDOR_ID_FREESCALE, PCI_DEVICE_ID_P1013,
+	 PCI_ANY_ID, PCI_ANY_ID, 0x0b2001, 0xffffff, 0},
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, boardnet_id_table);
