@@ -360,6 +360,8 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy0>;
@@ -387,6 +389,8 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy4>;
@@ -415,6 +419,8 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy1>;
@@ -455,6 +461,28 @@
 			fsl,descriptor-types-mask = <0x3a30abf>;
 			fsl,multi-host-mode = "dual";
 			fsl,channel-remap = <0x3>;
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8536-pmc", "fsl,mpc8548-pmc",
+			             "fsl,p1022-pmc";
+			reg = <0xe0070 0x20>;
+			etsec1_clk: soc-clk@B0{
+				fsl,pmcdr-mask = <0x00000080>;
+			};
+			etsec2_clk: soc-clk@B1{
+				fsl,pmcdr-mask = <0x00000040>;
+			};
+			etsec3_clk: soc-clk@B2{
+				fsl,pmcdr-mask = <0x00000020>;
+			};
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
 		};
 
 		mpic: pic@40000 {
