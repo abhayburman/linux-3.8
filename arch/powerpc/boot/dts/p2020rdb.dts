@@ -1,7 +1,7 @@
 /*
  * P2020 RDB Device Tree Source
  *
- * Copyright 2009 Freescale Semiconductor Inc.
+ * Copyright 2009-2010 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -45,6 +45,12 @@
 
 	memory {
 		device_type = "memory";
+	};
+
+	l2sram@fff00000 {
+		device_type = "memory";
+		compatible = "fsl,l2sram";
+		reg = <0x0 0xfff00000 0 0x10000>;
 	};
 
 	localbus@ffe05000 {
