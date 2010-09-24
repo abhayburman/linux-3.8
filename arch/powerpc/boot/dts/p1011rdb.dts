@@ -41,6 +41,12 @@
 		device_type = "memory";
 	};
 
+	l2sram@fff00000 {
+		device_type = "memory";
+		compatible = "fsl,l2sram";
+		reg = <0x0 0xfff00000 0 0x10000>;
+	};
+
 	localbus@ffe05000 {
 		#address-cells = <2>;
 		#size-cells = <1>;
