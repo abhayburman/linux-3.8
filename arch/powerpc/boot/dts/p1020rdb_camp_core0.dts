@@ -4,7 +4,7 @@
  * In CAMP mode, each core needs to have its own dts. Only mpic and L2 cache
  * can be shared, all the other devices must be assigned to one core only.
  * This dts file allows core0 to have memory, l2, i2c, spi, gpio, tdm, dma, usb,
- * eth1, eth2, sdhc, crypto, global-util, message, pci0.
+ * eth1, eth2, sdhc, crypto, global-util, message, pci0, pci1, msi.
  *
  * Please note to add "-b 0" for core0's dts compiling.
  *
@@ -28,6 +28,7 @@
 		ethernet1 = &enet1;
 		ethernet2 = &enet2;
 		pci0 = &pci0;
+		pci1 = &pci1;
 	};
 
 	cpus {
@@ -124,7 +125,7 @@
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
 				modal = "s25sl128b";
-				spi-max-frequency = <50000000>;
+				spi-max-frequency = <45000000>;
 				mode = <0>;
 
 				partition@0 {
@@ -166,7 +167,7 @@
 				compatible = "fsl,espi-slic";
 				reg = <1>;
 				linux,modalias = "legerity";
-				spi-max-frequency = <2000000>;
+				spi-max-frequency = <8000000>;
 				ch1-rx-slot = <0>;
 				ch1-tx-slot = <0>;
 				ch2-rx-slot = <2>;
@@ -177,7 +178,7 @@
 				compatible = "fsl,espi-slic";
 				reg = <2>;
 				linux,modalias = "legerity";
-				spi-max-frequency = <2000000>;
+				spi-max-frequency = <8000000>;
 				ch1-rx-slot = <4>;
 				ch1-tx-slot = <4>;
 				ch2-rx-slot = <6>;
@@ -384,10 +385,7 @@
 			device_type = "open-pic";
 			protected-sources = <
 			42 29 30 34	/* serial1, enet0-queue-group0 */
-			17 18 24 26 58	/* enet0-queue-group1, pci1 */
-			0xe0 0xe1 0xe2	/* msi */
-			0xe3 0xe4 0xe5
-			0xe6 0xe7
+			17 18 24 58	/* enet0-queue-group1, crypto */
 			>;
 		};
 
@@ -418,6 +416,22 @@
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
+
+		msi@41600 {
+			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
+			reg = <0x41600 0x80>;
+			msi-available-ranges = <0 0x100>;
+			interrupts = <
+				0xe0 0
+				0xe1 0
+				0xe2 0
+				0xe3 0
+				0xe4 0
+				0xe5 0
+				0xe6 0
+				0xe7 0>;
+			interrupt-parent = <&mpic>;
+		};
 	};
 
 	pci0: pcie@ffe09000 {
@@ -433,7 +447,7 @@
 			  0x1000000 0x0 0x00000000 0 0xffc30000 0x0 0x10000>;
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
-		interrupts = <25 2>;
+		interrupts = <16 2>;
 		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
 		interrupt-map = <
 			/* IDSEL 0x0 */
@@ -457,4 +471,40 @@
 		};
 	};
 
+	pci1: pcie@ffe0a000 {
+		cell-index = <2>;
+		compatible = "fsl,mpc8548-pcie";
+		device_type = "pci";
+		#interrupt-cells = <1>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0 0xffe0a000 0 0x1000>;
+		bus-range = <0 255>;
+		ranges = <0x2000000 0x0 0xc0000000 0 0xc0000000 0x0 0x20000000
+			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
+		clock-frequency = <33333333>;
+		interrupt-parent = <&mpic>;
+		interrupts = <16 2>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x0 0x1
+			0000 0x0 0x0 0x2 &mpic 0x1 0x1
+			0000 0x0 0x0 0x3 &mpic 0x2 0x1
+			0000 0x0 0x0 0x4 &mpic 0x3 0x1
+			>;
+		pcie@0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			#size-cells = <2>;
+			#address-cells = <3>;
+			device_type = "pci";
+			ranges = <0x2000000 0x0 0xc0000000
+				  0x2000000 0x0 0xc0000000
+				  0x0 0x20000000
+
+				  0x1000000 0x0 0x0
+				  0x1000000 0x0 0x0
+				  0x0 0x100000>;
+		};
+	};
 };
