@@ -353,6 +353,12 @@ static void __init mpc85xx_mds_setup_arch(void)
 				/*Enable UART1 */
 				clrbits8(&bcsr_regs[6], BCSR6_TDMD_UART1);
 			}
+#if defined CONFIG_ATM_UCC
+#define BCSR6_LBC_UPC          (0x1 << 5)
+#define BCSR6_UPC_EN           (0x1 << 4)
+			clrbits8(&bcsr_regs[6], BCSR6_LBC_UPC);
+			clrbits8(&bcsr_regs[6], BCSR6_UPC_EN);
+#endif
 		}
 
 		iounmap(bcsr_regs);
@@ -361,9 +367,13 @@ static void __init mpc85xx_mds_setup_arch(void)
 	if (machine_is(p1021_mds)) {
 #define MPC85xx_PMUXCR_OFFSET           0x60
 #define MPC85xx_PMUXCR_QE0              0x00008000
+#define MPC85xx_PMUXCR_QE2              0x00002000
 #define MPC85xx_PMUXCR_QE3              0x00001000
+#define MPC85xx_PMUXCR_QE4              0x00000800
+#define MPC85xx_PMUXCR_QE5              0x00000400
 #define MPC85xx_PMUXCR_QE8              0x00000080
 #define MPC85xx_PMUXCR_QE9              0x00000040
+#define MPC85xx_PMUXCR_QE11             0x00000010
 #define MPC85xx_PMUXCR_QE12             0x00000008
 		static __be32 __iomem *pmuxcr;
 
@@ -390,6 +400,16 @@ static void __init mpc85xx_mds_setup_arch(void)
 
 			if (use_ucc_uart)
 				setbits32(pmuxcr, MPC85xx_PMUXCR_QE8);
+
+#if defined CONFIG_ATM_UCC
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE12);
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE9);
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
+					  MPC85xx_PMUXCR_QE2 |
+					  MPC85xx_PMUXCR_QE4 |
+					  MPC85xx_PMUXCR_QE5 |
+					  MPC85xx_PMUXCR_QE11);
+#endif
 
 			of_node_put(np);
 		}
