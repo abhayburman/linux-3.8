@@ -30,7 +30,7 @@
 #define MPC85xx_ECM_EEBPCR_OFF		0x01010
 #define MPC85xx_PIC_PIR_OFF		0x41090
 
-extern void mpc85xx_cpu_down(void);
+extern void mpc85xx_cpu_down(void) __attribute__((noreturn));
 extern void __early_start(void);
 extern void __secondary_start_page(void);
 extern volatile unsigned long __spin_table;
@@ -55,16 +55,13 @@ smp_85xx_mach_cpu_die(void)
 {
 	__get_cpu_var(cpu_state) = CPU_DEAD;
 	smp_wmb();
-
 	preempt_enable();
 
 	local_irq_disable();
 	idle_task_exit();
-
-	while (1) {
-		set_dec(0x7fffffff);
-		mpc85xx_cpu_down();
-	}
+	mtspr(SPRN_TSR, TSR_ENW | TSR_WIS | TSR_DIS | TSR_FIS);
+	mtspr(SPRN_TCR, 0);
+	mpc85xx_cpu_down();
 }
 
 static void __cpuinit
