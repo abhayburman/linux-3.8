@@ -210,6 +210,7 @@ static void __init mpc85xx_mds_setup_arch(void)
 {
 	struct device_node *np;
 	static u8 __iomem *bcsr_regs = NULL;
+	int use_ucc_uart = 0;
 #ifdef CONFIG_PCI
 	struct pci_controller *hose;
 	u32 host_agent;
@@ -333,9 +334,17 @@ static void __init mpc85xx_mds_setup_arch(void)
 
 		} else if (machine_is(p1021_mds)) {
 #define BCSR11_ENET_MICRST     (0x1 << 5)
+#define BCSR6_TDMD_UART1	(0x1 << 2)
 			/* Reset Micrel PHY */
 			clrbits8(&bcsr_regs[11], BCSR11_ENET_MICRST);
 			setbits8(&bcsr_regs[11], BCSR11_ENET_MICRST);
+
+			np = of_find_compatible_node(NULL, NULL, "ucc_uart");
+			if (np && of_device_is_available(np)) {
+				use_ucc_uart = 1;
+				/*Enable UART1 */
+				clrbits8(&bcsr_regs[6], BCSR6_TDMD_UART1);
+			}
 		}
 
 		iounmap(bcsr_regs);
@@ -345,6 +354,7 @@ static void __init mpc85xx_mds_setup_arch(void)
 #define MPC85xx_PMUXCR_OFFSET           0x60
 #define MPC85xx_PMUXCR_QE0              0x00008000
 #define MPC85xx_PMUXCR_QE3              0x00001000
+#define MPC85xx_PMUXCR_QE8              0x00000080
 #define MPC85xx_PMUXCR_QE9              0x00000040
 #define MPC85xx_PMUXCR_QE12             0x00000008
 		static __be32 __iomem *pmuxcr;
@@ -363,12 +373,15 @@ static void __init mpc85xx_mds_setup_arch(void)
 			 * enable QE UEC mode, we need to set bit QE0 for UCC1
 			 * in Eth mode, QE0 and QE3 for UCC5 in Eth mode, QE9
 			 * and QE12 for QE MII management singals in PMUXCR
-			 * register.
+			 * register. QE8 need to be exposed for UCC7 UART mode.
 			 */
 				setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
 						  MPC85xx_PMUXCR_QE3 |
 						  MPC85xx_PMUXCR_QE9 |
 						  MPC85xx_PMUXCR_QE12);
+
+			if (use_ucc_uart)
+				setbits32(pmuxcr, MPC85xx_PMUXCR_QE8);
 
 			of_node_put(np);
 		}

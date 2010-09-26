@@ -586,6 +586,16 @@
 					0x1  0x4  0x2  0x0  0x2  0x0    /* ENET5_RX_DV_SER5_CTS_B */
 					0x1  0x8  0x2  0x0  0x2  0x0>;    /* ENET5_RX_ER_SER5_CD_B */
 			};
+
+			pio3: ucc_pin@03 {
+				pio-map = <
+			/* port  pin  dir  open_drain  assignment  has_irq */
+					0x1  0x12 0x2  0x0  0x2  0x0    /* SER7_CD_B_OPT2*/
+					0x1  0xe  0x2  0x0  0x2  0x0    /* SER7_CTS_B_OPT2*/
+					0x1  0xf  0x1  0x0  0x2  0x0    /* SER7_RTS_B_OPT2*/
+					0x1  0x10 0x2  0x0  0x2  0x0    /* SER7_RXD0_OPT2*/
+					0x1  0x11 0x1  0x0  0x2  0x0>;    /* SER7_TXD0_OPT2*/
+			};
 		};
 	};
 
@@ -737,6 +747,20 @@
 			pio-handle = <&pio2>;
 			phy-handle = <&qe_phy1>;
 			phy-connection-type = "rmii";
+		};
+
+		ucc_uart: ucc@2600 {
+			device_type = "serial";
+			compatible = "ucc_uart";
+			status = "disabled";
+			reg = <0x2600 0x200>;
+			cell-index = <7>;
+			port-number = <0>;
+			rx-clock-name = "brg6";
+			tx-clock-name = "brg6";
+			interrupts = <42>;
+			interrupt-parent = <&qeic>;
+			pio-handle = <&pio3>;
 		};
 
 		muram@10000 {
