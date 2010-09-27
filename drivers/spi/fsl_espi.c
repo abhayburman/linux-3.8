@@ -56,6 +56,8 @@ struct fsl_espi_reg {
 #define CS_BEF(x)		((x) << 12)
 #define CS_AFT(x)		((x) << 8)
 #define CS_CG(x)		((x) << 3)
+#define CSMODE_PM_MAX		(0xF)
+#define CSMODE_PM_MIN		(0x2)
 
 #define SPMODE_ENABLE		(1 << 31)
 #define SPMODE_LOOP		(1 << 30)
@@ -185,16 +187,17 @@ int fsl_espi_setup_transfer(struct spi_device *spi, struct spi_transfer *t)
 	if ((fsl_espi->spibrg / hz) > 32) {
 		cs->hw_mode |= CSMODE_DIV16;
 		pm = fsl_espi->spibrg / (hz * 32);
-		if (pm > 16) {
-			pm = 16;
+		if (pm > CSMODE_PM_MAX) {
+			pm = CSMODE_PM_MAX;
 			dev_err(&spi->dev, "Requested speed is too "
 				"low: %d Hz. Will use %d Hz instead.\n",
 				hz, fsl_espi->spibrg / 32 * 16);
 		}
-	} else
+	} else {
 		pm = fsl_espi->spibrg / (hz * 2);
-	if (pm)
-		pm--;
+		if (pm < CSMODE_PM_MIN)
+			pm = CSMODE_PM_MIN;
+	}
 	cs->hw_mode |= CSMODE_PM(pm);
 
 	/* Reset the hw mode */
