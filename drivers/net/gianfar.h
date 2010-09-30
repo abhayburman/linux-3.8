@@ -48,7 +48,11 @@
 #include <linux/ethtool.h>
 
 /* The maximum number of packets to be handled in one call of gfar_poll */
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define GFAR_DEV_WEIGHT 16
+#else
 #define GFAR_DEV_WEIGHT 64
+#endif
 
 /* Length for FCB */
 #define GMAC_FCB_LEN 8
@@ -70,7 +74,7 @@
 #define PHY_INIT_TIMEOUT 100000
 #define GFAR_PHY_CHANGE_TIME 2
 
-#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.2, "
+#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.4-skbr1.1.4, "
 #define DRV_NAME "gfar-enet"
 extern const char gfar_driver_name[];
 extern const char gfar_driver_version[];
@@ -83,8 +87,13 @@ extern const char gfar_driver_version[];
 #define MAXGROUPS 0x2
 
 /* These need to be powers of 2 for this driver */
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define DEFAULT_TX_RING_SIZE	128
+#define DEFAULT_RX_RING_SIZE	128
+#else
 #define DEFAULT_TX_RING_SIZE	256
 #define DEFAULT_RX_RING_SIZE	256
+#endif
 #define DEFAULT_WK_RING_SIZE	16
 
 
@@ -127,8 +136,13 @@ extern const char gfar_driver_version[];
 #define GFAR_10_TIME    25600
 
 #define DEFAULT_TX_COALESCE 1
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define DEFAULT_TXCOUNT	22
+#define DEFAULT_TXTIME	64
+#else
 #define DEFAULT_TXCOUNT	16
 #define DEFAULT_TXTIME	21
+#endif
 
 #define DEFAULT_RXTIME	21
 
@@ -648,6 +662,10 @@ struct rmon_mib
 
 struct gfar_extra_stats {
 	u64 kernel_dropped;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	u64 rx_skbr;
+	u64 rx_skbr_free;
+#endif
 	u64 rx_large;
 	u64 rx_short;
 	u64 rx_nonoctet;
@@ -895,6 +913,29 @@ struct gfar {
 	u8	res27[208];
 };
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+#define GFAR_DEFAULT_RECYCLE_MAX 64
+#define GFAR_DEFAULT_RECYCLE_TRUESIZE (SKB_DATA_ALIGN(DEFAULT_RX_BUFFER_SIZE \
+		+ RXBUF_ALIGNMENT + NET_SKB_PAD) + sizeof(struct sk_buff))
+
+/* Socket buffer recycling handler for Gianfar driver. This structure has own
+ * spinlock to prevent simultaneous access. The member recycle_queue holds
+ * top of recyclable socket buffer which are owned by this interface.
+ * Maximu size of recyclable buffers are defined by recycle_max, and
+ * current size of list is recycle_count.
+ */
+struct gfar_skb_handler {
+	/* Lock for buffer recycling queue */
+	spinlock_t	lock;
+	short int	recycle_max;
+	short int	recycle_count;
+	struct sk_buff *recycle_queue;
+};
+
+extern void gfar_free_recycle_queue(struct gfar_skb_handler *sh,
+		int lock_flag);
+#endif
+
 /* Flags related to gianfar device features */
 #define FSL_GIANFAR_DEV_HAS_GIGABIT		0x00000001
 #define FSL_GIANFAR_DEV_HAS_COALESCE		0x00000002
@@ -1097,10 +1138,12 @@ struct gfar_private {
 	unsigned long wk_buf_align_vaddr;
 	unsigned long wk_buf_align_paddr;
 
-	struct sk_buff_head rx_recycle;
-
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	unsigned int rx_skbuff_truesize;
+	struct gfar_skb_handler skb_handler;
+	struct gfar_skb_handler *local_sh; /*per_cpu*/
+#endif
 	struct vlan_group *vlgrp;
-
 
 	/* Hash registers and their width */
 	u32 __iomem *hash_regs[16];

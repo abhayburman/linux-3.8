@@ -96,6 +96,7 @@
 #include <linux/phy.h>
 #include <linux/phy_fixed.h>
 #include <linux/of.h>
+#include <net/xfrm.h>
 
 #include "gianfar.h"
 #include "fsl_pq_mdio.h"
@@ -105,7 +106,7 @@
 #undef VERBOSE_GFAR_ERRORS
 
 const char gfar_driver_name[] = "Gianfar Ethernet";
-const char gfar_driver_version[] = "1.3";
+const char gfar_driver_version[] = "1.4-skbr1.1.4";
 
 static int gfar_enet_open(struct net_device *dev);
 static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev);
@@ -155,6 +156,13 @@ static void gfar_tx_start(struct net_device *dev);
 static void gfar_enable_filer(struct net_device *dev);
 static int gfar_get_ip(struct net_device *dev);
 static void gfar_config_filer_table(struct net_device *dev);
+#endif
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+static unsigned int skbuff_truesize(unsigned int buffer_size);
+static void gfar_skbr_register_truesize(struct gfar_private *priv);
+static int gfar_kfree_skb(struct sk_buff *skb);
+static void gfar_reset_skb_handler(struct gfar_skb_handler *sh);
 #endif
 
 MODULE_AUTHOR("Freescale Semiconductor, Inc");
@@ -262,6 +270,17 @@ static int gfar_alloc_skb_resources(struct net_device *ndev)
 	unsigned long wk_buf_paddr;
 	unsigned long wk_buf_vaddr;
 	int err = 0;
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	priv->rx_skbuff_truesize = GFAR_DEFAULT_RECYCLE_TRUESIZE;
+	gfar_reset_skb_handler(&priv->skb_handler);
+	priv->local_sh = alloc_percpu(struct gfar_skb_handler);
+
+	for_each_possible_cpu(i) {
+		gfar_reset_skb_handler(
+				per_cpu_ptr(priv->local_sh, i));
+	}
+#endif
 
 	priv->total_tx_ring_size = 0;
 	for (i = 0; i < priv->num_tx_queues; i++)
@@ -1941,6 +1960,50 @@ void stop_gfar(struct net_device *dev)
 	free_skb_resources(priv);
 }
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+/*
+ * function: gfar_reset_skb_handler
+ * Resetting skb handler spin lock entry in the driver initialization.
+ * Execute only once.
+ */
+static void gfar_reset_skb_handler(struct gfar_skb_handler *sh)
+{
+	spin_lock_init(&sh->lock);
+	sh->recycle_max = GFAR_DEFAULT_RECYCLE_MAX;
+	sh->recycle_count = 0;
+	sh->recycle_queue = NULL;
+}
+
+/*
+ * function: gfar_free_recycle_queue
+ * Reset SKB handler struction and free existance socket buffer
+ * and data buffer in the recycling queue.
+ */
+void gfar_free_recycle_queue(struct gfar_skb_handler *sh, int lock_flag)
+{
+	unsigned long flags = 0;
+	struct sk_buff *clist = NULL;
+	struct sk_buff *skb;
+	/* Get recycling queue */
+	/* just for making sure there is recycle_queue */
+	if (lock_flag)
+		spin_lock_irqsave(&sh->lock, flags);
+	if (sh->recycle_queue) {
+		/* pick one from head; most recent one */
+		clist = sh->recycle_queue;
+		sh->recycle_count = 0;
+		sh->recycle_queue = NULL;
+	}
+	if (lock_flag)
+		spin_unlock_irqrestore(&sh->lock, flags);
+	while (clist) {
+		skb = clist;
+		clist = clist->next;
+		dev_kfree_skb_any(skb);
+	}
+}
+#endif
+
 static void free_skb_tx_queue(struct gfar_priv_tx_q *tx_queue)
 {
 	struct txbd8 *txbdp;
@@ -2000,6 +2063,16 @@ static void free_skb_resources(struct gfar_private *priv)
 	struct gfar_priv_rx_q *rx_queue = NULL;
 	int i;
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	/* 1: spinlocking of skb_handler is required */
+	gfar_free_recycle_queue(&priv->skb_handler, 1);
+	for_each_possible_cpu(i) {
+		gfar_free_recycle_queue(
+			per_cpu_ptr(priv->local_sh, i), 0);
+	}
+	free_percpu(priv->local_sh);
+#endif
+
 	/* Go through all the buffer descriptors and free their data buffers */
 	for (i = 0; i < priv->num_tx_queues; i++) {
 		tx_queue = priv->tx_queue[i];
@@ -2018,7 +2091,6 @@ static void free_skb_resources(struct gfar_private *priv)
 			sizeof(struct rxbd8) * priv->total_rx_ring_size,
 			priv->tx_queue[0]->tx_bd_base,
 			priv->tx_queue[0]->tx_bd_dma_base);
-	skb_queue_purge(&priv->rx_recycle);
 }
 
 void gfar_start(struct net_device *dev)
@@ -2248,8 +2320,6 @@ static int gfar_enet_open(struct net_device *dev)
 	int err;
 
 	enable_napi(priv);
-
-	skb_queue_head_init(&priv->rx_recycle);
 
 	/* Initialize a bunch of registers */
 	init_registers(dev);
@@ -2655,6 +2725,13 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 
 	dev->mtu = new_mtu;
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	gfar_skbr_register_truesize(priv);
+	printk(KERN_INFO"%s: MTU = %d (frame size=%d, truesize=%d)\n",
+			dev->name, dev->mtu, frame_size,
+			priv->rx_skbuff_truesize);
+#endif /*CONFIG_GFAR_SKBUFF_RECYCLING*/
+
 	gfar_write(&regs->mrblr, priv->rx_buffer_size);
 	gfar_write(&regs->maxfrm, priv->rx_buffer_size);
 
@@ -2724,6 +2801,10 @@ static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 	size_t buflen;
 	union skb_shared_tx *shtx;
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	int howmany_recycle = 0;
+#endif
+
 	rx_queue = priv->rx_queue[tx_queue->qindex];
 	bdp = tx_queue->dirty_tx;
 	skb_dirtytx = tx_queue->skb_dirtytx;
@@ -2783,17 +2864,11 @@ static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 			bdp = next_txbd(bdp, base, tx_ring_size);
 		}
 
-		/*
-		 * If there's room in the queue (limit it to rx_buffer_size)
-		 * we add this skb back into the pool, if it's the right size
-		 */
-		if (skb_queue_len(&priv->rx_recycle) < rx_queue->rx_ring_size &&
-				skb_recycle_check(skb, priv->rx_buffer_size +
-					RXBUF_ALIGNMENT))
-			__skb_queue_head(&priv->rx_recycle, skb);
-		else
-			dev_kfree_skb_any(skb);
-
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+		howmany_recycle += gfar_kfree_skb(skb);
+#else
+		dev_kfree_skb_any(skb);
+#endif
 		tx_queue->tx_skbuff[skb_dirtytx] = NULL;
 
 		skb_dirtytx = (skb_dirtytx + 1) &
@@ -2812,6 +2887,10 @@ static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 	/* Update dirty indicators */
 	tx_queue->skb_dirtytx = skb_dirtytx;
 	tx_queue->dirty_tx = bdp;
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	priv->extra_stats.rx_skbr_free += howmany_recycle;
+#endif
 
 	return howmany;
 }
@@ -2854,17 +2933,118 @@ static void gfar_new_rxbdp(struct gfar_priv_rx_q *rx_queue, struct rxbd8 *bdp,
 	gfar_init_rxbdp(rx_queue, bdp, buf);
 }
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+static unsigned int skbuff_truesize(unsigned int buffer_size)
+{
+	return SKB_DATA_ALIGN(buffer_size + RXBUF_ALIGNMENT +
+				NET_SKB_PAD) + sizeof(struct sk_buff);
+}
 
+static void gfar_skbr_register_truesize(struct gfar_private *priv)
+{
+	priv->rx_skbuff_truesize = skbuff_truesize(priv->rx_buffer_size);
+}
+
+static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
+{
+	unsigned int truesize;
+	unsigned int size;
+	unsigned int alignamount;
+	struct net_device *owner;
+
+	skb_dst_drop(skb);
+#ifdef CONFIG_XFRM
+	if (skb->sp) {
+		secpath_put(skb->sp);
+		skb->sp = NULL;
+	}
+#endif
+#if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+	nf_conntrack_put(skb->nfct);
+	nf_conntrack_put_reasm(skb->nfct_reasm);
+	skb->nfct = NULL;
+	skb->nfct_reasm = NULL;
+#endif
+#ifdef CONFIG_BRIDGE_NETFILTER
+	nf_bridge_put(skb->nf_bridge);
+	skb->nf_bridge = NULL;
+#endif
+#ifdef CONFIG_NET_SCHED
+	skb->tc_index = 0;
+#ifdef CONFIG_NET_CLS_ACT
+	skb->tc_verd = 0;
+#endif
+#endif
+	/* re-initialization
+	 * We are not going to touch the buffer size, so
+	 * skb->truesize can be used as the truesize again
+	 */
+	owner = skb->skb_owner;
+	truesize = skb->truesize;
+	size = truesize - sizeof(struct sk_buff);
+	/* clear structure by &tail */
+	cacheable_memzero(skb, offsetof(struct sk_buff, tail));
+	atomic_set(&skb->users, 1);
+	/* reset data and tail pointers */
+	skb->data = skb->head + NET_SKB_PAD;
+	skb_reset_tail_pointer(skb);
+	/* shared info clean up */
+	atomic_set(&(skb_shinfo(skb)->dataref), 1);
+	/* We need the data buffer to be aligned properly.  We will
+	 * reserve as many bytes as needed to align the data properly
+	 */
+	alignamount = ((unsigned)skb->data) & (RXBUF_ALIGNMENT-1);
+	skb_reserve(skb, RXBUF_ALIGNMENT - alignamount);
+	skb->dev = owner;
+	/* Keep incoming device pointer for recycling */
+	skb->skb_owner = owner;
+}
+
+static int gfar_kfree_skb(struct sk_buff *skb)
+{
+	unsigned long int flags;
+	struct gfar_private *priv;
+	struct gfar_skb_handler *sh;
+
+	if ((skb->skb_owner == NULL) ||
+		(skb->destructor) ||
+		(skb_shinfo(skb)->nr_frags))
+			goto _normal_free;
+
+	priv = netdev_priv(skb->skb_owner);
+	if (skb->truesize == priv->rx_skbuff_truesize) {
+		sh = &priv->skb_handler;
+		/* loosly checking */
+		if (likely(sh->recycle_count < sh->recycle_max)) {
+			if (!atomic_dec_and_test(&skb->users))
+				return 0;
+			gfar_clean_reclaim_skb(skb);
+			/* lock sh for add one */
+			spin_lock_irqsave(&sh->lock, flags);
+			skb->next = sh->recycle_queue;
+			sh->recycle_queue = skb;
+			sh->recycle_count++;
+			spin_unlock_irqrestore(&sh->lock, flags);
+			return 1;
+		}
+	}
+_normal_free:
+	/* skb is not recyclable */
+	dev_kfree_skb_any(skb);
+	return 0;
+}
+#endif /* RECYCLING */
+
+/*
+ * normal new skb routine
+ */
 struct sk_buff * gfar_new_skb(struct net_device *dev)
 {
 	unsigned int alignamount;
 	struct gfar_private *priv = netdev_priv(dev);
 	struct sk_buff *skb = NULL;
 
-	skb = __skb_dequeue(&priv->rx_recycle);
-	if (!skb)
-		skb = netdev_alloc_skb(dev,
-				priv->rx_buffer_size + RXBUF_ALIGNMENT);
+	skb = netdev_alloc_skb(dev, priv->rx_buffer_size + RXBUF_ALIGNMENT);
 
 	if (!skb)
 		return NULL;
@@ -2878,6 +3058,11 @@ struct sk_buff * gfar_new_skb(struct net_device *dev)
 	skb_reserve(skb, alignamount);
 	GFAR_CB(skb)->alignamount = alignamount;
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	skb->dev = dev;
+	/* Keep incoming device pointer for recycling */
+	skb->skb_owner = dev;
+#endif
 	return skb;
 }
 
@@ -3088,6 +3273,14 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	int amount_pull;
 	int howmany = 0;
 	struct gfar_private *priv = netdev_priv(dev);
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	int howmany_reuse = 0;
+	struct gfar_skb_handler *sh;
+	int free_skb;
+	struct sk_buff *local_head;
+	unsigned long flags;
+	struct gfar_skb_handler *local_sh;
+#endif
 
 	/* Get the first full descriptor */
 	bdp = rx_queue->cur_rx;
@@ -3095,12 +3288,47 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 
 	amount_pull = (gfar_uses_fcb(priv) ? GMAC_FCB_LEN : 0);
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	local_sh = per_cpu_ptr(priv->local_sh, smp_processor_id());
+	if (local_sh->recycle_queue) {
+		local_head = local_sh->recycle_queue;
+		free_skb = local_sh->recycle_count;
+		local_sh->recycle_queue = NULL;
+		local_sh->recycle_count = 0;
+	} else {
+		local_head = NULL;
+		free_skb = 0;
+	}
+	/* global skb_handler for this device */
+	sh = &priv->skb_handler;
+#endif
+
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
 		struct sk_buff *newskb;
 		rmb();
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+		if (!free_skb && sh->recycle_count) {
+			/* refill local buffer */
+			spin_lock_irqsave(&sh->lock, flags);
+			local_head = sh->recycle_queue;
+			free_skb = sh->recycle_count;
+			sh->recycle_queue = NULL;
+			sh->recycle_count = 0;
+			spin_unlock_irqrestore(&sh->lock, flags);
+		}
+		if (local_head) {
+			newskb = local_head;
+			local_head = newskb->next;
+			newskb->next = NULL;
+			free_skb--;
+			howmany_reuse++;
+		} else
+			newskb = gfar_new_skb(dev);
+#else
 		/* Add another skb for the future */
 		newskb = gfar_new_skb(dev);
+#endif
 
 		skb = rx_queue->rx_skbuff[rx_queue->skb_currx];
 
@@ -3118,17 +3346,8 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 
 			if (unlikely(!newskb))
 				newskb = skb;
-			else if (skb) {
-				/*
-				 * We need to un-reserve() the skb to what it
-				 * was before gfar_new_skb() re-aligned
-				 * it to an RXBUF_ALIGNMENT boundary
-				 * before we put the skb back on the
-				 * recycle list.
-				 */
-				skb_reserve(skb, -GFAR_CB(skb)->alignamount);
-				__skb_queue_head(&priv->rx_recycle, skb);
-			}
+			else if (skb)
+				dev_kfree_skb_any(skb);
 		} else {
 			/* Increment the number of packets */
 			rx_queue->stats.rx_packets++;
@@ -3165,6 +3384,15 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 		    (rx_queue->skb_currx + 1) &
 		    RX_RING_MOD_MASK(rx_queue->rx_ring_size);
 	}
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	if (free_skb) {
+		/* return to local_sh for next time */
+		local_sh->recycle_queue = local_head;
+		local_sh->recycle_count = free_skb;
+	}
+	priv->extra_stats.rx_skbr += howmany_reuse;
+#endif
 
 	/* Update the current rxbd pointer to be the next one */
 	rx_queue->cur_rx = bdp;

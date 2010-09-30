@@ -2404,6 +2404,15 @@ config GIANFAR
 	  This driver supports the Gigabit TSEC on the MPC83xx, MPC85xx,
 	  and MPC86xx family of chips, and the FEC on the 8540.
 
+config GFAR_SKBUFF_RECYCLING
+	default y
+	bool "Socket Buffer Recycling Support (v1.1.4) (EXPERIMENTAL)"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	 This implements a new private socket data buffer recycling algorithm
+	 used for fast IPv4 packet forwarding. Select this if you would like
+	 to improve your latency and throughput performance.
+
 config UCC_GETH
 	tristate "Freescale QE Gigabit Ethernet"
 	depends on QUICC_ENGINE

@@ -57,6 +57,10 @@ static void gfar_gdrvinfo(struct net_device *dev, struct ethtool_drvinfo *drvinf
 
 static char stat_gstrings[][ETH_GSTRING_LEN] = {
 	"rx-dropped-by-kernel",
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	"skb-recycled-frames-new",
+	"skb-recycled-frames-free",
+#endif
 	"rx-large-frame-errors",
 	"rx-short-frame-errors",
 	"rx-non-octet-errors",

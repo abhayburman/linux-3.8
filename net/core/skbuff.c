@@ -20,6 +20,8 @@
  *		Andi Kleen	:	slabified it.
  *		Robert Olsson	:	Removed skb_head_pool
  *
+ *	Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *
  *	NOTE:
  *		The __skb_ routines should be called with interrupts
  *	disabled, or you better be *real* sure that the operation is atomic
@@ -537,6 +539,9 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->ipvs_property	= old->ipvs_property;
 #endif
 	new->protocol		= old->protocol;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	new->skb_owner		= NULL;
+#endif
 	new->mark		= old->mark;
 	new->skb_iif		= old->skb_iif;
 	__nf_copy(new, old);
@@ -574,6 +579,10 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	n->cloned = 1;
 	n->nohdr = 0;
 	n->destructor = NULL;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	n->skb_owner = NULL;
+	skb->skb_owner = NULL;
+#endif
 	C(tail);
 	C(end);
 	C(head);
