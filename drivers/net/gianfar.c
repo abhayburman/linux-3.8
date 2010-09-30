@@ -2818,7 +2818,9 @@ static inline int try_fastroute(struct sk_buff *skb,
 	struct rtable *rt;
 	struct net_device *odev;
 	struct gfar_private *priv = netdev_priv(dev);
+	struct netdev_queue *txq = NULL;
 	const struct net_device_ops *ops;
+	u16 q_idx = 0;
 
 	/* this is correct. pull padding already */
 	eth = (struct ethhdr *) (skb->data);
@@ -2858,10 +2860,13 @@ static inline int try_fastroute(struct sk_buff *skb,
 		    && (!(eth->h_dest[0] & 0x01))
 		    && neigh_is_valid(rt->u.dst.neighbour)
 		    && iph->ttl > 1) {
+
+			q_idx = skb_get_queue_mapping(skb);
+			txq = netdev_get_tx_queue(odev, q_idx);
 			/* Fast Route Path: Taken if the outgoing
 			 * device is ready to transmit the packet now */
-			if ((!netif_queue_stopped(odev))
-			    && (!spin_is_locked(&odev->_tx->_xmit_lock))
+			if ((!netif_tx_queue_stopped(txq))
+			    && (!spin_is_locked(&txq->_xmit_lock))
 			    && (skb->len <= (odev->mtu + ETH_HLEN + 2 + 4))) {
 				skb->pkt_type = PACKET_FASTROUTE;
 				skb->protocol = __constant_htons(ETH_P_IP);
@@ -3750,7 +3755,9 @@ static int gfar_poll_tx(struct napi_struct *napi, int budget)
 							flags);
 			}
 			tx_cleaned += tx_cleaned_per_queue;
+			tx_cleaned_per_queue = 0;
 		}
+		mask = mask >> 0x1;
 	}
 
 	budget = (num_act_qs * DEFAULT_TX_RING_SIZE) + 1;
