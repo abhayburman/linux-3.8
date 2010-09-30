@@ -2413,6 +2413,13 @@ config GFAR_SKBUFF_RECYCLING
 	 used for fast IPv4 packet forwarding. Select this if you would like
 	 to improve your latency and throughput performance.
 
+config GIANFAR_L2SRAM
+	bool "Selecting L2sram bd allocation"
+	depends on (GIANFAR && FSL_SOC_BOOKE)
+	select FSL_85XX_CACHE_SRAM
+	help
+	  This option supports BD alloc in L2SRAM.
+
 config UCC_GETH
 	tristate "Freescale QE Gigabit Ethernet"
 	depends on QUICC_ENGINE
