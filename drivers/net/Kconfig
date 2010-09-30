@@ -2413,6 +2413,14 @@ config GFAR_SKBUFF_RECYCLING
 	 used for fast IPv4 packet forwarding. Select this if you would like
 	 to improve your latency and throughput performance.
 
+config GIANFAR_TXNAPI
+	default n
+	bool "Introduce seperate tx_napi for cleaning the tx ring(V 0.0.1) (EXPERIMENTAL)"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	  Selecting this option introduces a seperate TX NAPI for cleaning the
+	  tx ring(s).
+
 config GIANFAR_L2SRAM
 	bool "Selecting L2sram bd allocation"
 	depends on (GIANFAR && FSL_SOC_BOOKE)
