@@ -3726,23 +3726,35 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 	priv = netdev_priv(skb->skb_owner);
 	if (skb->truesize == priv->skbuff_truesize) {
 		unsigned long flags = 0;
-		sh = &priv->skb_handler;
+		sh = per_cpu_ptr(priv->rx_queue[qindex]->local_sh,
+						smp_processor_id());
 		/* loosly checking */
 		if (likely(sh->recycle_count < sh->recycle_max)) {
 			if (!atomic_dec_and_test(&skb->users))
 				return 0;
 			gfar_clean_reclaim_skb(skb);
-			/* lock sh for add one */
-			spin_lock_irqsave(&sh->lock, flags);
-			if (unlikely(!sh->recycle_enable)) {
-				spin_unlock_irqrestore(&sh->lock, flags);
-				return 0;
-			}
 			skb->next = sh->recycle_queue;
 			sh->recycle_queue = skb;
 			sh->recycle_count++;
-			spin_unlock_irqrestore(&sh->lock, flags);
 			return 1;
+		} else {
+			sh = &priv->skb_handler;
+			if (likely(sh->recycle_count < sh->recycle_max)) {
+				if (!atomic_dec_and_test(&skb->users))
+					return 0;
+				gfar_clean_reclaim_skb(skb);
+				/* lock sh for add one */
+				spin_lock_irqsave(&sh->lock, flags);
+				if (unlikely(!sh->recycle_enable)) {
+					spin_unlock_irqrestore(&sh->lock, flags);
+					return 0;
+				}
+				skb->next = sh->recycle_queue;
+				sh->recycle_queue = skb;
+				sh->recycle_count++;
+				spin_unlock_irqrestore(&sh->lock, flags);
+				return 1;
+			}
 		}
 	}
 _normal_free:
@@ -4086,7 +4098,10 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 		free_skb = 0;
 	}
 	/* global skb_handler for this device */
-	sh = &priv->skb_handler;
+	sh = &rx_queue->skb_handler;
+	if (sh->recycle_count == 0 &&
+		priv->skb_handler.recycle_count > 0)
+		sh = &priv->skb_handler;
 #endif
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
