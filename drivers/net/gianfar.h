@@ -79,7 +79,7 @@
 #define PHY_INIT_TIMEOUT 100000
 #define GFAR_PHY_CHANGE_TIME 2
 
-#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.4-skbr1.1.4, "
+#define DEVICE_NAME "%s: Gianfar Ethernet Controller Version 1.4-skbr1.1.5, "
 #define DRV_NAME "gfar-enet"
 extern const char gfar_driver_name[];
 extern const char gfar_driver_version[];
@@ -950,6 +950,7 @@ struct gfar_skb_handler {
 	spinlock_t	lock;
 	short int	recycle_max;
 	short int	recycle_count;
+	short int	recycle_enable;
 	struct sk_buff *recycle_queue;
 };
 

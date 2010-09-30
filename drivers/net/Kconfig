@@ -2406,12 +2406,12 @@ config GIANFAR
 
 config GFAR_SKBUFF_RECYCLING
 	default y
-	bool "Socket Buffer Recycling Support (v1.1.4) (EXPERIMENTAL)"
+	bool "Socket Buffer Recycling Support (v1.1.5) (EXPERIMENTAL)"
 	depends on GIANFAR && EXPERIMENTAL
 	help
 	 This implements a new private socket data buffer recycling algorithm
-	 used for fast IPv4 packet forwarding. Select this if you would like
-	 to improve your latency and throughput performance.
+	 used for fast IPv4 packet forwarding and TCP transmission. Select this
+	 if you would like to improve your latency and throughput performance.
 
 config GIANFAR_TXNAPI
 	default n

@@ -114,7 +114,7 @@
 #undef VERBOSE_GFAR_ERRORS
 
 const char gfar_driver_name[] = "Gianfar Ethernet";
-const char gfar_driver_version[] = "1.4-skbr1.1.4";
+const char gfar_driver_version[] = "1.4-skbr1.1.5";
 
 static int gfar_enet_open(struct net_device *dev);
 static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev);
@@ -2051,6 +2051,7 @@ static void gfar_reset_skb_handler(struct gfar_skb_handler *sh)
 	sh->recycle_max = GFAR_DEFAULT_RECYCLE_MAX;
 	sh->recycle_count = 0;
 	sh->recycle_queue = NULL;
+	sh->recycle_enable = 1;
 }
 
 /*
@@ -2070,6 +2071,7 @@ void gfar_free_recycle_queue(struct gfar_skb_handler *sh, int lock_flag)
 	if (sh->recycle_queue) {
 		/* pick one from head; most recent one */
 		clist = sh->recycle_queue;
+		sh->recycle_enable = 0;
 		sh->recycle_count = 0;
 		sh->recycle_queue = NULL;
 	}
@@ -3705,6 +3707,10 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 			gfar_clean_reclaim_skb(skb);
 			/* lock sh for add one */
 			spin_lock_irqsave(&sh->lock, flags);
+			if (unlikely(!sh->recycle_enable)) {
+				spin_unlock_irqrestore(&sh->lock, flags);
+				return 0;
+			}
 			skb->next = sh->recycle_queue;
 			sh->recycle_queue = skb;
 			sh->recycle_count++;
@@ -3717,6 +3723,43 @@ _normal_free:
 	dev_kfree_skb_any(skb);
 	return 0;
 }
+
+int gfar_recycle_skb(struct sk_buff *skb)
+{
+	unsigned long int flags;
+	struct gfar_private *priv;
+	struct gfar_skb_handler *sh;
+
+	if ((skb->skb_owner == NULL) ||
+		(skb->destructor) ||
+		skb_has_frags(skb) ||
+		skb->cloned)
+		return 0;
+
+	priv = netdev_priv(skb->skb_owner);
+	if (skb->truesize == priv->skbuff_truesize) {
+		sh = &priv->skb_handler;
+		/* loosly checking */
+		if (likely(sh->recycle_count < sh->recycle_max)) {
+			gfar_clean_reclaim_skb(skb);
+			/* lock sh for add one */
+			spin_lock_irqsave(&sh->lock, flags);
+			if (unlikely(!sh->recycle_enable)) {
+				spin_unlock_irqrestore(&sh->lock, flags);
+				return 0;
+			}
+			skb->next = sh->recycle_queue;
+			sh->recycle_queue = skb;
+			sh->recycle_count++;
+			spin_unlock_irqrestore(&sh->lock, flags);
+			priv->extra_stats.rx_skbr_free++;
+			return 1;
+		}
+	}
+	/* skb is not recyclable */
+	return 0;
+}
+
 #endif /* RECYCLING */
 
 /*

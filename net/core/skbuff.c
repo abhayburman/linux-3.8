@@ -72,6 +72,10 @@
 
 #include "kmap_skb.h"
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+extern int gfar_recycle_skb(struct sk_buff *skb);
+#endif
+
 static struct kmem_cache *skbuff_head_cache __read_mostly;
 static struct kmem_cache *skbuff_fclone_cache __read_mostly;
 
@@ -427,6 +431,10 @@ static void skb_release_all(struct sk_buff *skb)
 
 void __kfree_skb(struct sk_buff *skb)
 {
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	if (gfar_recycle_skb(skb))
+		return;
+#endif
 	skb_release_all(skb);
 	kfree_skbmem(skb);
 }
