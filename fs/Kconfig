@@ -62,6 +62,12 @@ config DELAY_ASYNC_READAHEAD
 	  This option enables delay async readahead in sendfile that impoves
 	  sendfile performance for large file.
 
+config SEND_PAGES
+	bool "Enable sendpages"
+	default n
+	help
+	  This option enables sendpages mode for sendfile.
+
 source "fs/notify/Kconfig"
 
 source "fs/quota/Kconfig"
