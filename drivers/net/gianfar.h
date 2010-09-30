@@ -671,6 +671,9 @@ struct gfar_extra_stats {
 	u64 rx_skbr;
 	u64 rx_skbr_free;
 #endif
+#ifdef CONFIG_NET_GIANFAR_FP
+	u64 rx_fast;
+#endif
 	u64 rx_large;
 	u64 rx_short;
 	u64 rx_nonoctet;
@@ -1246,4 +1249,7 @@ void gfar_init_sysfs(struct net_device *dev);
 
 extern const struct ethtool_ops gfar_ethtool_ops;
 
+#ifdef CONFIG_NET_GIANFAR_FP
+extern int netdev_fastroute;
+#endif
 #endif /* __GIANFAR_H */

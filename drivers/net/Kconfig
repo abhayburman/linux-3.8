@@ -2420,6 +2420,14 @@ config GIANFAR_L2SRAM
 	help
 	  This option supports BD alloc in L2SRAM.
 
+config NET_GIANFAR_FP
+	default y
+	bool "Fast Path routing"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	  Fast path routing. To enable,
+	  $ echo 1 > /proc/sys/net/core/netdev_fastroute
+
 config UCC_GETH
 	tristate "Freescale QE Gigabit Ethernet"
 	depends on QUICC_ENGINE

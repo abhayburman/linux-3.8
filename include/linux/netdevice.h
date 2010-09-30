@@ -15,6 +15,8 @@
  *		Bjorn Ekwall. <bj0rn@blox.se>
  *              Pekka Riikonen <priikone@poseidon.pspt.fi>
  *
+ *              Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -192,7 +194,7 @@ struct net_device_stats {
 	unsigned long	tx_fifo_errors;
 	unsigned long	tx_heartbeat_errors;
 	unsigned long	tx_window_errors;
-	
+
 	/* for cslip etc */
 	unsigned long	rx_compressed;
 	unsigned long	tx_compressed;
@@ -716,6 +718,10 @@ struct net_device_ops {
 						  int new_mtu);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
 						   struct neigh_parms *);
+#ifdef CONFIG_NET_GIANFAR_FP
+	int                     (*ndo_accept_fastpath)(struct net_device *,
+							   struct dst_entry *);
+#endif
 	void			(*ndo_tx_timeout) (struct net_device *dev);
 
 	struct net_device_stats* (*ndo_get_stats)(struct net_device *dev);
@@ -920,7 +926,7 @@ struct net_device {
 
 
 	/* Protocol specific pointers */
-	
+
 #ifdef CONFIG_NET_DSA
 	void			*dsa_ptr;	/* dsa specific data */
 #endif
@@ -1026,6 +1032,12 @@ struct net_device {
 
 	/* bridge stuff */
 	struct net_bridge_port	*br_port;
+#ifdef CONFIG_NET_GIANFAR_FP
+#define NETDEV_FASTROUTE_HMASK 0xF
+	/* Semi-private data. Keep it at the end of device struct. */
+	rwlock_t		fastpath_lock;
+	struct dst_entry	*fastpath[NETDEV_FASTROUTE_HMASK+1];
+#endif
 	/* macvlan */
 	struct macvlan_port	*macvlan_port;
 	/* GARP */

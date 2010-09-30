@@ -61,6 +61,9 @@ static char stat_gstrings[][ETH_GSTRING_LEN] = {
 	"skb-recycled-frames-new",
 	"skb-recycled-frames-free",
 #endif
+#ifdef CONFIG_NET_GIANFAR_FP
+	"rx-fast-path",
+#endif
 	"rx-large-frame-errors",
 	"rx-short-frame-errors",
 	"rx-non-octet-errors",

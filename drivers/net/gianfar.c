@@ -98,6 +98,14 @@
 #include <linux/of.h>
 #include <net/xfrm.h>
 
+#ifdef CONFIG_NET_GIANFAR_FP
+#include <linux/if_arp.h>
+#include <linux/netdevice.h>
+#include <net/route.h>
+#include <net/ip.h>
+#include <linux/jhash.h>
+#endif
+
 #include "gianfar.h"
 #include "fsl_pq_mdio.h"
 
@@ -134,6 +142,10 @@ static void gfar_configure_serdes(struct net_device *dev);
 static int gfar_poll(struct napi_struct *napi, int budget);
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void gfar_netpoll(struct net_device *dev);
+#endif
+#ifdef CONFIG_NET_GIANFAR_FP
+static int gfar_accept_fastpath(struct net_device *dev, struct dst_entry *dst);
+DECLARE_PER_CPU(struct netif_rx_stats, netdev_rx_stat);
 #endif
 int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit);
 static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue);
@@ -581,6 +593,9 @@ static const struct net_device_ops gfar_netdev_ops = {
 	.ndo_validate_addr = eth_validate_addr,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller = gfar_netpoll,
+#endif
+#ifdef CONFIG_NET_GIANFAR_FP
+	.ndo_accept_fastpath = gfar_accept_fastpath,
 #endif
 };
 
@@ -2638,7 +2653,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* If the next BD still needs to be cleaned up, then the bds
 	   are full.  We need to tell the kernel to stop sending us stuff. */
 	if (!tx_queue->num_txbdfree) {
-		netif_tx_stop_queue(txq);
+		netif_stop_subqueue(dev, tx_queue->qindex);
 
 		dev->stats.tx_fifo_errors++;
 	}
@@ -2679,6 +2694,141 @@ static int gfar_set_mac_address(struct net_device *dev)
 	return 0;
 }
 
+/**********************************************************************
+ * gfar_accept_fastpath
+ *
+ * Used to authenticate to the kernel that a fast path entry can be
+ * added to device's routing table cache
+ *
+ * Input : pointer to ethernet interface network device structure and
+ *         a pointer to the designated entry to be added to the cache.
+ * Output : zero upon success, negative upon failure
+ **********************************************************************/
+#ifdef CONFIG_NET_GIANFAR_FP
+static int gfar_accept_fastpath(struct net_device *dev, struct dst_entry *dst)
+{
+	struct net_device *odev = dst->dev;
+	const struct net_device_ops *ops = odev->netdev_ops;
+
+	if ((dst->ops->protocol != __constant_htons(ETH_P_IP))
+			|| (odev->type != ARPHRD_ETHER)
+			|| (ops->ndo_accept_fastpath == NULL))
+		return -1;
+
+	return 0;
+}
+
+static inline int neigh_is_valid(struct neighbour *neigh)
+{
+	return neigh->nud_state & NUD_VALID;
+}
+
+
+u32 gfar_fastroute_hash(u8 daddr, u8 saddr)
+{
+	u32 hash;
+
+	hash = ((u32)daddr ^ saddr) & NETDEV_FASTROUTE_HMASK;
+
+	return hash;
+}
+#endif
+
+
+/* try_fastroute() -- Checks the fastroute cache to see if a given packet
+ *   can be routed immediately to another device.  If it can, we send it.
+ *   If we used a fastroute, we return 1.  Otherwise, we return 0.
+ *   Returns 0 if CONFIG_NET_GIANFAR_FP is not on
+ */
+static inline int try_fastroute(struct sk_buff *skb,
+				struct net_device *dev, int length)
+{
+#ifdef CONFIG_NET_GIANFAR_FP
+	struct ethhdr *eth;
+	struct iphdr *iph;
+	unsigned int hash;
+	struct rtable *rt;
+	struct net_device *odev;
+	struct gfar_private *priv = netdev_priv(dev);
+	const struct net_device_ops *ops;
+
+	/* this is correct. pull padding already */
+	eth = (struct ethhdr *) (skb->data);
+
+	/* Only route ethernet IP packets */
+	if (eth->h_proto != __constant_htons(ETH_P_IP))
+		return 0;
+
+	iph = (struct iphdr *)(skb->data + ETH_HLEN);
+
+	/* Generate the hash value */
+	hash = gfar_fastroute_hash((*(u8 *)&iph->daddr),
+				   (*(u8 *)&iph->saddr));
+
+#ifdef FASTPATH_DEBUG
+	printk(KERN_INFO "%s:  hash = %d (%d, %d)\n",
+	       __func__, hash, (*(u8 *)&iph->daddr), (*(u8 *)&iph->saddr));
+#endif
+	rt = (struct rtable *) (dev->fastpath[hash]);
+	/* Only support big endian */
+	if ((rt != NULL)
+	    && ((*(u32 *)(&iph->daddr))	== (*(u32 *)(&rt->rt_dst)))
+	    && ((*(u32 *)(&iph->saddr))	== (*(u32 *)(&rt->rt_src)))
+	    && !(rt->u.dst.obsolete > 0)) {
+		odev = rt->u.dst.dev;  /* get output device */
+		ops = odev->netdev_ops;
+
+		/* Make sure the packet is:
+		 * 1) IPv4
+		 * 2) without any options (header length of 5)
+		 * 3) Not a multicast packet
+		 * 4) going to a valid destination
+		 * 5) Not out of time-to-live
+		 */
+		if (iph->version == 4
+		    && iph->ihl == 5
+		    && (!(eth->h_dest[0] & 0x01))
+		    && neigh_is_valid(rt->u.dst.neighbour)
+		    && iph->ttl > 1) {
+			/* Fast Route Path: Taken if the outgoing
+			 * device is ready to transmit the packet now */
+			if ((!netif_queue_stopped(odev))
+			    && (!spin_is_locked(&odev->_tx->_xmit_lock))
+			    && (skb->len <= (odev->mtu + ETH_HLEN + 2 + 4))) {
+				skb->pkt_type = PACKET_FASTROUTE;
+				skb->protocol = __constant_htons(ETH_P_IP);
+				skb_set_network_header(skb, ETH_HLEN);
+				ip_decrease_ttl(iph);
+
+				memcpy(eth->h_source, odev->dev_addr,
+				       MAC_ADDR_LEN);
+				memcpy(eth->h_dest, rt->u.dst.neighbour->ha,
+				       MAC_ADDR_LEN);
+				skb->dev = odev;
+				if (ops->ndo_start_xmit(skb, odev) != 0) {
+					panic("%s: FastRoute path corrupted",
+					      dev->name);
+				}
+				priv->extra_stats.rx_fast++;
+			}
+			/* Semi Fast Route Path: Mark the packet as needing
+			 * fast routing, but let the stack handle getting it
+			 * to the device */
+			else {
+				skb->pkt_type = PACKET_FASTROUTE;
+				skb_reset_network_header(skb);
+				/* Tell the skb what kind of packet this is*/
+				skb->protocol = eth_type_trans(skb, dev);
+				/* Prep the skb for the packet */
+				if (netif_receive_skb(skb) == NET_RX_DROP)
+					priv->extra_stats.kernel_dropped++;
+			}
+			return 1;
+		}
+	}
+#endif /* CONFIG_NET_GIANFAR_FP */
+	return 0;
+}
 
 /* Enables and disables VLAN insertion/extraction */
 static void gfar_vlan_rx_register(struct net_device *dev,
@@ -3285,6 +3435,10 @@ static int gfar_process_frame(struct net_device *dev, struct sk_buff *skb,
 	if (priv->rx_csum_enable)
 		gfar_rx_checksum(skb, fcb);
 
+#ifdef CONFIG_NET_GIANFAR_FP
+	if (netdev_fastroute && (try_fastroute(skb, dev, skb->len) != 0))
+		return 0;
+#endif
 	/* Tell the skb what kind of packet this is */
 	skb->protocol = eth_type_trans(skb, dev);
 

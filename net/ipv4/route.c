@@ -56,13 +56,12 @@
  * 	Ilia Sotnikov		:	Ignore TOS on PMTUD and Redirect
  * 	Ilia Sotnikov		:	Removed TOS from hash calculations
  *
+ * 	Copyright (C) 2007-2010 Freescale Semiconductor, Inc.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
- *
- * Copyright statement for the ROUTE_HOOK sections:
- * Copyright (C) 2007-2009 Freescale Semiconductor, Inc. All rights reserved.
  */
 
 
@@ -2013,6 +2012,10 @@ static void ip_handle_martian_source(struct net_device *dev,
 #endif
 }
 
+#ifdef CONFIG_NET_GIANFAR_FP
+extern int netdev_fastroute;
+extern int netdev_fastroute_obstacles;
+#endif
 static int __mkroute_input(struct sk_buff *skb,
 			   struct fib_result *res,
 			   struct in_device *in_dev,
@@ -2107,6 +2110,27 @@ static int __mkroute_input(struct sk_buff *skb,
 
 	rth->rt_flags = flags;
 
+#ifdef CONFIG_NET_GIANFAR_FP
+#ifdef FASTPATH_DEBUG
+	printk(KERN_INFO" %s: netdev_fastroute = %x, flags = %x, rth = %p",
+	       __func__, netdev_fastroute, flags, rth);
+#endif
+	if (netdev_fastroute && !(flags&(RTCF_NAT|RTCF_MASQ|RTCF_DOREDIRECT))) {
+		struct net_device *odev = rth->u.dst.dev;
+		struct net_device *dev = in_dev->dev;
+
+		if (odev != dev &&
+		    dev->netdev_ops->ndo_accept_fastpath &&
+		    odev->mtu >= dev->mtu &&
+		    dev->netdev_ops->ndo_accept_fastpath(dev, &rth->u.dst)
+		    == 0) {
+			rth->rt_flags |= RTCF_FAST;
+#ifdef FASTPATH_DEBUG
+			printk(KERN_INFO "fastroute(%s) accept\n", __func__);
+#endif
+		}
+	}
+#endif
 	*result = rth;
 	err = 0;
  cleanup:
