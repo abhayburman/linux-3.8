@@ -604,20 +604,20 @@ static int __devinit tdm_fsl_starlite_probe(struct of_device *ofdev,
 	dev_set_drvdata(&ofdev->dev, priv);
 	priv->device = &ofdev->dev;
 
-	ret = of_address_to_resource(ofdev->node, 0, &res);
+	ret = of_address_to_resource(ofdev->dev.of_node, 0, &res);
 	if (ret) {
 		ret = -EINVAL;
 		goto err_resource;
 	}
 	priv->ptdm_base = res.start;
 
-	priv->tdm_regs = of_iomap(ofdev->node, 0);
+	priv->tdm_regs = of_iomap(ofdev->dev.of_node, 0);
 	if (!priv->tdm_regs) {
 		ret = -ENOMEM;
 		goto err_tdmregs;
 	}
 
-	priv->dmac_regs = of_iomap(ofdev->node, 1);
+	priv->dmac_regs = of_iomap(ofdev->dev.of_node, 1);
 	if (!priv->dmac_regs) {
 		ret = -ENOMEM;
 		goto err_dmacreg;
@@ -631,13 +631,13 @@ static int __devinit tdm_fsl_starlite_probe(struct of_device *ofdev,
 	    (struct tdm_clock *)(TDM_CLKREG_OFFSET + (u8 *)priv->tdm_regs);
 
 	/* irqs mapping for tdm err/dmac err, dmac done */
-	priv->tdm_err_intr = irq_of_parse_and_map(ofdev->node, 0);
+	priv->tdm_err_intr = irq_of_parse_and_map(ofdev->dev.of_node, 0);
 	if (priv->tdm_err_intr == NO_IRQ) {
 		ret = -EINVAL;
 		goto err_tdmerr_irqmap;
 	}
 
-	priv->dmac_done_intr = irq_of_parse_and_map(ofdev->node, 1);
+	priv->dmac_done_intr = irq_of_parse_and_map(ofdev->dev.of_node, 1);
 	if (priv->dmac_done_intr == NO_IRQ) {
 		ret = -EINVAL;
 		goto err_dmacdone_irqmap;
@@ -771,13 +771,13 @@ static const struct of_device_id fsl_tdm_of_match[] = {
 MODULE_DEVICE_TABLE(of, fsl_tdm_of_match);
 
 static struct of_platform_driver tdm_fsl_starlite_driver = {
-	.match_table	= fsl_tdm_of_match,
-	.probe		= tdm_fsl_starlite_probe,
-	.remove		= __devexit_p(tdm_fsl_starlite_remove),
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= DRV_NAME,
+		.of_match_table	= fsl_tdm_of_match,
 	},
+	.probe		= tdm_fsl_starlite_probe,
+	.remove		= __devexit_p(tdm_fsl_starlite_remove),
 };
 
 static int __init tdm_fsl_starlite_init(void)
