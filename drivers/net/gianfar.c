@@ -2147,6 +2147,17 @@ static void free_skb_resources(struct gfar_private *priv)
 	int i, cpu;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	/* 1: spinlocking of skb_handler is required */
+	gfar_free_recycle_queue(&(priv->skb_handler), 1);
+	for (i = 0; i < priv->num_tx_queues ; i++) {
+		for_each_possible_cpu(cpu) {
+			gfar_free_recycle_queue(
+				per_cpu_ptr(priv->tx_queue[i]->local_sh,
+								cpu), 0);
+		}
+		free_percpu(priv->tx_queue[i]->local_sh);
+	}
+
 	for (i = 0; i < priv->num_rx_queues ; i++) {
 		/* 1: spinlocking of skb_handler is required */
 		gfar_free_recycle_queue(&(priv->rx_queue[i]->skb_handler), 1);
@@ -2397,6 +2408,16 @@ int startup_gfar(struct net_device *ndev)
 	gfar_init_mac(ndev);
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	priv->skbuff_truesize = GFAR_DEFAULT_RECYCLE_TRUESIZE;
+	gfar_reset_skb_handler(&(priv->skb_handler));
+	for (i = 0;  i < priv->num_tx_queues; i++) {
+		priv->tx_queue[i]->local_sh = alloc_percpu(
+						struct gfar_skb_handler);
+		for_each_possible_cpu(cpu) {
+			gfar_reset_skb_handler(
+				per_cpu_ptr(priv->tx_queue[i]->local_sh, cpu));
+		}
+	}
 	for (i = 0;  i < priv->num_rx_queues; i++) {
 		priv->rx_queue[i]->rx_skbuff_truesize =
 					GFAR_DEFAULT_RECYCLE_TRUESIZE;
@@ -2675,6 +2696,7 @@ static int gfar_xmit_skb(struct sk_buff *skb, struct net_device *dev, int rq)
 /*software TCP segmentation offload*/
 static int gfar_tso(struct sk_buff *skb, struct net_device *dev, int rq)
 {
+	struct gfar_private *priv = netdev_priv(dev);
 	int i = 0;
 	struct iphdr *iph;
 	int ihl;
@@ -2693,7 +2715,29 @@ static int gfar_tso(struct sk_buff *skb, struct net_device *dev, int rq)
 	int pos;
 	int hsize;
 	int ret;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	int howmany_reuse = 0;
+	struct gfar_skb_handler *sh;
+	int free_skb;
+	struct sk_buff *local_head;
+	unsigned long flags;
+	struct gfar_skb_handler *local_sh;
 
+	local_sh = per_cpu_ptr(priv->tx_queue[rq]->local_sh,
+			smp_processor_id());
+
+	if (local_sh->recycle_queue) {
+		local_head = local_sh->recycle_queue;
+		free_skb = local_sh->recycle_count;
+		local_sh->recycle_queue = NULL;
+		local_sh->recycle_count = 0;
+	} else {
+		local_head = NULL;
+		free_skb = 0;
+	}
+	/* global skb_handler for this device */
+	sh = &priv->skb_handler;
+#endif
 	/*processing mac header*/
 	skb_reset_mac_header(skb);
 	skb->mac_len = skb->network_header - skb->mac_header;
@@ -2738,8 +2782,28 @@ static int gfar_tso(struct sk_buff *skb, struct net_device *dev, int rq)
 		if (len > mss)
 			len = mss;
 
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+		if (!free_skb && sh->recycle_count) {
+			/* refill local buffer */
+			spin_lock_irqsave(&sh->lock, flags);
+			local_head = sh->recycle_queue;
+			free_skb = sh->recycle_count;
+			sh->recycle_queue = NULL;
+			sh->recycle_count = 0;
+			spin_unlock_irqrestore(&sh->lock, flags);
+		}
+		if (local_head) {
+			nskb = local_head;;
+			local_head = nskb->next;
+			nskb->next = NULL;
+			free_skb--;
+			howmany_reuse++;
+		} else
+			nskb = gfar_new_skb(dev);
+#else
 		nskb = alloc_skb(hsize + doffset + headroom,
 					 GFP_ATOMIC);
+#endif
 		skb_reserve(nskb, headroom);
 		__skb_put(nskb, doffset+hsize);
 
@@ -2809,6 +2873,15 @@ skip_fraglist:
 	} while ((offset += len) < skb->len);
 
 out_tso:
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	if (free_skb) {
+		/* return to local_sh for next time */
+		local_sh->recycle_queue = local_head;
+		local_sh->recycle_count = free_skb;
+	}
+	priv->extra_stats.rx_skbr += howmany_reuse;
+#endif
 	dev_kfree_skb_any(skb);
 	return ret;
 }
@@ -3542,6 +3615,7 @@ static void gfar_skbr_register_truesize(struct gfar_private *priv)
 {
 	int i = 0;
 
+	priv->skbuff_truesize = skbuff_truesize(priv->rx_buffer_size);
 	for (i = 0; i < priv->num_rx_queues; i++)
 		priv->rx_queue[i]->rx_skbuff_truesize =
 				skbuff_truesize(priv->rx_buffer_size);
@@ -3581,6 +3655,12 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	 * We are not going to touch the buffer size, so
 	 * skb->truesize can be used as the truesize again
 	 */
+	if (skb_shinfo(skb)->nr_frags) {
+		int i;
+		for (i = 0; i < skb_shinfo(skb)->nr_frags; i++)
+			put_page(skb_shinfo(skb)->frags[i].page);
+		skb_shinfo(skb)->nr_frags = 0;
+	}
 	owner = skb->skb_owner;
 	truesize = skb->truesize;
 	size = truesize - sizeof(struct sk_buff);
@@ -3600,6 +3680,7 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	skb->dev = owner;
 	/* Keep incoming device pointer for recycling */
 	skb->skb_owner = owner;
+
 }
 
 static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
@@ -3609,22 +3690,25 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 
 	if ((skb->skb_owner == NULL) ||
 		(skb->destructor) ||
-		(skb_shinfo(skb)->nr_frags))
+		skb_has_frags(skb) ||
+		skb->cloned)
 			goto _normal_free;
 
 	priv = netdev_priv(skb->skb_owner);
-	if (skb->truesize == priv->rx_queue[qindex]->rx_skbuff_truesize) {
-		sh = per_cpu_ptr(priv->rx_queue[qindex]->local_sh,
-							smp_processor_id());
+	if (skb->truesize == priv->skbuff_truesize) {
+		unsigned long flags = 0;
+		sh = &priv->skb_handler;
 		/* loosly checking */
 		if (likely(sh->recycle_count < sh->recycle_max)) {
 			if (!atomic_dec_and_test(&skb->users))
 				return 0;
 			gfar_clean_reclaim_skb(skb);
 			/* lock sh for add one */
+			spin_lock_irqsave(&sh->lock, flags);
 			skb->next = sh->recycle_queue;
 			sh->recycle_queue = skb;
 			sh->recycle_count++;
+			spin_unlock_irqrestore(&sh->lock, flags);
 			return 1;
 		}
 	}
@@ -3908,7 +3992,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 		free_skb = 0;
 	}
 	/* global skb_handler for this device */
-	sh = &rx_queue->skb_handler;
+	sh = &priv->skb_handler;
 #endif
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {

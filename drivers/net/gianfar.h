@@ -1030,6 +1030,9 @@ struct gfar_priv_tx_q {
 	unsigned long txic;
 	unsigned short txcount;
 	unsigned short txtime;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	struct gfar_skb_handler *local_sh; /*per_cpu*/
+#endif
 };
 
 /*
@@ -1214,6 +1217,11 @@ struct gfar_private {
 	/* HW time stamping enabled flag */
 	int hwts_rx_en;
 	int hwts_tx_en;
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	unsigned int skbuff_truesize;
+	struct gfar_skb_handler skb_handler;
+#endif
 };
 
 extern unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
