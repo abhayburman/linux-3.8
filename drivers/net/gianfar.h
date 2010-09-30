@@ -1243,8 +1243,10 @@ extern void stop_gfar(struct net_device *dev);
 extern void gfar_halt(struct net_device *dev);
 extern void gfar_phy_test(struct mii_bus *bus, struct phy_device *phydev,
 		int enable, u32 regnum, u32 read);
-extern void gfar_configure_coalescing(struct gfar_private *priv,
-		unsigned long tx_mask, unsigned long rx_mask);
+extern void gfar_configure_tx_coalescing(struct gfar_private *priv,
+					long unsigned int tx_mask);
+extern void gfar_configure_rx_coalescing(struct gfar_private *priv,
+					long unsigned int rx_mask);
 void gfar_init_sysfs(struct net_device *dev);
 
 extern const struct ethtool_ops gfar_ethtool_ops;
