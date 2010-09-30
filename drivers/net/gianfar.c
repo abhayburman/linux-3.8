@@ -2280,9 +2280,11 @@ void gfar_configure_tx_coalescing(struct gfar_private *priv,
 	/* Backward compatible case ---- even if we enable
 	 * multiple queues, there's only single reg to program
 	 */
-	gfar_write(&regs->txic, 0);
-	if(likely(priv->tx_queue[0]->txcoalescing))
-		gfar_write(&regs->txic, priv->tx_queue[0]->txic);
+	if (priv->mode == SQ_SG_MODE) {
+		gfar_write(&regs->txic, 0);
+		if (likely(priv->tx_queue[0]->txcoalescing))
+			gfar_write(&regs->txic, priv->tx_queue[0]->txic);
+	}
 
 	if (priv->mode == MQ_MG_MODE) {
 		baddr = &regs->txic0;
@@ -2292,7 +2294,6 @@ void gfar_configure_tx_coalescing(struct gfar_private *priv,
 				gfar_write(baddr + i, priv->tx_queue[i]->txic);
 			}
 		}
-
 	}
 }
 
@@ -2306,9 +2307,11 @@ void gfar_configure_rx_coalescing(struct gfar_private *priv,
 	/* Backward compatible case ---- even if we enable
 	 * multiple queues, there's only single reg to program
 	 */
-	gfar_write(&regs->rxic, 0);
-	if (unlikely(priv->rx_queue[0]->rxcoalescing))
-		gfar_write(&regs->rxic, priv->rx_queue[0]->rxic);
+	if (priv->mode == SQ_SG_MODE) {
+		gfar_write(&regs->rxic, 0);
+		if (unlikely(priv->rx_queue[0]->rxcoalescing))
+			gfar_write(&regs->rxic, priv->rx_queue[0]->rxic);
+	}
 
 	if (priv->mode == MQ_MG_MODE) {
 		baddr = &regs->rxic0;
