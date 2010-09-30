@@ -324,7 +324,8 @@ static ssize_t gfar_show_recycle_max(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
-	return sprintf(buf, "%d\n", priv->skb_handler.recycle_max);
+	return sprintf(buf, "%d\n",
+		priv->rx_queue[smp_processor_id()]->skb_handler.recycle_max);
 }
 
 static ssize_t gfar_set_recycle_max(struct device *dev,
@@ -333,12 +334,14 @@ static ssize_t gfar_set_recycle_max(struct device *dev,
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 	unsigned int length = simple_strtoul(buf, NULL, 0);
+	int i = 0;
 
 	/* recycling max management is loosely done. If the count is more
 	 * than max, simply don't keep the buffer until the current amount
 	 * lower than max.
 	 */
-	priv->skb_handler.recycle_max = length;
+	for (i = 0; i < priv->num_rx_queues; i++)
+		priv->rx_queue[i]->skb_handler.recycle_max = length;
 	return count;
 }
 

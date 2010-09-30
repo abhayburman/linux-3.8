@@ -935,7 +935,7 @@ struct gfar {
 };
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-#define GFAR_DEFAULT_RECYCLE_MAX 64
+#define GFAR_DEFAULT_RECYCLE_MAX 32
 #define GFAR_DEFAULT_RECYCLE_TRUESIZE (SKB_DATA_ALIGN(DEFAULT_RX_BUFFER_SIZE \
 		+ RXBUF_ALIGNMENT + NET_SKB_PAD) + sizeof(struct sk_buff))
 
@@ -1070,6 +1070,11 @@ struct gfar_priv_rx_q {
 	/* RX Coalescing values */
 	unsigned char rxcoalescing;
 	unsigned long rxic;
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	unsigned int rx_skbuff_truesize;
+	struct gfar_skb_handler skb_handler;
+	struct gfar_skb_handler *local_sh; /*per_cpu*/
+#endif
 };
 
 /**
@@ -1164,11 +1169,6 @@ struct gfar_private {
 	unsigned long wk_buf_align_vaddr;
 	unsigned long wk_buf_align_paddr;
 
-#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-	unsigned int rx_skbuff_truesize;
-	struct gfar_skb_handler skb_handler;
-	struct gfar_skb_handler *local_sh; /*per_cpu*/
-#endif
 	struct vlan_group *vlgrp;
 
 	/* Hash registers and their width */
