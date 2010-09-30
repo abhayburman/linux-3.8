@@ -15,6 +15,7 @@
  * Copyright (C) 2005-2006 Jens Axboe <axboe@kernel.dk>
  * Copyright (C) 2005-2006 Linus Torvalds <torvalds@osdl.org>
  * Copyright (C) 2006 Ingo Molnar <mingo@elte.hu>
+ * Copyright (C) 2010 Freescale Semiconductor, Inc.
  *
  */
 #include <linux/fs.h>
@@ -391,7 +392,11 @@ __generic_file_splice_read(struct file *in, loff_t *ppos,
 		this_len = min_t(unsigned long, len, PAGE_CACHE_SIZE - loff);
 		page = spd.pages[page_nr];
 
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		if (!in->f_ra.delay_readahead && PageReadahead(page))
+#else
 		if (PageReadahead(page))
+#endif
 			page_cache_async_readahead(mapping, &in->f_ra, in,
 					page, index, req_pages - page_nr);
 
@@ -1176,6 +1181,11 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 	umode_t i_mode;
 	size_t len;
 	int i, flags;
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+	int nr_pages, index;
+	struct page *pages[PIPE_DEF_BUFFERS];
+	struct address_space *mapping = in->f_mapping;
+#endif
 
 	/*
 	 * We require the input being a regular file, as we don't want to
@@ -1223,6 +1233,12 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 		size_t read_len;
 		loff_t pos = sd->pos, prev_pos = pos;
 
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		/*disable async readahead in file splice read*/
+		if (in->f_op->splice_read == generic_file_splice_read)
+			in->f_ra.delay_readahead = 1;
+#endif /*CONFIG_DELAY_ASYNC_READAHEAD*/
+
 		ret = do_splice_to(in, &pos, pipe, len, flags);
 		if (unlikely(ret <= 0))
 			goto out_release;
@@ -1236,6 +1252,26 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 		 * could get stuck data in the internal pipe:
 		 */
 		ret = actor(pipe, sd);
+
+#ifdef CONFIG_DELAY_ASYNC_READAHEAD
+		/*do async readahead*/
+		if (in->f_ra.delay_readahead) {
+			index = sd->pos >> PAGE_CACHE_SHIFT;
+			nr_pages = (read_len + (sd->pos & ~PAGE_CACHE_MASK)
+					+ PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+			nr_pages = find_get_pages_contig(mapping, index, nr_pages, pages);
+			for (i = 0; i < nr_pages; i++) {
+				if (PageReadahead(pages[i])) {
+					page_cache_async_readahead(mapping, &in->f_ra, in,
+						pages[i], index, nr_pages - i);
+				}
+				index++;
+				page_cache_release(pages[i]);
+			}
+			in->f_ra.delay_readahead = 0;
+		}
+#endif /*CONFIG_DELAY_ASYNC_READAHEAD*/
+
 		if (unlikely(ret <= 0)) {
 			sd->pos = prev_pos;
 			goto out_release;
