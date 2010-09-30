@@ -2404,6 +2404,13 @@ config GIANFAR
 	  This driver supports the Gigabit TSEC on the MPC83xx, MPC85xx,
 	  and MPC86xx family of chips, and the FEC on the 8540.
 
+config GFAR_TX_NONAPI
+	default n
+	bool "TX non-NAPI mode"
+	depends on GIANFAR && EXPERIMENTAL && !GIANFAR_TXNAPI
+	help
+	  TX non-NAPI mode for Ethernet load balance on multi-core.
+
 config GFAR_SKBUFF_RECYCLING
 	default y
 	bool "Socket Buffer Recycling Support (v1.1.5) (EXPERIMENTAL)"
