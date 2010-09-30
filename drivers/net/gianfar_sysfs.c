@@ -325,7 +325,7 @@ static ssize_t gfar_show_recycle_max(struct device *dev,
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 	return sprintf(buf, "%d\n",
-		priv->rx_queue[smp_processor_id()]->skb_handler.recycle_max);
+		priv->rx_queue[0]->skb_handler.recycle_max);
 }
 
 static ssize_t gfar_set_recycle_max(struct device *dev,
