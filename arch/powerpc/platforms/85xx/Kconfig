@@ -193,6 +193,7 @@ config P5020_DS
 	select SWIOTLB
 	select MPC8xxx_GPIO
 	select HAS_RAPIDIO
+	select HAS_FSL_PAMU
 	select HAS_FSL_QBMAN
 	select HAS_FSL_PME
 	select FSL_HYDRA_DS_MDIO if PHYLIB
