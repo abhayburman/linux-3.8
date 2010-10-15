@@ -823,6 +823,14 @@ static void update_lcdc(struct fb_info *info)
 	   for (j = 0; j <= 255; j++)
 	      *gamma_table_base++ = j;
 
+	if (machine_data->monitor_port == 1) {
+		/* fix the gamma for LCD panel */
+		gamma_table_base = pool.gamma.vaddr;
+		for (i = 0; i < 256*3; i++)
+			gamma_table_base[i] = (gamma_table_base[i] << 2)
+				| ((gamma_table_base[i] >> 6) & 0x03);
+	}
+
 	diu_ops.set_gamma_table(machine_data->monitor_port, pool.gamma.vaddr);
 
 	pr_debug("update-lcdc: HW - %p\n Disabling DIU\n", hw);
