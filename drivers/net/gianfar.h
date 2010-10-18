@@ -298,7 +298,6 @@ extern const char gfar_driver_version[];
 
 #define next_bd(bdp, base, ring_size) skip_bd(bdp, 1, base, ring_size)
 
-#define RCTRL_TS_ENABLE 	0x01000000
 #define RCTRL_PAL_MASK		0x001f0000
 #define RCTRL_VLEX		0x00002000
 #define RCTRL_FILREN		0x00001000
@@ -973,7 +972,6 @@ extern void gfar_free_recycle_queue(struct gfar_skb_handler *sh,
 #define FSL_GIANFAR_DEV_HAS_MAGIC_PACKET	0x00000100
 #define FSL_GIANFAR_DEV_HAS_BD_STASHING		0x00000200
 #define FSL_GIANFAR_DEV_HAS_BUF_STASHING	0x00000400
-#define FSL_GIANFAR_DEV_HAS_TIMER		0x00000800
 #define FSL_GIANFAR_DEV_HAS_ARP_PACKET		0x00001000
 
 #if (MAXGROUPS == 2)
@@ -1217,9 +1215,6 @@ struct gfar_private {
 
 	/* Network Statistics */
 	struct gfar_extra_stats extra_stats;
-
-	/* HW time stamping enabled flag */
-	int hwts_rx_en;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	unsigned int skbuff_truesize;
