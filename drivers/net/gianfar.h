@@ -596,7 +596,7 @@ struct txbd8
 
 struct txfcb {
 	u8	flags;
-	u8	ptp;    /* Flag to enable tx timestamping */
+	u8	reserved;
 	u8	l4os;	/* Level 4 Header Offset */
 	u8	l3os; 	/* Level 3 Header Offset */
 	u16	phcs;	/* Pseudo-header Checksum */
@@ -1220,7 +1220,6 @@ struct gfar_private {
 
 	/* HW time stamping enabled flag */
 	int hwts_rx_en;
-	int hwts_tx_en;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	unsigned int skbuff_truesize;
