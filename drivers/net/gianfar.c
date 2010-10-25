@@ -3057,6 +3057,92 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 }
 
+/*
+ * This is called by try_fastroute when a fastroute frame is ready for
+ * transmission.
+ */
+static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+	struct gfar_priv_tx_q *tx_queue = NULL;
+	struct netdev_queue *txq;
+	struct gfar __iomem *regs = NULL;
+	struct txbd8 *txbdp, *txbdp_start, *base;
+	u32 lstatus;
+	int rq = 0;
+	unsigned long flags;
+
+	rq = skb->queue_mapping;
+	tx_queue = priv->tx_queue[rq];
+	txq = netdev_get_tx_queue(dev, rq);
+	base = tx_queue->tx_bd_base;
+	regs = tx_queue->grp->regs;
+
+	spin_lock_irqsave(&tx_queue->txlock, flags);
+
+	/* check if there is space to queue this packet */
+	if (unlikely(tx_queue->num_txbdfree < 1)) {
+		/* no space, stop the queue */
+		netif_tx_stop_queue(txq);
+		dev->stats.tx_fifo_errors++;
+		spin_unlock_irqrestore(&tx_queue->txlock, flags);
+		return NETDEV_TX_BUSY;
+	}
+
+	/* Update transmit stats */
+	txq->tx_bytes += skb->len;
+	txq->tx_packets++;
+
+	txbdp = txbdp_start = tx_queue->cur_tx;
+
+	lstatus = txbdp->lstatus | BD_LFLAG(TXBD_LAST | TXBD_INTERRUPT);
+
+	/* setup the TxBD length and buffer pointer for the first BD */
+	tx_queue->tx_skbuff[tx_queue->skb_curtx] = skb;
+	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
+			skb_headlen(skb), DMA_TO_DEVICE);
+
+	lstatus |= BD_LFLAG(TXBD_CRC | TXBD_READY) | skb_headlen(skb);
+
+	/*
+	 * The powerpc-specific eieio() is used, as wmb() has too strong
+	 * semantics (it requires synchronization between cacheable and
+	 * uncacheable mappings, which eieio doesn't provide and which we
+	 * don't need), thus requiring a more expensive sync instruction.  At
+	 * some point, the set of architecture-independent barrier functions
+	 * should be expanded to include weaker barriers.
+	 */
+	eieio();
+
+	txbdp_start->lstatus = lstatus;
+
+	/* Update the current skb pointer to the next entry we will use
+	 * (wrapping if necessary) */
+	tx_queue->skb_curtx = (tx_queue->skb_curtx + 1) &
+		TX_RING_MOD_MASK(tx_queue->tx_ring_size);
+
+	tx_queue->cur_tx = next_txbd(txbdp, base, tx_queue->tx_ring_size);
+
+	/* reduce TxBD free count */
+	tx_queue->num_txbdfree -= 1;
+
+	txq->trans_start = jiffies;
+
+	/* If the next BD still needs to be cleaned up, then the bds
+	   are full.  We need to tell the kernel to stop sending us stuff. */
+	if (unlikely(!tx_queue->num_txbdfree)) {
+		netif_stop_subqueue(dev, tx_queue->qindex);
+		dev->stats.tx_fifo_errors++;
+	}
+
+	/* Tell the DMA to go go go */
+	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
+
+	spin_unlock_irqrestore(&tx_queue->txlock, flags);
+
+	return NETDEV_TX_OK;
+}
+
 /* Stops the kernel queue, and halts the controller */
 static int gfar_close(struct net_device *dev)
 {
@@ -3200,7 +3286,9 @@ static inline int try_fastroute(struct sk_buff *skb,
 				memcpy(eth->h_dest, rt->u.dst.neighbour->ha,
 				       MAC_ADDR_LEN);
 				skb->dev = odev;
-				if (ops->ndo_start_xmit(skb, odev) != 0) {
+				if (likely(ops->ndo_start_xmit == gfar_start_xmit)) {
+					gfar_fast_xmit(skb, odev);
+				} else if (ops->ndo_start_xmit(skb, odev) != 0) {
 					panic("%s: FastRoute path corrupted",
 					      dev->name);
 				}
