@@ -149,6 +149,10 @@
 				label = "reserved-nand";
 			};
 		};
+		board-control@3,0 {
+			compatible = "fsl,p1022ds-fpga-pixis";
+			reg = <0x3 0x0 0x8000>;
+		};
 	};
 
 	soc@ffe00000 {
