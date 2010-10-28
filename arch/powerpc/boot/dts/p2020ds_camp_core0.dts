@@ -253,7 +253,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x9fe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
-			fsl,multi-host-mode = "primary";
+			fsl,multi-host-mode = "secondary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -265,7 +265,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			31 32 33 58		/* enet2 */
+			31 32 33 45		/* enet2 */
 			76 77 78 79 26 42	/* dma2 pci2 serial*/
 			0x0 0x1 0x2 0x3		/* pcie intx */
 			0xe4 0xe5 0xe6 0xe7     /* msi */

@@ -367,7 +367,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "primary";
+			fsl,multi-host-mode = "secondary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -380,7 +380,7 @@
 			device_type = "open-pic";
 			protected-sources = <
 			25 26 27 31 32 33 /* enet2 */
-			42 59 58  /* serial spi crypto*/
+			42 59 45  /* serial spi crypto*/
 			>;
 
 		};

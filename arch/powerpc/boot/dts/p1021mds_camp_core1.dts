@@ -160,7 +160,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "secondary";
+			fsl,multi-host-mode = "primary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -172,7 +172,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			16 19 42 45 	/* MEM L2 elbc serial crypto*/
+			16 19 42 58 	/* MEM L2 elbc serial crypto*/
 			17 18 24 29 30 34	/*eth0*/
 			35 36 40 51 56 67 	/*eth1*/
 			20 21 22 23	/* dma */
