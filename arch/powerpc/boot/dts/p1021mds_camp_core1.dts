@@ -3,7 +3,7 @@
  *
  * In CAMP mode, each core needs to have its own dts. Only mpic and L2 cache
  * can be shared, all the other devices must be assigned to one core only.
- * This dts file allows core1 to have l2, uart1, eth2, crypto, pci1, msi and spi.
+ * This dts file allows core1 to have l2, uart1, eth2, crypto, and spi.
  *
  * Please note to add "-b 1" for core1's dts compiling.
  *
@@ -25,7 +25,6 @@
 	aliases {
 		serial0 = &serial0;
 		ethernet2 = &enet2;
-		pci1 = &pci1;
 	};
 
 	cpus {
@@ -184,42 +183,4 @@
 		};
 
 	};
-
-	pci1: pcie@ffe0a000 {
-		compatible = "fsl,mpc8548-pcie";
-		cell-index = <1>;
-		device_type = "pci";
-		#interrupt-cells = <1>;
-		#size-cells = <2>;
-		#address-cells = <3>;
-		reg = <0 0xffe0a000 0 0x1000>;
-		bus-range = <0 255>;
-		ranges = <0x2000000 0x0 0xc0000000 0 0xc0000000 0x0 0x20000000
-			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
-		clock-frequency = <33333333>;
-		interrupt-parent = <&mpic>;
-		interrupts = <16 2>;
-		interrupt-map-mask = <0xf800 0 0 7>;
-		interrupt-map = <
-			/* IDSEL 0x0 */
-			0000 0 0 1 &mpic 0 1
-			0000 0 0 2 &mpic 1 1
-			0000 0 0 3 &mpic 2 1
-			0000 0 0 4 &mpic 3 1
-			>;
-		pcie@0 {
-			reg = <0x0 0x0 0x0 0x0 0x0>;
-			#size-cells = <2>;
-			#address-cells = <3>;
-			device_type = "pci";
-			ranges = <0x2000000 0x0 0xc0000000
-				  0x2000000 0x0 0xc0000000
-				  0x0 0x20000000
-
-				  0x1000000 0x0 0x0
-				  0x1000000 0x0 0x0
-				  0x0 0x100000>;
-		};
-	};
-
 };
