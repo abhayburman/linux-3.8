@@ -7,6 +7,7 @@ menu "MPC85xx PCI agent mode driver"
 
 config CARDNET
 	tristate "Cardnet driver support"
+	select FSL_MPIC_MSG_INTS
 	---help---
 	  cardnet driver is a simulating ethernet driver for MPC85xx
 	  board when it acts as Agent/EP device.
@@ -30,6 +31,7 @@ menu "MPC85xx board PCI demo driver"
 
 config BOARDNET
 	tristate "Boardnet driver support"
+	select FSL_MPIC_MSG_INTS
 	---help---
 	  Boardnet driver is a simulate ethernet driver for MPC85xx board
 	  when it act as PCI host/RC.
