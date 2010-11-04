@@ -172,7 +172,7 @@ static struct snd_soc_ops p1022_ds_ops = {
 static int p1022_ds_probe(struct of_device *ofdev,
 	const struct of_device_id *match)
 {
-	struct device_node *np = ofdev->node;
+	struct device_node *np = ofdev->dev.of_node;
 	struct device_node *codec_np = NULL;
 	struct device_node *guts_np = NULL;
 	struct device_node *dma_channel_np = NULL;
@@ -520,9 +520,11 @@ static struct of_device_id p1022_ds_match[] = {
 MODULE_DEVICE_TABLE(of, p1022_ds_match);
 
 static struct of_platform_driver p1022_ds_of_driver = {
-	.owner  	= THIS_MODULE,
-	.name   	= "p1022",
-	.match_table    = p1022_ds_match,
+	.driver = {
+		.owner		= THIS_MODULE,
+		.name		= "p1022",
+		.of_match_table	= p1022_ds_match,
+	},
 	.probe  	= p1022_ds_probe,
 	.remove 	= p1022_ds_remove,
 };
