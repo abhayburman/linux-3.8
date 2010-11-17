@@ -554,6 +554,7 @@
 			fsl,sdhci-auto-cmd12;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
+			pmsaveproctlreg = <1>;
 		};
 
 		crypto@30000 {
