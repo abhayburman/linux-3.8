@@ -154,19 +154,19 @@ static int get_mpc85xx_ds_host_agent(void)
 {
 	struct device_node *np;
 	void __iomem *gur_regs;
-	u32 host_agent;
+	u32 host_agent = 7;
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,mpc8548-guts");
 	if (np == NULL) {
 		printk(KERN_ERR "Could not find global-utilities node\n");
-		return 0;
+		return host_agent;
 	}
 
 	gur_regs = of_iomap(np, 0);
 	of_node_put(np);
 	if (!gur_regs) {
 		printk(KERN_ERR "Failed to map global-utilities register space\n");
-		return 0;
+		return host_agent;
 	}
 	host_agent = (in_be32(gur_regs + 4) & 0x00070000) >> 16 ;
 

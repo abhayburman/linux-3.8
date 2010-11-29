@@ -238,7 +238,7 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p2020-guts";
+			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
