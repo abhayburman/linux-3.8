@@ -3269,7 +3269,8 @@ static inline int try_fastroute(struct sk_buff *skb,
 		    && neigh_is_valid(rt->u.dst.neighbour)
 		    && iph->ttl > 1) {
 
-			q_idx = skb_get_queue_mapping(skb);
+			q_idx = skb_tx_hash(odev, skb);
+			skb_set_queue_mapping(skb, q_idx);
 			txq = netdev_get_tx_queue(odev, q_idx);
 			/* Fast Route Path: Taken if the outgoing
 			 * device is ready to transmit the packet now */
