@@ -3,7 +3,8 @@
  *	   Copyright (C) 1996, 1997 Ingo Molnar, Miguel de Icaza, Gadi Oxman
  *	   Copyright (C) 1999, 2000 Ingo Molnar
  *	   Copyright (C) 2002, 2003 H. Peter Anvin
- *
+ *	   Copyright (C) 2010, Freescale Semiconductor, Inc. All rights
+ *		reserved.
  * RAID-4/5/6 management functions.
  * Thanks to Penguin Computing for making the RAID-6 development possible
  * by donating a test server!
@@ -308,6 +309,7 @@ static int grow_buffers(struct stripe_head *sh)
 	return 0;
 }
 
+static struct page *raid5_zero_copy(struct bio *bio, sector_t sector);
 static void raid5_build_block(struct stripe_head *sh, int i, int previous);
 static void stripe_set_idx(sector_t stripe, raid5_conf_t *conf, int previous,
 			    struct stripe_head *sh);
@@ -561,6 +563,14 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
 				set_bit(STRIPE_DEGRADED, &sh->state);
 			pr_debug("skip op %ld on disc %d for sector %llu\n",
 				bi->bi_rw, i, (unsigned long long)sh->sector);
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+			if (test_bit(R5_DirectAccess, &sh->dev[i].flags)) {
+				struct page *pg = sh->dev[i].page;
+				BUG_ON(sh->dev[i].req.bi_io_vec[0].bv_page ==
+					pg);
+				sh->dev[i].req.bi_io_vec[0].bv_page = pg;
+			}
+#endif
 			clear_bit(R5_LOCKED, &sh->dev[i].flags);
 			set_bit(STRIPE_HANDLE, &sh->state);
 		}
@@ -688,6 +698,7 @@ static void ops_run_biofill(struct stripe_head *sh)
 			dev->read = rbi = dev->toread;
 			dev->toread = NULL;
 			spin_unlock_irq(&conf->device_lock);
+
 			while (rbi && rbi->bi_sector <
 				dev->sector + STRIPE_SECTORS) {
 				tx = async_copy_data(0, rbi, dev->page,
@@ -757,10 +768,16 @@ ops_run_compute5(struct stripe_head *sh, struct raid5_percpu *percpu)
 		__func__, (unsigned long long)sh->sector, target);
 	BUG_ON(!test_bit(R5_Wantcompute, &tgt->flags));
 
-	for (i = disks; i--; )
+	for (i = disks; i--; ) {
+		struct r5dev *dev = &sh->dev[i];
+		struct page *pg = dev->page;
 		if (i != target)
-			xor_srcs[count++] = sh->dev[i].page;
-
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+			if (test_bit(R5_DirectAccess, &dev->flags))
+				pg = dev->req.bi_io_vec[0].bv_page;
+#endif
+			xor_srcs[count++] = pg;
+	}
 	atomic_inc(&sh->count);
 
 	init_async_submit(&submit, ASYNC_TX_FENCE|ASYNC_TX_XOR_ZERO_DST, NULL,
@@ -996,8 +1013,14 @@ ops_run_prexor(struct stripe_head *sh, struct raid5_percpu *percpu,
 	for (i = disks; i--; ) {
 		struct r5dev *dev = &sh->dev[i];
 		/* Only process blocks that are known to be uptodate */
-		if (test_bit(R5_Wantdrain, &dev->flags))
-			xor_srcs[count++] = dev->page;
+		if (test_bit(R5_Wantdrain, &dev->flags)) {
+			struct page *pg = dev->page;
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+			if (test_bit(R5_DirectAccess, &dev->flags))
+				pg = dev->req.bi_io_vec[0].bv_page;
+#endif
+			xor_srcs[count++] = pg;
+		}
 	}
 
 	init_async_submit(&submit, ASYNC_TX_FENCE|ASYNC_TX_XOR_DROP_DST, tx,
@@ -1028,8 +1051,28 @@ ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
 			dev->towrite = NULL;
 			BUG_ON(dev->written);
 			wbi = dev->written = chosen;
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+			set_bit(R5_LOCKED, &dev->flags);
+			BUG_ON(test_bit(R5_DirectAccess, &dev->flags));
 			spin_unlock(&sh->lock);
 
+			if (!wbi->bi_next && test_bit(R5_OVERWRITE, &dev->flags)
+					&& test_bit(R5_Insync, &dev->flags)) {
+				struct page *pg = raid5_zero_copy(wbi,
+								dev->sector);
+				if (pg) {
+					dev->req.bi_io_vec[0].bv_page = pg;
+					set_bit(R5_DirectAccess, &dev->flags);
+					clear_bit(R5_UPTODATE, &dev->flags);
+					clear_bit(R5_OVERWRITE, &dev->flags);
+					continue;
+				}
+			}
+			clear_bit(R5_OVERWRITE, &dev->flags);
+			set_bit(R5_UPTODATE, &dev->flags);
+#else
+			spin_unlock(&sh->lock);
+#endif
 			while (wbi && wbi->bi_sector <
 				dev->sector + STRIPE_SECTORS) {
 				tx = async_copy_data(1, wbi, dev->page,
@@ -1096,15 +1139,29 @@ ops_run_reconstruct5(struct stripe_head *sh, struct raid5_percpu *percpu,
 		xor_dest = xor_srcs[count++] = sh->dev[pd_idx].page;
 		for (i = disks; i--; ) {
 			struct r5dev *dev = &sh->dev[i];
-			if (dev->written)
-				xor_srcs[count++] = dev->page;
+			struct page *pg = dev->page;
+
+			if (dev->written) {
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+				if (test_bit(R5_DirectAccess, &dev->flags))
+					pg = dev->req.bi_io_vec[0].bv_page;
+#endif
+				xor_srcs[count++] = pg;
+			}
 		}
 	} else {
 		xor_dest = sh->dev[pd_idx].page;
 		for (i = disks; i--; ) {
 			struct r5dev *dev = &sh->dev[i];
-			if (i != pd_idx)
-				xor_srcs[count++] = dev->page;
+			struct page *pg = dev->page;
+
+			if (i != pd_idx) {
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+				if (test_bit(R5_DirectAccess, &dev->flags))
+					pg = dev->req.bi_io_vec[0].bv_page;
+#endif
+				xor_srcs[count++] = pg;
+			}
 		}
 	}
 
@@ -1628,6 +1685,7 @@ static void raid5_end_read_request(struct bio * bi, int error)
 			md_error(conf->mddev, rdev);
 		}
 	}
+
 	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
 	clear_bit(R5_LOCKED, &sh->dev[i].flags);
 	set_bit(STRIPE_HANDLE, &sh->state);
@@ -1657,15 +1715,45 @@ static void raid5_end_write_request(struct bio *bi, int error)
 		md_error(conf->mddev, conf->disks[i].rdev);
 
 	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
-	
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+	if (test_bit(R5_DirectAccess, &sh->dev[i].flags)) {
+		BUG_ON(sh->dev[i].req.bi_io_vec[0].bv_page == sh->dev[i].page);
+		sh->dev[i].req.bi_io_vec[0].bv_page = sh->dev[i].page;
+	}
+#endif
 	clear_bit(R5_LOCKED, &sh->dev[i].flags);
 	set_bit(STRIPE_HANDLE, &sh->state);
 	release_stripe(sh);
 }
 
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+static struct page *raid5_zero_copy(struct bio *bio, sector_t sector)
+{
+	sector_t bi_sector = bio->bi_sector;
+	struct page *page = NULL;
+	struct bio_vec *bv;
+	int i;
+
+	bio_for_each_segment(bv, bio, i) {
+		if (sector == bi_sector)
+			page = bio_iovec_idx(bio, i)->bv_page;
+
+		bi_sector += bio_iovec_idx(bio, i)->bv_len >> 9;
+		if (bi_sector >= sector + STRIPE_SECTORS) {
+			/* check if the stripe is covered by one page */
+			if (page == bio_iovec_idx(bio, i)->bv_page) {
+				SetPageConstant(page);
+				return page;
+			}
+			return NULL;
+		}
+	}
+	return NULL;
+}
+#endif
 
 static sector_t compute_blocknr(struct stripe_head *sh, int i, int previous);
-	
+
 static void raid5_build_block(struct stripe_head *sh, int i, int previous)
 {
 	struct r5dev *dev = &sh->dev[i];
@@ -2499,7 +2587,11 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
 		if (sh->dev[i].written) {
 			dev = &sh->dev[i];
 			if (!test_bit(R5_LOCKED, &dev->flags) &&
-				test_bit(R5_UPTODATE, &dev->flags)) {
+				(test_bit(R5_UPTODATE, &dev->flags)
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+				|| test_bit(R5_DirectAccess, &dev->flags)
+#endif
+			)) {
 				/* We can return any write requests */
 				struct bio *wbi, *wbi2;
 				int bitmap_end = 0;
@@ -2507,6 +2599,9 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
 				spin_lock_irq(&conf->device_lock);
 				wbi = dev->written;
 				dev->written = NULL;
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+				clear_bit(R5_DirectAccess, &dev->flags);
+#endif
 				while (wbi && wbi->bi_sector <
 					dev->sector + STRIPE_SECTORS) {
 					wbi2 = r5_next_bio(wbi, dev->sector);

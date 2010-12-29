@@ -263,18 +263,24 @@ struct r6_state {
 #define	R5_Insync	3	/* rdev && rdev->in_sync at start */
 #define	R5_Wantread	4	/* want to schedule a read */
 #define	R5_Wantwrite	5
-#define	R5_Overlap	7	/* There is a pending overlapping request on this block */
+#define	R5_Overlap	7	/* There is a pending overlapping request
+					*on this block */
 #define	R5_ReadError	8	/* seen a read error here recently */
 #define	R5_ReWrite	9	/* have tried to over-write the readerror */
 
 #define	R5_Expanded	10	/* This block now has post-expand data */
-#define	R5_Wantcompute	11 /* compute_block in progress treat as
-				    * uptodate
-				    */
+#define	R5_Wantcompute	11      /* compute_block in progress treat as
+					* uptodate */
+
 #define	R5_Wantfill	12 /* dev->toread contains a bio that needs
-				    * filling
-				    */
+					* filling */
 #define R5_Wantdrain	13 /* dev->towrite needs to be drained */
+
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+#define R5_DirectAccess 14 /* access cached pages directly instead of
+					* sh pages */
+#endif
+
 /*
  * Write method
  */

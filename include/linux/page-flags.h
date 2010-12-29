@@ -108,6 +108,9 @@ enum pageflags {
 #ifdef CONFIG_MEMORY_FAILURE
 	PG_hwpoison,		/* hardware poisoned page. Don't touch */
 #endif
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+	PG_constant,		/* const page not modified during raid5 io */
+#endif
 	__NR_PAGEFLAGS,
 
 	/* Filesystems */
@@ -197,6 +200,14 @@ static inline int TestClearPage##uname(struct page *page) { return 0; }
 static inline int __TestClearPage##uname(struct page *page) { return 0; }
 
 struct page;	/* forward declaration */
+
+#ifdef CONFIG_OPTIMIZE_FSL_DMA_MEMCPY
+#define PageConstant(page) test_bit(PG_constant, &(page)->flags)
+#define SetPageConstant(page) set_bit(PG_constant, &(page)->flags)
+#define ClearPageConstant(page) clear_bit(PG_constant, &(page->flags))
+#define TestSetPageConstant(page) test_and_set_bit(PG_constant, &(page)->flags)
+extern void clear_page_constant(struct page *page);
+#endif
 
 TESTPAGEFLAG(Locked, locked) TESTSETFLAG(Locked, locked)
 PAGEFLAG(Error, error)
@@ -432,5 +443,4 @@ static inline int page_has_private(struct page *page)
 }
 
 #endif /* !__GENERATING_BOUNDS_H */
-
 #endif	/* PAGE_FLAGS_H */
