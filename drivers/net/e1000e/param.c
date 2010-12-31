@@ -390,7 +390,11 @@ void __devinit e1000e_check_options(struct e1000_adapter *adapter)
 			.type = range_option,
 			.name = "Interrupt Mode",
 			.err  = "defaulting to 2 (MSI-X)",
+#ifdef CONFIG_PCI_MSI
 			.def  = E1000E_INT_MODE_MSIX,
+#else
+			.def  = E1000E_INT_MODE_LEGACY,
+#endif
 			.arg  = { .r = { .min = MIN_INTMODE,
 					 .max = MAX_INTMODE } }
 		};
