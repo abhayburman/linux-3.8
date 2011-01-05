@@ -10,7 +10,7 @@
  * Maintainer: Kumar Gala
  * Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- * Copyright 2002-2010 Freescale Semiconductor, Inc.
+ * Copyright 2002-2011 Freescale Semiconductor, Inc.
  * Copyright 2007 MontaVista Software, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
@@ -4265,6 +4265,10 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	struct net_device *owner;
 
 	skb_dst_drop(skb);
+	if (skb->destructor) {
+		skb->destructor(skb);
+		skb->destructor = NULL;
+	}
 #ifdef CONFIG_XFRM
 	if (skb->sp) {
 		secpath_put(skb->sp);
@@ -4326,7 +4330,6 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 	unsigned long flags = 0;
 
 	if ((skb->skb_owner == NULL) ||
-		(skb->destructor) ||
 		skb_has_frags(skb) ||
 		skb->cloned)
 			goto _normal_free;
@@ -4387,7 +4390,6 @@ int gfar_recycle_skb(struct sk_buff *skb)
 	struct gfar_skb_handler *sh;
 
 	if ((skb->skb_owner == NULL) ||
-		(skb->destructor) ||
 		skb_has_frags(skb) ||
 		skb->cloned)
 		return 0;
