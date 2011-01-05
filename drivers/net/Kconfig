@@ -2404,6 +2404,12 @@ config GIANFAR
 	  This driver supports the Gigabit TSEC on the MPC83xx, MPC85xx,
 	  and MPC86xx family of chips, and the FEC on the 8540.
 
+config TCP_FAST_ACK
+	bool "TCP: fast acknowledgment"
+	depends on GIANFAR && EXPERIMENTAL
+	help
+	 Accelerate TCP ACK.
+
 config GFAR_HW_TCP_RECEIVE_OFFLOAD
 	default n
 	bool "Hardware TCP receive offload"

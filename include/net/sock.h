@@ -277,6 +277,9 @@ struct sock {
 #ifdef CONFIG_NET_DMA
 	struct sk_buff_head	sk_async_wait_queue;
 #endif
+#ifdef CONFIG_TCP_FAST_ACK
+	struct sk_buff_head	sk_ack_queue;
+#endif
 	int			sk_wmem_queued;
 	int			sk_forward_alloc;
 	gfp_t			sk_allocation;

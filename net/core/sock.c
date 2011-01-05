@@ -1127,6 +1127,9 @@ static void __sk_free(struct sock *sk)
 #endif
 	put_net(sock_net(sk));
 	sk_prot_free(sk->sk_prot_creator, sk);
+#ifdef CONFIG_TCP_FAST_ACK
+	skb_queue_purge(&sk->sk_ack_queue);
+#endif
 }
 
 void sk_free(struct sock *sk)
@@ -1189,6 +1192,9 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority)
 		skb_queue_head_init(&newsk->sk_write_queue);
 #ifdef CONFIG_NET_DMA
 		skb_queue_head_init(&newsk->sk_async_wait_queue);
+#endif
+#ifdef CONFIG_TCP_FAST_ACK
+		skb_queue_head_init(&newsk->sk_ack_queue);
 #endif
 
 		spin_lock_init(&newsk->sk_dst_lock);
@@ -1927,6 +1933,9 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	skb_queue_head_init(&sk->sk_error_queue);
 #ifdef CONFIG_NET_DMA
 	skb_queue_head_init(&sk->sk_async_wait_queue);
+#endif
+#ifdef CONFIG_TCP_FAST_ACK
+	skb_queue_head_init(&sk->sk_ack_queue);
 #endif
 
 	sk->sk_send_head	=	NULL;

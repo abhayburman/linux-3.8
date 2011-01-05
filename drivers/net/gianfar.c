@@ -4287,11 +4287,24 @@ static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 			bdp = next_txbd(bdp, base, tx_ring_size);
 		}
 
-#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-		howmany_recycle += gfar_kfree_skb(skb, tx_queue->qindex);
-#else
-		dev_kfree_skb_any(skb);
+#ifdef CONFIG_TCP_FAST_ACK
+		if (skb->sk &&
+		skb->truesize == SKB_DATA_ALIGN(MAX_TCP_HEADER) + sizeof(struct sk_buff) &&
+		TCP_SKB_CB(skb)->flags == TCPCB_FLAG_ACK &&
+		skb_queue_len(&skb->sk->sk_ack_queue) < GFAR_DEFAULT_RECYCLE_MAX) {
+			spin_lock(&skb->sk->sk_ack_queue.lock);
+			__skb_queue_head(&skb->sk->sk_ack_queue, skb);
+			spin_unlock(&skb->sk->sk_ack_queue.lock);
+
+		} else
 #endif
+		{
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+			howmany_recycle += gfar_kfree_skb(skb, tx_queue->qindex);
+#else
+			dev_kfree_skb_any(skb);
+#endif
+		}
 		tx_queue->tx_skbuff[skb_dirtytx] = NULL;
 
 		skb_dirtytx = (skb_dirtytx + 1) &
