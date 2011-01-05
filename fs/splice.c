@@ -15,7 +15,7 @@
  * Copyright (C) 2005-2006 Jens Axboe <axboe@kernel.dk>
  * Copyright (C) 2005-2006 Linus Torvalds <torvalds@osdl.org>
  * Copyright (C) 2006 Ingo Molnar <mingo@elte.hu>
- * Copyright (C) 2010 Freescale Semiconductor, Inc.
+ * Copyright (C) 2010-2011 Freescale Semiconductor, Inc.
  *
  */
 #include <linux/fs.h>
@@ -32,13 +32,23 @@
 #include <linux/uio.h>
 #include <linux/security.h>
 #include <linux/gfp.h>
+#include <linux/socket.h>
+#include <linux/net.h>
 
 #ifdef CONFIG_SEND_PAGES
 #include <net/tcp.h>
 #include <linux/netdevice.h>
-#include <linux/socket.h>
 extern int is_sock_file(struct file *f);
 #endif /*CONFIG_SEND_PAGES*/
+
+#define MAX_RECV_PAGES 8
+	struct receive_page {
+	struct page *page;
+	loff_t pos;
+	size_t count;
+	void *fsdata;
+};
+
 /*
  * Attempt to steal a page from a pipe buffer. This should perhaps go into
  * a vm helper function, it's already simplified quite a bit by the
@@ -1764,6 +1774,114 @@ static long vmsplice_to_user(struct file *file, const struct iovec __user *iov,
 	return ret;
 }
 
+static int socket_to_file(struct socket *sock, struct file *file,
+		loff_t pos, size_t count)
+{
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	struct receive_page pages[MAX_RECV_PAGES];
+	struct kvec iov[MAX_RECV_PAGES];
+	struct msghdr msg;
+	unsigned long total_remains;
+	unsigned long total_send = 0;
+	int ret;
+	int err = 0;
+	int index = 0;
+	int total_page = 0;
+	int send_page = 0;
+
+	mutex_lock(&inode->i_mutex);
+
+	vfs_check_frozen(inode->i_sb, SB_FREEZE_WRITE);
+	current->backing_dev_info = mapping->backing_dev_info;
+
+	err = generic_write_checks(file, &pos, &count, S_ISBLK(inode->i_mode));
+
+	if (err != 0 || count == 0) {
+		current->backing_dev_info = NULL;
+		mutex_unlock(&inode->i_mutex);
+		return -EFAULT;
+	}
+
+	file_remove_suid(file);
+	file_update_time(file);
+
+	total_remains = count;
+	do {
+		send_page = 0;
+		do {
+			unsigned long bytes;
+			unsigned long offset;
+			struct page *page;
+			void *fsdata;
+
+			offset = (pos & (PAGE_CACHE_SIZE - 1));
+			bytes = min_t(unsigned long, PAGE_CACHE_SIZE - offset,
+					total_remains);
+
+			ret =  mapping->a_ops->write_begin(file, mapping, pos,
+				bytes, AOP_FLAG_UNINTERRUPTIBLE, &page, &fsdata);
+
+			if (unlikely(ret)) {
+				err = -EFAULT;
+				break;
+			}
+
+			pages[send_page].page = page;
+			pages[send_page].pos = pos;
+			pages[send_page].count = bytes;
+			pages[send_page].fsdata = fsdata;
+			iov[send_page].iov_base = kmap(page) + offset;
+			iov[send_page].iov_len = bytes;
+			send_page++;
+			total_remains -= bytes;
+			pos += bytes;
+		} while (total_remains && send_page != MAX_RECV_PAGES);
+
+		total_page += send_page;
+		/*setup socket message*/
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = (struct iovec *)&iov[0];
+		msg.msg_iovlen = send_page;
+		msg.msg_control = NULL;
+		msg.msg_controllen = 0;
+		msg.msg_flags = MSG_WAITALL;
+		total_send += kernel_recvmsg(sock, &msg, &iov[0], send_page,
+			(count - total_remains - total_send), MSG_WAITALL);
+
+		if ((total_send + total_remains) != count)
+			err = -EPIPE;
+		else
+			err = total_send;
+
+		/*commit pages to file cache*/
+		for (index = 0; index < send_page; index++) {
+			mark_page_accessed(pages[index].page);
+			kunmap(pages[index].page);
+			ret = mapping->a_ops->write_end(file, mapping,
+			pages[index].pos, pages[index].count, pages[index].count,
+			pages[index].page, pages[index].fsdata);
+			if (unlikely(ret < 0)) {
+				err = ret;
+				break;
+			}
+		}
+
+		if (err < 0)
+			break;
+
+	} while (total_remains);
+
+	if (err > 0)
+		balance_dirty_pages_ratelimited_nr(mapping, total_page);
+
+	current->backing_dev_info = NULL;
+	mutex_unlock(&inode->i_mutex);
+
+	return err;
+}
+
 /*
  * vmsplice splices a user address range into a pipe. It can be thought of
  * as splice-from-memory, where the regular splice is splice-from-file (or
@@ -1852,11 +1970,35 @@ SYSCALL_DEFINE6(splice, int, fd_in, loff_t __user *, off_in,
 	long error;
 	struct file *in, *out;
 	int fput_in, fput_out;
+	struct socket *sock = NULL;
 
 	if (unlikely(!len))
 		return 0;
 
 	error = -EBADF;
+
+	sock = sockfd_lookup(fd_in, &error);
+	if (sock) {
+		loff_t pos;
+		out = NULL;
+
+		if (!sock->sk)
+			return error;
+
+		if (copy_from_user(&pos, off_out, sizeof(loff_t)))
+			return -EFAULT;
+
+		out = fget_light(fd_out, &fput_out);
+		if (out) {
+			if (out->f_mode & FMODE_WRITE)
+				error = socket_to_file(sock, out, pos, len);
+			fput_light(out, fput_out);
+		}
+
+		fput(sock->file);
+		return error;
+	}
+
 	in = fget_light(fd_in, &fput_in);
 	if (in) {
 		if (in->f_mode & FMODE_READ) {
