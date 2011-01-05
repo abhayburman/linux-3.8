@@ -85,6 +85,9 @@
 int sysctl_tcp_tw_reuse __read_mostly;
 int sysctl_tcp_low_latency __read_mostly;
 
+#define TCP_HWACCEL_THRESHOLD	(1024*1024) /*1M*/
+extern void gfar_setup_hwaccel_tcp4_receive(struct sock *sk, struct sk_buff *skb);
+
 
 #ifdef CONFIG_TCP_MD5SIG
 static struct tcp_md5sig_key *tcp_v4_md5_do_lookup(struct sock *sk,
@@ -574,7 +577,7 @@ int tcp_v4_gso_send_check(struct sk_buff *skb)
  *	Exception: precedence violation. We do not implement it in any case.
  */
 
-static void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb)
+void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcphdr *th = tcp_hdr(skb);
 	struct {
@@ -1557,6 +1560,14 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
 		sock_rps_save_rxhash(sk, skb->rxhash);
 		TCP_CHECK_TIMER(sk);
+
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+		if (sk->tcp_hw_channel == NULL &&
+			(TCP_SKB_CB(skb)->seq - sk->init_seq) > TCP_HWACCEL_THRESHOLD &&
+			skb->skb_owner != NULL && (sk->sk_filter == NULL))
+			gfar_setup_hwaccel_tcp4_receive(sk , skb);
+#endif
+
 		if (tcp_rcv_established(sk, skb, tcp_hdr(skb), skb->len)) {
 			rsk = sk;
 			goto reset;
@@ -1656,6 +1667,11 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	sk = __inet_lookup_skb(&tcp_hashinfo, skb, th->source, th->dest);
 	if (!sk)
 		goto no_tcp_socket;
+
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	if (th->syn)
+		sk->init_seq = ntohl(th->seq);
+#endif
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)

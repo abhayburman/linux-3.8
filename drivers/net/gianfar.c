@@ -108,6 +108,8 @@
 #include <linux/jhash.h>
 #endif
 
+#include <net/tcp.h>
+
 #include "gianfar.h"
 #include "fsl_pq_mdio.h"
 
@@ -115,6 +117,7 @@
 #undef BRIEF_GFAR_ERRORS
 #undef VERBOSE_GFAR_ERRORS
 
+extern void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb);
 const char gfar_driver_name[] = "Gianfar Ethernet";
 const char gfar_driver_version[] = "1.4-skbr1.1.5";
 
@@ -307,6 +310,17 @@ unsigned long alloc_bds(struct gfar_private *priv, dma_addr_t *addr)
 				region_size, addr, GFP_KERNEL);
 #endif
 	return vaddr;
+}
+
+static inline void gfar_rx_checksum(struct sk_buff *skb, struct rxfcb *fcb)
+{
+	/* If valid headers were found, and valid sums
+	 * were verified, then we tell the kernel that no
+	 * checksumming is necessary.  Otherwise, it is */
+	if ((fcb->flags & RXFCB_CSUM_MASK) == (RXFCB_CIP | RXFCB_CTU))
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	else
+		skb->ip_summed = CHECKSUM_NONE;
 }
 
 static int gfar_alloc_skb_resources(struct net_device *ndev)
@@ -1086,6 +1100,206 @@ static u32 cluster_entry_per_class(struct gfar_private *priv, u32 rqfar,
 	return rqfar;
 }
 
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+void gfar_setup_hwaccel_tcp4_receive(struct sock *sk, struct sk_buff *skb)
+{
+
+	int i = 0;
+	int j = 0;
+	u32 rqfcr = 0x0;
+	u32 rqfpr = 0;
+	struct tcphdr *th;
+	struct iphdr *iph;
+	struct gfar_private *priv = netdev_priv(skb->skb_owner);
+
+	if (priv->ptimer_present || !priv->rx_csum_enable ||
+		priv->num_rx_queues < (TCP_CHL_OFFSET + RESERVE_CHL_NUM))
+		return;
+
+	th = tcp_hdr(skb);
+	iph = ip_hdr(skb);
+
+	/*select next empty TCP channel*/
+	for (i = priv->empty_tcp_channel + 1;
+		i != priv->empty_tcp_channel;
+		i = (i+1) % (priv->num_rx_queues - TCP_CHL_OFFSET - 1)) {
+		if (priv->tcp_hw_channel[i] == NULL)
+			break;
+	}
+
+	if (i == priv->empty_tcp_channel)
+		i++;
+
+	priv->tcp_hw_channel[priv->empty_tcp_channel] = sk;
+	sk->tcp_hw_channel = &(priv->tcp_hw_channel[priv->empty_tcp_channel]);
+
+	j = priv->tcp_filer_idx + (priv->empty_tcp_channel << 2);
+
+	/*setup IPv4 source address*/
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_SIA | RQFCR_AND;
+	rqfpr = ntohl(iph->saddr);
+	priv->ftp_rqfcr[j] = rqfcr;
+	priv->ftp_rqfpr[j] = rqfpr;
+	gfar_write_filer(priv, j, rqfcr, rqfpr);
+	j++;
+	/*setup IPv4 destination address*/
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_DIA | RQFCR_AND;
+	rqfpr = ntohl(iph->daddr);
+	priv->ftp_rqfcr[j] = rqfcr;
+	priv->ftp_rqfpr[j] = rqfpr;
+	gfar_write_filer(priv, j, rqfcr, rqfpr);
+	j++;
+	/*setup TCP source port*/
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_SPT | RQFCR_AND;
+	rqfpr = ntohs(th->source);
+	priv->ftp_rqfcr[j] = rqfcr;
+	priv->ftp_rqfpr[j] = rqfpr;
+	gfar_write_filer(priv, j, rqfcr, rqfpr);
+	j++;
+	/*setup TCP destination port*/
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_DPT | ((priv->empty_tcp_channel + 1) << 10);
+	rqfpr = ntohs(th->dest);
+	priv->ftp_rqfcr[j] = rqfcr;
+	priv->ftp_rqfpr[j] = rqfpr;
+	gfar_write_filer(priv, j, rqfcr, rqfpr);
+
+	priv->empty_tcp_channel = i;
+
+	/*clean up tcp channel*/
+	if (priv->tcp_hw_channel[i] != NULL) {
+		priv->tcp_hw_channel[i]->tcp_hw_channel = NULL;
+		priv->tcp_hw_channel[i] = NULL;
+		j = priv->tcp_filer_idx + (i << 2);
+		rqfcr = RQFCR_CMP_NOMATCH;
+		rqfpr = FPR_FILER_MASK;
+		priv->ftp_rqfcr[j] = rqfcr;
+		priv->ftp_rqfpr[j] = rqfpr;
+		gfar_write_filer(priv, j, rqfcr, rqfpr);
+		j++;
+		priv->ftp_rqfcr[j] = rqfcr;
+		priv->ftp_rqfpr[j] = rqfpr;
+		gfar_write_filer(priv, j, rqfcr, rqfpr);
+		j++;
+		priv->ftp_rqfcr[j] = rqfcr;
+		priv->ftp_rqfpr[j] = rqfpr;
+		gfar_write_filer(priv, j, rqfcr, rqfpr);
+		j++;
+		priv->ftp_rqfcr[j] = rqfcr;
+		priv->ftp_rqfpr[j] = rqfpr;
+		gfar_write_filer(priv, j, rqfcr, rqfpr);
+	}
+}
+
+inline void gfar_hwaccel_tcp4_receive(struct gfar_private *priv,
+		struct gfar_priv_rx_q *rx_queue, struct sk_buff *skb, int amount_pull)
+{
+	const struct tcphdr *th;
+	const struct iphdr *iph;
+	int p_len;
+	int ph_len;
+	struct rxfcb *fcb;
+	struct sock *gfar_sk;
+
+	gfar_sk = priv->tcp_hw_channel[rx_queue->qindex-1];
+
+	fcb = (struct rxfcb *)skb->data;
+
+	gfar_rx_checksum(skb, fcb);
+	skb->pkt_type = PACKET_HOST;
+
+	/*set IPv4 header*/
+	skb->network_header = skb->data + amount_pull + ETH_HLEN;
+	iph = ip_hdr(skb);
+
+	if (iph->ihl > 5 || (iph->frag_off & htons(IP_MF | IP_OFFSET)) ||
+		(gfar_sk->sk_state != TCP_ESTABLISHED)) {
+		gfar_process_frame(priv->ndev, skb, amount_pull);
+		return;
+	}
+
+	/*IPv4 header length*/
+	ph_len = iph->ihl << 2;
+	p_len = ntohs(iph->tot_len);
+
+	if (p_len <  (skb->len - amount_pull - ETH_HLEN)) {
+		skb->tail = skb->tail - ((skb->len - amount_pull - ETH_HLEN) - p_len);
+		skb->len = p_len - ph_len;
+	} else
+		skb->len = skb->len - (amount_pull + ETH_HLEN + ph_len);
+
+	/*set TCP header*/
+	skb->transport_header = skb->network_header + ph_len;
+	skb->data = skb->transport_header;
+	th = tcp_hdr(skb);
+	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
+					skb->len - (th->doff << 2));
+	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
+	TCP_SKB_CB(skb)->when	 = 0;
+	TCP_SKB_CB(skb)->flags	 = iph->tos;
+	TCP_SKB_CB(skb)->sacked	 = 0;
+
+	bh_lock_sock(gfar_sk);
+	if (!sock_owned_by_user(gfar_sk)) {
+		if (tcp_rcv_established(gfar_sk, skb, tcp_hdr(skb), skb->len)) {
+			tcp_v4_send_reset(gfar_sk, skb);
+			kfree_skb(skb);
+		}
+	} else
+		sk_add_backlog(gfar_sk, skb);
+	bh_unlock_sock(gfar_sk);
+}
+
+void gfar_init_tcp_filer_rule(struct gfar_private *priv, int index)
+{
+	int i;
+	int j = 0;
+	u32 rqfcr = 0x0;
+	u32 rqfpr = FPR_FILER_MASK;
+
+	i = index - 4 - (TCP_CHL_NUM << 2);
+	if (i < 0)
+		return;
+
+	printk(KERN_INFO "%s: enabled hardware TCP receive offload\n",
+			priv->ndev->name);
+
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_MASK | RQFCR_AND;
+	rqfpr = RQFPR_IPV4|RQFPR_TCP;
+	priv->ftp_rqfcr[i] = rqfcr;
+	priv->ftp_rqfpr[i] = rqfpr;
+	gfar_write_filer(priv, i, rqfcr, rqfpr);
+	i++;
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_PARSE | RQFCR_AND;
+	rqfpr = RQFPR_IPV4|RQFPR_TCP;
+	priv->ftp_rqfcr[i] = rqfcr;
+	priv->ftp_rqfpr[i] = rqfpr;
+	gfar_write_filer(priv, i, rqfcr, rqfpr);
+	i++;
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_MASK | RQFCR_CLE | RQFCR_AND;
+	rqfpr = FPR_FILER_MASK;
+	priv->ftp_rqfcr[i] = rqfcr;
+	priv->ftp_rqfpr[i] = rqfpr;
+	gfar_write_filer(priv, i, rqfcr, rqfpr);
+	i++;
+	rqfcr = RQFCR_CMP_NOMATCH;
+	rqfpr = FPR_FILER_MASK;
+	priv->tcp_filer_idx = i;
+	for (j = 0; j < (TCP_CHL_NUM << 2); j++) {
+		priv->ftp_rqfcr[i] = rqfcr;
+		priv->ftp_rqfpr[i] = rqfpr;
+		gfar_write_filer(priv, i, rqfcr, rqfpr);
+		i++;
+	}
+	rqfpr = FPR_FILER_MASK;
+	rqfcr = RQFCR_CMP_NOMATCH | RQFCR_CLE;
+	priv->ftp_rqfcr[i] = rqfcr;
+	priv->ftp_rqfpr[i] = rqfpr;
+	gfar_write_filer(priv, i, rqfcr, rqfpr);
+}
+#endif
+
+
 static void gfar_init_filer_table(struct gfar_private *priv)
 {
 	int i = 0x0;
@@ -1106,9 +1320,22 @@ static void gfar_init_filer_table(struct gfar_private *priv)
 	rqfar = cluster_entry_per_class(priv, rqfar, RQFPR_IPV4 | RQFPR_UDP);
 	rqfar = cluster_entry_per_class(priv, rqfar, RQFPR_IPV4 | RQFPR_TCP);
 
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	/*init TCP filer rule table*/
+	gfar_init_tcp_filer_rule(priv, rqfar);
+
+	/* cur_filer_idx indicated the fisrt non-masked rule */
+	priv->cur_filer_idx = priv->tcp_filer_idx - 3;
+
+	/* Program the RIR0 reg with the required distribution */
+	priv->gfargrp[0].regs->rir0 = TWO_QUEUE_RIR0;
+#else
 	/* cur_filer_idx indicated the fisrt non-masked rule */
 	priv->cur_filer_idx = rqfar;
 
+	/* Program the RIR0 reg with the required distribution */
+	priv->gfargrp[0].regs->rir0 = DEFAULT_RIR0;
+#endif
 	/* Rest are masked rules */
 	rqfcr = RQFCR_CMP_NOMATCH;
 	for (i = 0; i < rqfar; i++) {
@@ -1117,8 +1344,6 @@ static void gfar_init_filer_table(struct gfar_private *priv)
 		gfar_write_filer(priv, i, rqfcr, rqfpr);
 	}
 
-	/* Program the RIR0 reg with the required distribution */
-	priv->gfargrp[0].regs->rir0 = DEFAULT_RIR0;
 }
 
 static int get_cpu_number(unsigned char *eth_pkt, int len)
@@ -4442,9 +4667,10 @@ struct sk_buff * gfar_new_skb(struct net_device *dev)
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	skb->dev = dev;
+#endif
 	/* Keep incoming device pointer for recycling */
 	skb->skb_owner = dev;
-#endif
+
 	return skb;
 }
 
@@ -4608,18 +4834,6 @@ irqreturn_t gfar_receive(int irq, void *grp_id)
 #endif
 	return IRQ_HANDLED;
 }
-
-static inline void gfar_rx_checksum(struct sk_buff *skb, struct rxfcb *fcb)
-{
-	/* If valid headers were found, and valid sums
-	 * were verified, then we tell the kernel that no
-	 * checksumming is necessary.  Otherwise, it is */
-	if ((fcb->flags & RXFCB_CSUM_MASK) == (RXFCB_CIP | RXFCB_CTU))
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-	else
-		skb->ip_summed = CHECKSUM_NONE;
-}
-
 
 /* gfar_process_frame() -- handle one incoming packet if skb
  * isn't NULL.  */
@@ -4814,7 +5028,13 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 						skb, amount_pull);
 				}
 #else
-				gfar_process_frame(dev, skb, amount_pull);
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+				if (rx_queue->qindex &&
+					priv->tcp_hw_channel[rx_queue->qindex - TCP_CHL_OFFSET]) {
+					gfar_hwaccel_tcp4_receive(priv, rx_queue, skb, amount_pull);
+				} else
+#endif
+					gfar_process_frame(dev, skb, amount_pull);
 #endif
 			} else {
 				if (netif_msg_rx_err(priv))

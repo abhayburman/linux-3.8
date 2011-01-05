@@ -494,6 +494,10 @@ extern const char gfar_driver_version[];
  * to the 3-bit hash value generated */
 #define DEFAULT_RIR0	0x05397700
 
+/*even hash value map to queue0
+ *odd hash value map to queue1*/
+#define TWO_QUEUE_RIR0	0x04104100
+
 /* RQFCR register bits */
 #define RQFCR_GPI		0x80000000
 #define RQFCR_HASHTBL_Q		0x00000000
@@ -629,6 +633,10 @@ extern const char gfar_driver_version[];
 #define GFAR_TX_BASE_H	0xf
 #define GFAR_RX_BASE_H	0xf
 #define GIANFAR_WOL_MAGIC       (1 << 5)
+
+#define TCP_CHL_NUM 5
+#define TCP_CHL_OFFSET 2
+#define RESERVE_CHL_NUM 3
 
 struct txbd8
 {
@@ -1281,6 +1289,11 @@ struct gfar_private {
 	unsigned int rx_stash_index;
 
 	u32 cur_filer_idx;
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	u16 tcp_filer_idx;
+	u16 empty_tcp_channel;
+	struct sock *tcp_hw_channel[MAX_RX_QS];
+#endif
 
 	/* wake up ring */
 	struct rxbd8 *wk_bd_base;

@@ -263,6 +263,10 @@ struct sock {
 #ifdef CONFIG_XFRM
 	struct xfrm_policy	*sk_policy[2];
 #endif
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	void			*tcp_hw_channel;
+	u32			init_seq;
+#endif
 	spinlock_t		sk_dst_lock;
 	atomic_t		sk_rmem_alloc;
 	atomic_t		sk_wmem_alloc;

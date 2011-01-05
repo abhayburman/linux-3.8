@@ -5,7 +5,7 @@
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  *		Florian La Roche, <rzsfl@rz.uni-sb.de>
  *
- *	Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *	Copyright 2009-2011 Freescale Semiconductor, Inc.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -369,9 +369,7 @@ struct sk_buff {
 	struct nf_bridge_info	*nf_bridge;
 #endif
 
-#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	void		*skb_owner;
-#endif
 
 	int			skb_iif;
 #ifdef CONFIG_NET_SCHED

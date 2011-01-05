@@ -1119,6 +1119,12 @@ static void __sk_free(struct sock *sk)
 		printk(KERN_DEBUG "%s: optmem leakage (%d bytes) detected.\n",
 		       __func__, atomic_read(&sk->sk_omem_alloc));
 
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	if (sk->tcp_hw_channel) {
+		*((struct sock **)sk->tcp_hw_channel) = NULL;
+		sk->tcp_hw_channel = NULL;
+	}
+#endif
 	put_net(sock_net(sk));
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
@@ -1196,7 +1202,10 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority)
 		newsk->sk_forward_alloc = 0;
 		newsk->sk_send_head	= NULL;
 		newsk->sk_userlocks	= sk->sk_userlocks & ~SOCK_BINDPORT_LOCK;
-
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+		newsk->init_seq    = sk->init_seq;
+		newsk->tcp_hw_channel = NULL;
+#endif
 		sock_reset_flag(newsk, SOCK_DONE);
 		skb_queue_head_init(&newsk->sk_error_queue);
 
@@ -1961,7 +1970,10 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->sk_rcvlowat		=	1;
 	sk->sk_rcvtimeo		=	MAX_SCHEDULE_TIMEOUT;
 	sk->sk_sndtimeo		=	MAX_SCHEDULE_TIMEOUT;
-
+#ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
+	sk->tcp_hw_channel	=	NULL;
+	sk->init_seq		=	0;
+#endif
 	sk->sk_stamp = ktime_set(-1L, 0);
 
 	/*
