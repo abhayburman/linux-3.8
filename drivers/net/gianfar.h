@@ -9,7 +9,7 @@
  * Maintainer: Kumar Gala
  * Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- * Copyright 2002-2010 Freescale Semiconductor, Inc.
+ * Copyright 2002-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -1356,6 +1356,9 @@ struct gfar_private {
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	int sps; /*flag for s/w packet steering */
 #endif
+
+	unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
+	unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];
 };
 
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
