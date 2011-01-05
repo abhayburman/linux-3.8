@@ -4174,10 +4174,6 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 
 	dev->mtu = new_mtu;
 
-#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-	gfar_skbr_register_truesize(priv);
-#endif /*CONFIG_GFAR_SKBUFF_RECYCLING*/
-
 	gfar_write(&regs->mrblr, priv->rx_buffer_size);
 	gfar_write(&regs->maxfrm, priv->rx_buffer_size);
 
@@ -4195,6 +4191,10 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 
 	if ((oldsize != tempsize) && (dev->flags & IFF_UP))
 		startup_gfar(dev);
+
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	gfar_skbr_register_truesize(priv);
+#endif /*CONFIG_GFAR_SKBUFF_RECYCLING*/
 
 	return 0;
 }
