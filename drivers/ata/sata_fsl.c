@@ -6,7 +6,7 @@
  * Author: Ashish Kalra <ashish.kalra@freescale.com>
  * Li Yang <leoli@freescale.com>
  *
- * Copyright (c) 2006-2010 Freescale Semiconductor, Inc.
+ * Copyright (c) 2006-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -158,7 +158,7 @@ enum {
 	    IE_ON_SINGL_DEVICE_ERR | IE_ON_CMD_COMPLETE,
 
 	EXT_INDIRECT_SEG_PRD_FLAG = (1 << 31),
-#ifdef CONFIG_P1022_DS
+#if defined(CONFIG_P1022_DS) || defined(CONFIG_P1010_RDB)
 	DATA_SNOOP_ENABLE = (1 << 28),
 #else
 	DATA_SNOOP_ENABLE = (1 << 22),
