@@ -91,7 +91,7 @@ static int get_pcie_host_agent(void)
 		printk(KERN_ERR "Failed to map global-utilities register space\n");
 		return 0;
 	}
-	host_agent = (in_be32(guts_regs + 4) & 0x00070000) >> 16 ;
+	host_agent = (in_be32(guts_regs + 4) & 0x00060000) >> 17 ;
 
 	iounmap(guts_regs);
 	return host_agent;
@@ -135,7 +135,7 @@ static void __init p1010_rdb_setup_arch(void)
 	dma_addr_t max = 0xffffffff;
 
 	if (ppc_md.progress)
-		ppc_md.progress("mpc85xx_rdb_setup_arch()", 0);
+		ppc_md.progress("p1010_rdb_setup_arch()", 0);
 
 #ifdef CONFIG_PCI
 	for_each_node_by_type(np, "pci") {

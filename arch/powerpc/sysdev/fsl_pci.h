@@ -1,7 +1,7 @@
 /*
  * MPC85xx/86xx PCI Express structure define
  *
- * Copyright 2007 Freescale Semiconductor, Inc
+ * Copyright 2007,2011 Freescale Semiconductor, Inc
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -21,6 +21,7 @@
 #define PIWAR_TGI_LOCAL		0x00f00000	/* target - local memory */
 #define PIWAR_READ_SNOOP	0x00050000
 #define PIWAR_WRITE_SNOOP	0x00005000
+#define PIWAR_SZ_MASK          0x0000003f
 
 /* PCI/PCI Express outbound window reg */
 struct pci_outbound_window_regs {
@@ -41,6 +42,19 @@ struct pci_inbound_window_regs {
 	__be32	piwar;	/* 0x.10 - Inbound window attributes register */
 	u8	res2[12];
 };
+
+#if defined(CONFIG_P1010_RDB)
+struct pci_inbound_msi_window {
+	__be32	pmitar;		/* 0x00 - Address */
+	u8	res1[4];
+	__be32	pmiwbar;		/* 0x08 - Window Base Address */
+	__be32	pmiwbear;	/* 0x0c - Window Base Address Extended */
+	__be32	pmiwar;		/* 0x10 - Window Attributes */
+	u8	res2[108];
+};
+#endif /* #if defined (CONFIG_P1010_RDB) */
+
+
 
 /* PCI/PCI Express IO block registers for 85xx/86xx */
 struct ccsr_pci {
@@ -63,7 +77,12 @@ struct ccsr_pci {
  */
 	struct pci_outbound_window_regs pow[5];
 
+#if defined(CONFIG_P1010_RDB)
+	u8	res14[96];
+	struct pci_inbound_msi_window pimw; /* 0xd00-0xd9c Inbound ATMU's MSI */
+#else
 	u8	res14[256];
+#endif /* #if defined (CONFIG_P1010_RDB) */
 
 /* PCI/PCI Express inbound window 3-1
  * inbound window 1 supports only a 32-bit base address and does not
