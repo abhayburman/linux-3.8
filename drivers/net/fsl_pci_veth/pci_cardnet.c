@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2005-2011 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Author: Xiaobo Xie <X.Xie@freescale.com>
  *	Roy Zang <tie-fei.zang@freescale.com>
@@ -134,7 +134,7 @@ void setup_agent_shmem_inb_win(struct pci_agent_dev *dev)
 	out_be32(&pci->piw[winno].pitar, dev->local_addr>>12);
 	out_be32(&pci->piw[winno].piwar, PIWAR_EN | PIWAR_TRGT_MEM |
 			PIWAR_RTT_SNOOP | PIWAR_WTT_SNOOP |
-			(__ilog2(dev->local_mem_size) - 1));
+			(((__ilog2(dev->local_mem_size) - 1)) & PIWAR_SZ_MASK));
 }
 
 static int card_open(struct net_device *dev)
