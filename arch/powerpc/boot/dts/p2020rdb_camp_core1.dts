@@ -7,7 +7,7 @@
  *
  * Please note to add "-b 1" for core1's dts compiling.
  *
- * Copyright 2009-2010 Freescale Semiconductor Inc.
+ * Copyright 2009-2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -41,12 +41,6 @@
 
 	memory {
 		device_type = "memory";
-	};
-
-	l2sram@fff00000 {
-		device_type = "memory";
-		compatible = "fsl,l2sram";
-		reg = <0x0 0xfff00000 0 0x10000>;
 	};
 
 	soc@ffe00000 {
