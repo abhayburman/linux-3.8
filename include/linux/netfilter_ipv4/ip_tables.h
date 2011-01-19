@@ -293,6 +293,11 @@ extern unsigned int ipt_do_table(struct sk_buff *skb,
 
 #define IPT_ALIGN(s) XT_ALIGN(s)
 
+struct firewall_asfctrl {
+	void (*firewall_asfctrl_cb)(void);
+};
+
+extern void hook_firewall_asfctrl_cb(struct firewall_asfctrl *);
 #ifdef CONFIG_COMPAT
 #include <net/compat.h>
 

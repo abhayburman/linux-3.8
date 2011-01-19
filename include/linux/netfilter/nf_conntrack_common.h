@@ -76,6 +76,11 @@ enum ip_conntrack_status {
 	/* Conntrack is a template */
 	IPS_TEMPLATE_BIT = 11,
 	IPS_TEMPLATE = (1 << IPS_TEMPLATE_BIT),
+	#ifdef CONFIG_AS_FASTPATH
+	/* Session offloaded to ASF */
+	IPS_ASF_OFFLOADED_BIT = 20,
+	IPS_ASF_OFFLOADED = (1 << IPS_ASF_OFFLOADED_BIT),
+#endif
 };
 
 /* Connection tracking event types */
