@@ -6,7 +6,7 @@
  * This dts file allows core0 to have memory, l2, i2c, dma1, global-util, eth0,
  * eth1, esdhc, crypto, pci0, pci1.
  *
- * Copyright 2007-2010 Freescale Semiconductor Inc.
+ * Copyright 2007-2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -265,7 +265,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			31 32 33 45		/* enet2 */
+			31 32 33 45 59		/* enet2 */
 			76 77 78 79 26 42	/* dma2 pci2 serial*/
 			0x0 0x1 0x2 0x3		/* pcie intx */
 			0xe4 0xe5 0xe6 0xe7     /* msi */
