@@ -162,6 +162,7 @@ config P3041_DS
 	select MPC8xxx_GPIO
 	select HAS_RAPIDIO
 	select HAS_FSL_QBMAN
+	select HAS_FSL_PME
 	help
 	  This option enables support for the P3041 DS board
 
@@ -175,6 +176,7 @@ config P4080_DS
 	select HAS_RAPIDIO
 	select HAS_FSL_PAMU
 	select HAS_FSL_QBMAN
+	select HAS_FSL_PME
 	help
 	  This option enables support for the P4080 DS board
 
@@ -190,6 +192,7 @@ config P5020_DS
 	select MPC8xxx_GPIO
 	select HAS_RAPIDIO
 	select HAS_FSL_QBMAN
+	select HAS_FSL_PME
 	help
 	  This option enables support for the P5020 DS board
 
