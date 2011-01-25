@@ -1,7 +1,7 @@
 /*
  * talitos - Freescale Integrated Security Engine (SEC) device driver
  *
- * Copyright (c) 2008-2010 Freescale Semiconductor, Inc.
+ * Copyright (c) 2008-2011 Freescale Semiconductor, Inc.
  *
  * Scatterlist Crypto API glue code copied from files with the following:
  * Copyright (c) 2006-2007 Herbert Xu <herbert@gondor.apana.org.au>
@@ -904,8 +904,7 @@ static void talitos_release_xor(struct device *dev, struct talitos_desc *hwdesc,
 
 static enum dma_status talitos_is_tx_complete(struct dma_chan *chan,
 					      dma_cookie_t cookie,
-					      dma_cookie_t *done,
-					      dma_cookie_t *used)
+					      struct dma_tx_state *state)
 {
 	struct talitos_xor_chan *xor_chan;
 	dma_cookie_t last_used;
@@ -916,11 +915,11 @@ static enum dma_status talitos_is_tx_complete(struct dma_chan *chan,
 	last_used = chan->cookie;
 	last_complete = xor_chan->completed_cookie;
 
-	if (done)
-		*done = last_complete;
+	if (state->last)
+		state->last = last_complete;
 
-	if (used)
-		*used = last_used;
+	if (state->used)
+		state->used = last_used;
 
 	return dma_async_is_complete(cookie, last_complete, last_used);
 }
