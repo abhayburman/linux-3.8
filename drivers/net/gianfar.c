@@ -4967,10 +4967,11 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	}
 #endif
-#endif
+
 	if (sh->recycle_count == 0 &&
-			priv->skb_handler.recycle_count > 0)
-			sh = &priv->skb_handler;
+		priv->skb_handler.recycle_count > 0)
+		sh = &priv->skb_handler;
+#endif
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
 		struct sk_buff *newskb;
