@@ -1120,7 +1120,7 @@ void gfar_setup_hwaccel_tcp4_receive(struct sock *sk, struct sk_buff *skb)
 	iph = ip_hdr(skb);
 
 	/*select next empty TCP channel*/
-	for (i = priv->empty_tcp_channel + 1;
+	for (i = (priv->empty_tcp_channel + 1) % (priv->num_rx_queues - TCP_CHL_OFFSET - 1);
 		i != priv->empty_tcp_channel;
 		i = (i+1) % (priv->num_rx_queues - TCP_CHL_OFFSET - 1)) {
 		if (priv->tcp_hw_channel[i] == NULL)
@@ -1128,7 +1128,7 @@ void gfar_setup_hwaccel_tcp4_receive(struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (i == priv->empty_tcp_channel)
-		i++;
+		i = (i+1) % (priv->num_rx_queues - TCP_CHL_OFFSET - 1);
 
 	priv->tcp_hw_channel[priv->empty_tcp_channel] = sk;
 	sk->tcp_hw_channel = &(priv->tcp_hw_channel[priv->empty_tcp_channel]);
@@ -1157,7 +1157,7 @@ void gfar_setup_hwaccel_tcp4_receive(struct sock *sk, struct sk_buff *skb)
 	gfar_write_filer(priv, j, rqfcr, rqfpr);
 	j++;
 	/*setup TCP destination port*/
-	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_DPT | ((priv->empty_tcp_channel + 1) << 10);
+	rqfcr = RQFCR_CMP_EXACT | RQFCR_PID_DPT | ((priv->empty_tcp_channel + TCP_CHL_OFFSET) << 10);
 	rqfpr = ntohs(th->dest);
 	priv->ftp_rqfcr[j] = rqfcr;
 	priv->ftp_rqfpr[j] = rqfpr;
@@ -1200,7 +1200,7 @@ inline void gfar_hwaccel_tcp4_receive(struct gfar_private *priv,
 	struct rxfcb *fcb;
 	struct sock *gfar_sk;
 
-	gfar_sk = priv->tcp_hw_channel[rx_queue->qindex-1];
+	gfar_sk = priv->tcp_hw_channel[rx_queue->qindex - TCP_CHL_OFFSET];
 
 	fcb = (struct rxfcb *)skb->data;
 
@@ -1285,12 +1285,18 @@ void gfar_init_tcp_filer_rule(struct gfar_private *priv, int index)
 	rqfcr = RQFCR_CMP_NOMATCH;
 	rqfpr = FPR_FILER_MASK;
 	priv->tcp_filer_idx = i;
+	priv->empty_tcp_channel = 1;
+
 	for (j = 0; j < (TCP_CHL_NUM << 2); j++) {
 		priv->ftp_rqfcr[i] = rqfcr;
 		priv->ftp_rqfpr[i] = rqfpr;
 		gfar_write_filer(priv, i, rqfcr, rqfpr);
 		i++;
 	}
+
+	for (j = 0; j < TCP_CHL_NUM; j++)
+		priv->tcp_hw_channel[j] = 0;
+
 	rqfpr = FPR_FILER_MASK;
 	rqfcr = RQFCR_CMP_NOMATCH | RQFCR_CLE;
 	priv->ftp_rqfcr[i] = rqfcr;
@@ -5042,7 +5048,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				}
 #else
 #ifdef CONFIG_GFAR_HW_TCP_RECEIVE_OFFLOAD
-				if (rx_queue->qindex &&
+				if ((rx_queue->qindex >= TCP_CHL_OFFSET) &&
 					priv->tcp_hw_channel[rx_queue->qindex - TCP_CHL_OFFSET]) {
 					gfar_hwaccel_tcp4_receive(priv, rx_queue, skb, amount_pull);
 				} else
