@@ -287,7 +287,7 @@
 
 // If SPI flash node exists legerity cannot be in device tree because both
 // are sitting at same CS #0
-/ either legerity or SPI flash node will be deleted by u-boot fixup at runtime.
+// either legerity or SPI flash node will be deleted by u-boot fixup at runtime.
 			legerity@0{
 				compatible = "fsl,espi-slic";
 				reg = <0>;
@@ -452,6 +452,43 @@
 			dr_mode = "host";
 			phy_type = "utmi";
 			};
+
+		crypto: crypto@30000 {
+			compatible = "fsl,p4080-sec4.0", "fsl,sec4.0";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg		 = <0x30000 0x10000>;
+			interrupts	 = <58 2>;
+			interrupt-parent = <&mpic>;
+
+			sec_jr0: jr@1000 {
+				compatible = "fsl,p4080-sec4.0-job-ring", "fsl,sec4.0-job-ring";
+				reg	   = <0x1000 0x1000>;
+				interrupts	 = <45 2>;
+				interrupt-parent = <&mpic>;
+			};
+
+			sec_jr1: jr@2000 {
+				compatible = "fsl,p4080-sec4.0-job-ring", "fsl,sec4.0-job-ring";
+				reg	   = <0x2000 0x1000>;
+				interrupts	 = <45 2>;
+				interrupt-parent = <&mpic>;
+			};
+
+			sec_jr2: jr@3000 {
+				compatible = "fsl,p4080-sec4.0-job-ring", "fsl,sec4.0-job-ring";
+				reg	   = <0x3000 0x1000>;
+				interrupts	 = <45 2>;
+				interrupt-parent = <&mpic>;
+			};
+
+			sec_jr3: jr@4000 {
+				compatible = "fsl,p4080-sec4.0-job-ring", "fsl,sec4.0-job-ring";
+				reg	   = <0x4000 0x1000>;
+				interrupts	 = <45 2>;
+				interrupt-parent = <&mpic>;
+			};
+		};
 
 		enet0: ethernet@b0000 {
 			#address-cells = <1>;
