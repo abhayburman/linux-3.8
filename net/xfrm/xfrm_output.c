@@ -3,6 +3,11 @@
  *
  * Copyright (c) 2007 Herbert Xu <herbert@gondor.apana.org.au>
  *
+ *	Hemant Agrawal <hemant@freescale.com>
+ *		Added support for diverting the packets for offloaded xfrm
+ *		policy and states.
+ *	Copyright 2011 Freescale Semiconductor, Inc.
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version
@@ -53,7 +58,13 @@ static int xfrm_output_one(struct sk_buff *skb, int err)
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTERROR);
 			goto error_nolock;
 		}
-
+#ifdef CONFIG_AS_FASTPATH
+		if (x->asf_sa_cookie && asf_cb_fns.ipsec_encrypt_n_send) {
+			err = -EINPROGRESS;
+			if (!asf_cb_fns.ipsec_encrypt_n_send(skb, x))
+				goto out_exit;
+		}
+#endif
 		err = x->outer_mode->output(x, skb);
 		if (err) {
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTSTATEMODEERROR);

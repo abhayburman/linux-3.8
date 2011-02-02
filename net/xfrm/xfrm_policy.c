@@ -11,7 +11,15 @@
  * 		Split up af-specific portion
  *	Derek Atkins <derek@ihtfp.com>		Add the post_input processor
  *
- */
+ *	Sandeep Malik <sandeep.malik@freescale.com>
+ *		Added support for offloading xfrm policy
+ *	Hemant Agrawal <hemant@freescale.com>
+ *		Improving the ASF offloading support for offloaded xfrm
+ *		policy and states.
+ *
+ *	Copyright 2011 Freescale Semiconductor, Inc.
+ *
+*/
 
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -33,7 +41,6 @@
 #endif
 
 #include "xfrm_hash.h"
-
 DEFINE_MUTEX(xfrm_cfg_mutex);
 EXPORT_SYMBOL(xfrm_cfg_mutex);
 
@@ -53,6 +60,31 @@ static int stale_bundle(struct dst_entry *dst);
 
 static struct xfrm_policy *__xfrm_policy_unlink(struct xfrm_policy *pol,
 						int dir);
+#ifdef CONFIG_AS_FASTPATH
+struct asf_ipsec_callbackfn_s	asf_cb_fns = {0};
+
+void  register_ipsec_offload_hook(struct asf_ipsec_callbackfn_s *p_fn_list)
+{
+	asf_cb_fns.ipsec_enc_hook = p_fn_list->ipsec_enc_hook;
+	asf_cb_fns.ipsec_dec_hook = p_fn_list->ipsec_dec_hook;
+	asf_cb_fns.ipsec_sync_sa = p_fn_list->ipsec_sync_sa;
+	asf_cb_fns.ipsec_encrypt_n_send
+			= p_fn_list->ipsec_encrypt_n_send;
+	asf_cb_fns.ipsec_decrypt_n_send
+			= p_fn_list->ipsec_decrypt_n_send;
+}
+EXPORT_SYMBOL(register_ipsec_offload_hook);
+
+void unregister_ipsec_offload_hook(void)
+{
+	asf_cb_fns.ipsec_enc_hook = NULL;
+	asf_cb_fns.ipsec_dec_hook = NULL;
+	asf_cb_fns.ipsec_sync_sa = NULL;
+	asf_cb_fns.ipsec_encrypt_n_send = NULL;
+	asf_cb_fns.ipsec_decrypt_n_send = NULL;
+}
+EXPORT_SYMBOL(unregister_ipsec_offload_hook);
+#endif /*CONFIG_AS_FASTPATH*/
 
 static inline int
 __xfrm4_selector_match(struct xfrm_selector *sel, struct flowi *fl)
@@ -1608,6 +1640,13 @@ xfrm_resolve_and_create_bundle(struct xfrm_policy **pols, int num_pols,
 
 	xdst = (struct xfrm_dst *)dst;
 	xdst->num_xfrms = err;
+
+#ifdef CONFIG_AS_FASTPATH
+		if (asf_cb_fns.ipsec_enc_hook)
+			if (!xfrm[0]->asf_sa_cookie)
+				asf_cb_fns.ipsec_enc_hook(pols[0], xfrm[0],
+					fl, fl->iif);
+#endif
 	if (num_pols > 1)
 		err = xfrm_dst_update_parent(dst, &pols[1]->selector);
 	else
@@ -2138,7 +2177,6 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINTMPLMISMATCH);
 			goto reject;
 		}
-
 		xfrm_pols_put(pols, npols);
 		return 1;
 	}
@@ -2172,6 +2210,23 @@ int __xfrm_route_forward(struct sk_buff *skb, unsigned short family)
 	return res;
 }
 EXPORT_SYMBOL(__xfrm_route_forward);
+struct xfrm_policy *xfrm_policy_check_flow(struct net *net, struct flowi *fl,
+				u16 family, u8 dir)
+{
+	struct flow_cache_object *flo;
+	struct xfrm_policy *pol;
+
+	flo = flow_cache_lookup(net, fl, family, dir, xfrm_policy_lookup, NULL);
+
+	if (IS_ERR_OR_NULL(flo))
+		pol = ERR_CAST(flo);
+	else
+		pol = container_of(flo, struct xfrm_policy, flo);
+	if (IS_ERR(pol))
+		return 0;
+	return pol;
+}
+EXPORT_SYMBOL(xfrm_policy_check_flow);
 
 /* Optimize later using cookies and generation ids. */
 

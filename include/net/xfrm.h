@@ -1,3 +1,6 @@
+/**************************************************************************
+ * Copyright 2011, Freescale Semiconductor, Inc. All rights reserved.
+***************************************************************************/
 #ifndef _NET_XFRM_H
 #define _NET_XFRM_H
 
@@ -219,6 +222,8 @@ struct xfrm_state {
 	/* Security context */
 	struct xfrm_sec_ctx	*security;
 
+	uintptr_t	asf_sa_cookie;
+	u32		asf_sa_direction;
 	/* Private data of this transformer, format is opaque,
 	 * interpreted by xfrm_type methods. */
 	void			*data;
@@ -491,11 +496,13 @@ struct xfrm_policy {
 	struct xfrm_lifetime_cfg lft;
 	struct xfrm_lifetime_cur curlft;
 	struct xfrm_policy_walk_entry walk;
+	u32			asf_cookie;
 	u8			type;
 	u8			action;
 	u8			flags;
 	u8			xfrm_nr;
 	u16			family;
+	u16			dir;
 	struct xfrm_sec_ctx	*security;
 	struct xfrm_tmpl       	xfrm_vec[XFRM_MAX_DEPTH];
 };
@@ -1581,6 +1588,30 @@ static inline struct xfrm_state *xfrm_input_state(struct sk_buff *skb)
 {
 	return skb->sp->xvec[skb->sp->len - 1];
 }
+#endif
+#ifdef CONFIG_AS_FASTPATH
+struct asf_ipsec_callbackfn_s {
+	/* Callback to offload the encryption Info*/
+	int	(*ipsec_enc_hook)(struct xfrm_policy *xp,
+			struct xfrm_state *xfrm, struct flowi *fl, int ifindex);
+
+	/* Callback to offload the decryption Info*/
+	int	(*ipsec_dec_hook)(struct xfrm_policy *xp,
+			struct xfrm_state *xfrm, struct flowi *fl, int ifindex);
+
+	/* Callback to receive the live SA Sync Info*/
+	int	(*ipsec_sync_sa)(struct xfrm_state *xfrm, int dir,
+			int seq_no, int bytes);
+
+	/* Callback to send the packet to ASF for further IPSEC processing */
+	int	(*ipsec_encrypt_n_send)(struct sk_buff *skb,
+			struct xfrm_state *xfrm);
+
+	/* Callback to send the packet to ASF for further IPSEC processing */
+	int	(*ipsec_decrypt_n_send)(struct sk_buff *skb,
+			struct xfrm_state *xfrm);
+};
+extern struct asf_ipsec_callbackfn_s	asf_cb_fns;
 #endif
 
 static inline int xfrm_mark_get(struct nlattr **attrs, struct xfrm_mark *m)

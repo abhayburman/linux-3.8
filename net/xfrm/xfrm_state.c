@@ -10,6 +10,10 @@
  * 		Split up af-specific functions
  *	Derek Atkins <derek@ihtfp.com>
  *		Add UDP Encapsulation
+ *      Sandeep Malik <sandeep.malik@freescale.com>
+ *		Added support for xfrm state with xfrm policy
+ *
+ *		Copyright 2011 Freescale Semiconductor, Inc.
  *
  */
 
@@ -1714,6 +1718,43 @@ void xfrm_replay_advance(struct xfrm_state *x, __be32 net_seq)
 	if (xfrm_aevent_is_on(xs_net(x)))
 		xfrm_replay_notify(x, XFRM_REPLAY_UPDATE);
 }
+/* todo - sandeep this needs more work */
+struct xfrm_policy *xfrm_state_policy_mapping(struct xfrm_state *xfrm)
+{
+	struct xfrm_policy *xp = 0, *matched_pol = 0;
+	struct net *xfrm_net = xs_net(xfrm);
+	struct list_head *list_policy_head = &xfrm_net->xfrm.policy_all;
+	struct xfrm_policy_walk_entry *x;
+	struct xfrm_tmpl *tmpl;
+	int cnt = 0;
+	if (!list_policy_head) {
+		printk(KERN_INFO "No Security Policies in the system\n");
+		return matched_pol;
+	}
+	x = list_first_entry(list_policy_head,
+			struct xfrm_policy_walk_entry, all);
+	if (!x) {
+		printk(KERN_INFO "Security Policies list is empty\n");
+		return matched_pol;
+	}
+	list_for_each_entry_from(x, list_policy_head, all) {
+		if (x->dead)
+			continue;
+		xp = container_of(x, struct xfrm_policy, walk);
+		tmpl = &xp->xfrm_vec[0];
+		if ((xp->dir <= XFRM_POLICY_OUT)
+			&& (xp->xfrm_vec[0].id.daddr.a4 == xfrm->id.daddr.a4)
+			&& (xp->xfrm_vec[0].saddr.a4 == xfrm->props.saddr.a4)
+			&& (xfrm->props.reqid == tmpl->reqid)
+			&& (xfrm->props.mode == tmpl->mode)) {
+			matched_pol = xp;
+			xfrm->asf_sa_direction = xp->dir;
+			break;
+		}
+	}
+	return matched_pol;
+}
+EXPORT_SYMBOL(xfrm_state_policy_mapping);
 
 static LIST_HEAD(xfrm_km_list);
 static DEFINE_RWLOCK(xfrm_km_lock);

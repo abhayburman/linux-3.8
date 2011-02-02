@@ -2669,6 +2669,7 @@ static int xfrm_send_policy_notify(struct xfrm_policy *xp, int dir, struct km_ev
 
 	switch (c->event) {
 	case XFRM_MSG_NEWPOLICY:
+		xp->dir = dir;
 	case XFRM_MSG_UPDPOLICY:
 	case XFRM_MSG_DELPOLICY:
 		return xfrm_notify_policy(xp, dir, c);

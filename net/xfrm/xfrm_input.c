@@ -5,6 +5,12 @@
  * 	YOSHIFUJI Hideaki @USAGI
  * 		Split up af-specific portion
  *
+ *	Hemant Agrawal <hemant@freescale.com>
+ *		Added support for diverting the packets for offloaded xfrm
+ *		policy and states.
+ *
+ *	Copyright 2011 Freescale Semiconductor, Inc.
+ *
  */
 
 #include <linux/slab.h>
@@ -172,6 +178,17 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 			goto drop_unlock;
 		}
 
+#ifdef CONFIG_AS_FASTPATH
+		if (!x->asf_sa_cookie && asf_cb_fns.ipsec_dec_hook)
+			asf_cb_fns.ipsec_dec_hook(NULL, x, NULL, skb->skb_iif);
+
+		spin_unlock(&x->lock);
+		if (x->asf_sa_cookie && asf_cb_fns.ipsec_decrypt_n_send) {
+			if (!asf_cb_fns.ipsec_decrypt_n_send(skb, x))
+				return 0;
+		}
+		spin_lock(&x->lock);
+#endif
 		if (x->props.replay_window && xfrm_replay_check(x, skb, seq)) {
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINSTATESEQERROR);
 			goto drop_unlock;

@@ -167,6 +167,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 	fl->fl4_dst = reverse ? iph->saddr : iph->daddr;
 	fl->fl4_src = reverse ? iph->daddr : iph->saddr;
 	fl->fl4_tos = iph->tos;
+	fl->iif = skb->skb_iif;
 }
 
 static inline int xfrm4_garbage_collect(struct dst_ops *ops)
