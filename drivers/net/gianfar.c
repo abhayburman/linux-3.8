@@ -4605,7 +4605,8 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	 * reserve as many bytes as needed to align the data properly
 	 */
 	alignamount = ((unsigned)skb->data) & (RXBUF_ALIGNMENT-1);
-	skb_reserve(skb, RXBUF_ALIGNMENT - alignamount);
+	if (alignamount)
+		skb_reserve(skb, RXBUF_ALIGNMENT - alignamount);
 	skb->dev = owner;
 	/* Keep incoming device pointer for recycling */
 	skb->skb_owner = owner;
@@ -4728,8 +4729,10 @@ struct sk_buff * gfar_new_skb(struct net_device *dev)
 
 	/* We need the data buffer to be aligned properly.  We will reserve
 	 * as many bytes as needed to align the data properly
+	 * Do only if not already aligned
 	 */
-	skb_reserve(skb, alignamount);
+	if (alignamount != RXBUF_ALIGNMENT)
+		skb_reserve(skb, alignamount);
 	GFAR_CB(skb)->alignamount = alignamount;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
