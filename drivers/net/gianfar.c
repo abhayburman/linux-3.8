@@ -113,6 +113,16 @@
 #include "gianfar.h"
 #include "fsl_pq_mdio.h"
 
+#ifdef CONFIG_AS_FASTPATH
+#include <linux/sched.h>
+
+devfp_hook_t	devfp_rx_hook;
+EXPORT_SYMBOL(devfp_rx_hook);
+
+devfp_hook_t	devfp_tx_hook;
+EXPORT_SYMBOL(devfp_tx_hook);
+#endif
+
 #define TX_TIMEOUT      (1*HZ)
 #undef BRIEF_GFAR_ERRORS
 #undef VERBOSE_GFAR_ERRORS
@@ -3647,6 +3657,11 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 	unsigned int nr_frags, length;
 
+#ifdef CONFIG_AS_FASTPATH
+	if (devfp_tx_hook && (skb->pkt_type != PACKET_FASTROUTE))
+		if (devfp_tx_hook(skb, dev) == AS_FP_STOLEN)
+			return 0;
+#endif
 
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (priv->sps)
@@ -4874,6 +4889,40 @@ static int gfar_process_frame(struct net_device *dev, struct sk_buff *skb,
 
 	if (priv->rx_csum_enable)
 		gfar_rx_checksum(skb, fcb);
+
+#ifdef CONFIG_AS_FASTPATH
+	if (devfp_rx_hook) {
+		int drop = 0;
+
+		if (priv->vlgrp && (fcb->flags & RXFCB_VLN)) {
+			struct net_device *vlan_dev = NULL;
+
+			vlan_dev = vlan_group_get_device(priv->vlgrp,
+					fcb->vlctl & VLAN_VID_MASK);
+
+			if (vlan_dev) {
+				skb->vlan_tci = fcb->vlctl;
+				skb->dev = vlan_dev;
+			} else {
+				drop = 1;
+			}
+		} else {
+			skb->dev = dev;
+		}
+
+		if (drop) {
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+			gfar_kfree_skb(skb, skb_get_rx_queue(skb));
+#else
+			dev_kfree_skb_any(skb);
+#endif
+			return 0;
+		}
+
+		if (devfp_rx_hook(skb, dev) == AS_FP_STOLEN)
+			return 0;
+	}
+#endif
 
 #ifdef CONFIG_NET_GIANFAR_FP
 	if (netdev_fastroute && (try_fastroute(skb, dev, skb->len) != 0))
