@@ -4510,6 +4510,11 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	unsigned int alignamount;
 	struct net_device *owner;
 
+#ifdef CONFIG_AS_FASTPATH
+	if (!skb->asf) {
+		/* Execute only if packet
+		   is not belonging to ASF */
+#endif
 	skb_dst_drop(skb);
 	if (skb->destructor) {
 		skb->destructor(skb);
@@ -4537,6 +4542,9 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	skb->tc_verd = 0;
 #endif
 #endif
+#ifdef CONFIG_AS_FASTPATH
+	}
+#endif
 	/* re-initialization
 	 * We are not going to touch the buffer size, so
 	 * skb->truesize can be used as the truesize again
@@ -4551,7 +4559,31 @@ static inline void gfar_clean_reclaim_skb(struct sk_buff *skb)
 	truesize = skb->truesize;
 	size = truesize - sizeof(struct sk_buff);
 	/* clear structure by &tail */
+#ifdef CONFIG_AS_FASTPATH
+	if (!skb->asf) {
+		/* Execute only if packet
+		is not belonging to ASF */
+#endif
 	cacheable_memzero(skb, offsetof(struct sk_buff, tail));
+#ifdef CONFIG_AS_FASTPATH
+	} else {
+		/* Just reset the fields used in software DPA */
+		skb->next = skb->prev = NULL;
+		skb->asf = 0;
+		skb->dev = NULL;
+		skb->len = 0;
+		skb->ip_summed = 0;
+		skb->transport_header = NULL;
+		skb->mac_header = NULL;
+		skb->network_header = NULL;
+		skb->pkt_type = 0;
+		skb->mac_len = 0;
+		skb->protocol = 0;
+		skb->vlan_tci = 0;
+		skb->data = 0;
+	}
+#endif
+
 	atomic_set(&skb->users, 1);
 	/* reset data and tail pointers */
 	skb->data = skb->head + NET_SKB_PAD;

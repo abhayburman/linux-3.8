@@ -403,6 +403,9 @@ struct sk_buff {
 		__u32		mark;
 		__u32		dropcount;
 	};
+#ifdef CONFIG_AS_FASTPATH
+	__u8                    asf;
+#endif
 
 	__u16			vlan_tci;
 
