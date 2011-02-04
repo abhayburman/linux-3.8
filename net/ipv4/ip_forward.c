@@ -18,7 +18,7 @@
  *					(always use output device).
  *		Mike McLagan	:	Routing by source
  *
- *		Copyright 2009-2010 Freescale Semiconductor, Inc.
+ *		Copyright 2009-2011 Freescale Semiconductor, Inc.
  */
 
 #include <linux/types.h>
@@ -136,6 +136,10 @@ int ip_forward(struct sk_buff *skb)
 		goto drop;
 	iph = ip_hdr(skb);
 
+#ifdef CONFIG_AS_FASTPATH
+	/* ToS in route table is not actually that is in packet */
+	_route_add_hook(rt, iph->tos);
+#endif
 	/* Decrease ttl after skb cow done */
 	ip_decrease_ttl(iph);
 
@@ -166,3 +170,7 @@ drop:
 	kfree_skb(skb);
 	return NET_RX_DROP;
 }
+
+#ifdef CONFIG_AS_FASTPATH
+EXPORT_SYMBOL(ip_forward);
+#endif

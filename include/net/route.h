@@ -240,4 +240,14 @@ static inline int inet_iif(const struct sk_buff *skb)
 	return skb_rtable(skb)->rt_iif;
 }
 
+#ifdef CONFIG_AS_FASTPATH
+typedef int route_add_hook(int iif, struct net_device *dev, uint32_t daddr,
+		uint32_t saddr, int tos, void *ctx);
+typedef void route_flush_hook(void);
+
+void route_hook_fn_register(route_add_hook *add,
+		route_flush_hook *flush);
+void route_hook_fn_unregister(void);
+void _route_add_hook(struct rtable *rt, u8 tos);
+#endif
 #endif	/* _ROUTE_H */

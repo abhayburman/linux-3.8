@@ -56,7 +56,7 @@
  * 	Ilia Sotnikov		:	Ignore TOS on PMTUD and Redirect
  * 	Ilia Sotnikov		:	Removed TOS from hash calculations
  *
- * 	Copyright (C) 2007-2010 Freescale Semiconductor, Inc.
+ *	Copyright (C) 2007-2011 Freescale Semiconductor, Inc.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -229,6 +229,12 @@ const __u8 ip_tos2prio[16] = {
 	TC_PRIO_INTERACTIVE_BULK,
 	ECN_OR_COST(INTERACTIVE_BULK)
 };
+#ifdef CONFIG_AS_FASTPATH
+
+static route_add_hook *route_add_fn;
+static route_flush_hook *route_flush_fn;
+
+#endif
 
 
 /*
@@ -960,6 +966,10 @@ static void rt_cache_invalidate(struct net *net)
 void rt_cache_flush(struct net *net, int delay)
 {
 	rt_cache_invalidate(net);
+#ifdef CONFIG_AS_FASTPATH
+	if (route_flush_fn)
+		route_flush_fn();
+#endif
 	if (delay >= 0)
 		rt_do_flush(!in_softirq());
 }
@@ -3474,3 +3484,36 @@ void __init ip_static_sysctl_init(void)
 
 EXPORT_SYMBOL(__ip_select_ident);
 EXPORT_SYMBOL(ip_route_output_key);
+#ifdef CONFIG_AS_FASTPATH
+
+void _route_add_hook(struct rtable *rt, u8 tos)
+{
+	if (route_add_fn) {
+		/* To avoid ARP pkt. */
+		if (!rt || rt->fl.fl4_src == 0)
+			return;
+
+		if (route_add_fn(rt->rt_iif, rt->idev->dev, rt->fl.fl4_dst,
+			rt->fl.fl4_src, tos, NULL) < 0) {
+			printk(KERN_DEBUG "%s: add fail: %d %d %u %u %u\n",
+			__func__, rt->fl.iif, rt->fl.oif, rt->fl.fl4_dst,
+				rt->fl.fl4_src, tos);
+		}
+	}
+}
+
+void route_hook_fn_register(route_add_hook *add,
+			route_flush_hook *flush)
+{
+	route_add_fn = add;
+	route_flush_fn = flush;
+}
+EXPORT_SYMBOL(route_hook_fn_register);
+
+void route_hook_fn_unregister(void)
+{
+	route_add_fn = NULL;
+	route_add_fn = NULL;
+}
+EXPORT_SYMBOL(route_hook_fn_unregister);
+#endif
