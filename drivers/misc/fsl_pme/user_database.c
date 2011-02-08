@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007-2009 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2007-2011 Freescale Semiconductor, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -136,6 +136,10 @@ static inline void database_data_reclaim(struct database_op_result *val)
 
 static int database_fops_open(struct inode *node, struct file *fp)
 {
+	/* private_data, as of v2.6.35 is set with the miscdevice ptr, with the
+	 * assumption that it would be useful.  We don't want it, so set it to
+	 * NULL */
+	fp->private_data = NULL;
 	/* Nothing is allocated until channel is set */
 	return 0;
 }
