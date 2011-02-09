@@ -2,6 +2,7 @@
  * Generic PPP layer for Linux.
  *
  * Copyright 1999-2002 Paul Mackerras.
+ * Copyright 2011 Freescale Semiconductor, Inc.
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -53,6 +54,7 @@
 #include <linux/nsproxy.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
+#include <linux/if_pppox.h>
 
 #define PPP_VERSION	"2.4.2"
 
@@ -1563,6 +1565,29 @@ ppp_do_recv(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
 		kfree_skb(skb);
 	ppp_recv_unlock(ppp);
 }
+
+struct net_device *
+ppp_get_parent_dev(struct net_device *dev, __be16 *sessid)
+{
+	struct ppp *ppp = netdev_priv(dev);
+	struct channel *pch;
+	struct list_head *list;
+	struct sock *sk;
+	struct pppox_sock *po;
+
+	list = &ppp->channels;
+	if (list_empty(list))
+		return NULL;
+
+	list = list->next;
+	pch = list_entry(list, struct channel, clist);
+	sk = pch->chan->private;
+	po = pppox_sk(sk);
+
+	*sessid = po->num;
+	return po->pppoe_dev;
+}
+EXPORT_SYMBOL(ppp_get_parent_dev);
 
 void
 ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
