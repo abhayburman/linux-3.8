@@ -25,6 +25,60 @@ menuconfig NETDEVICES
 # that for each of the symbols.
 if NETDEVICES
 
+config AS_FASTPATH
+       default n
+	bool "Network device driver level interface for Application Specific FastPath"
+	depends on GIANFAR && EXPERIMENTAL
+	select NAMESPACES
+	select NET_NS
+	select NETFILTER
+	select NETFILTER_ADVANCED
+	select NF_CONNTRACK
+	select NF_CONNTRACK_EVENTS
+	select NF_CONNTRACK_FTP
+	select NF_CONNTRACK_TFTP
+	select NETFILTER_XT_MATCH_HL
+	select NETFILTER_XTABLES
+	select NF_DEFRAG_IPV4
+	select NF_CONNTRACK_IPV4
+	select NF_CONNTRACK_PROC_COMPAT
+	select IP_NF_IPTABLES
+	select IP_NF_MATCH_ADDRTYPE
+	select IP_NF_FILTER
+	select IP_NF_TARGET_REJECT
+	select NF_NAT
+	select NF_NAT_NEEDED
+	select IP_NF_TARGET_MASQUERADE
+	select IP_NF_TARGET_REDIRECT
+	select NF_NAT_FTP
+	select NF_NAT_TFTP
+	select IP_NF_MANGLE
+	select GIANFAR_L2SRAM
+	select GFAR_SKBUFF_RECYCLING
+	---help---
+	  If you want device driver level FastPath implementations like ASF,
+	  say Y here.
+
+
+choice
+	prompt "Selects mode for ASF"
+	depends on AS_FASTPATH
+	default ASF_FEATURE_OPTION_MIN
+
+config ASF_FEATURE_OPTION_MIN
+	bool "MIN Features Set"
+	---help---
+	  Following features disabled in ASF
+	  PPPoE, VLAN, Fragmentation, Reassembly,
+	  IP Option, Statistics, Flow Aging.
+
+config ASF_FEATURE_OPTION_FULL
+	bool "FULL Features Set"
+	---help---
+	  All feature supported in ASF are enabled.
+
+endchoice
+
 config IFB
 	tristate "Intermediate Functional Block support"
 	depends on NET_CLS_ACT
