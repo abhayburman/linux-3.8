@@ -231,7 +231,7 @@ static void usb_hcd_fsl_remove(struct usb_hcd *hcd,
 	usb_put_hcd(hcd);
 }
 
-static void mpc83xx_setup_phy(struct usb_hcd *hcd,
+static void usb_setup_phy(struct usb_hcd *hcd,
 			      enum fsl_usb2_phy_modes phy_mode,
 			      unsigned int port_offset)
 {
@@ -270,7 +270,7 @@ static void mpc83xx_setup_phy(struct usb_hcd *hcd,
 	ehci_writel(ehci, portsc, &ehci->regs->port_status[port_offset]);
 }
 
-static void mpc83xx_usb_setup(struct usb_hcd *hcd)
+static void fsl_usb_setup(struct usb_hcd *hcd)
 {
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	struct fsl_usb2_platform_data *pdata;
@@ -300,7 +300,7 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 
 	if ((pdata->operating_mode == FSL_USB2_DR_HOST) ||
 			(pdata->operating_mode == FSL_USB2_DR_OTG))
-		mpc83xx_setup_phy(hcd, pdata->phy_mode, 0);
+		usb_setup_phy(hcd, pdata->phy_mode, 0);
 
 	if (pdata->operating_mode == FSL_USB2_MPH_HOST) {
 		unsigned int chip, rev, svr;
@@ -314,9 +314,9 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 			ehci->has_fsl_port_bug = 1;
 
 		if (pdata->port_enables & FSL_USB2_PORT0_ENABLED)
-			mpc83xx_setup_phy(hcd, pdata->phy_mode, 0);
+			usb_setup_phy(hcd, pdata->phy_mode, 0);
 		if (pdata->port_enables & FSL_USB2_PORT1_ENABLED)
-			mpc83xx_setup_phy(hcd, pdata->phy_mode, 1);
+			usb_setup_phy(hcd, pdata->phy_mode, 1);
 	}
 
 	/* put controller in host mode. */
@@ -337,10 +337,10 @@ int ehci_fsl_reinit(struct ehci_hcd *ehci)
 
 	if (machine_is(p1021_mds)) {
 #if !defined(CONFIG_FSL_USB_OTG) && !defined(CONFIG_FSL_USB_OTG_MODULE)
-		mpc83xx_usb_setup(ehci_to_hcd(ehci));
+		fsl_usb_setup(ehci_to_hcd(ehci));
 #endif
 	} else {
-		mpc83xx_usb_setup(ehci_to_hcd(ehci));
+		fsl_usb_setup(ehci_to_hcd(ehci));
 	}
 #if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)
 #else
