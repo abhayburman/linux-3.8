@@ -45,6 +45,7 @@
 #define OTG_PORT		(1<<5)
 #define PLL_RESET		(1<<8)
 #define UTMI_PHY_EN		(1<<9)
+#define ULPI_PHY_CLK_SEL	(1<<10)
 #endif				/* _EHCI_FSL_H */
 
 #if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)

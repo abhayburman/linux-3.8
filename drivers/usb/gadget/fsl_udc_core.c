@@ -192,6 +192,12 @@ static int dr_controller_setup(struct fsl_udc *udc)
 	portctrl &= ~(PORTSCX_PHY_TYPE_SEL | PORTSCX_PORT_WIDTH);
 	switch (udc->phy_mode) {
 	case FSL_USB2_PHY_ULPI:
+#ifdef CONFIG_PPC_85xx
+		ctrl = __raw_readl(&usb_sys_regs->control);
+		ctrl &= ~USB_CTRL_UTMI_PHY_EN;
+		ctrl |= USB_CTRL_ULPI_PHY_CLK_SEL;
+		__raw_writel(ctrl, &usb_sys_regs->control);
+#endif
 		portctrl |= PORTSCX_PTS_ULPI;
 		break;
 	case FSL_USB2_PHY_UTMI_WIDE:

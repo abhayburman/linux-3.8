@@ -242,6 +242,11 @@ static void mpc83xx_setup_phy(struct usb_hcd *hcd,
 
 	switch (phy_mode) {
 	case FSL_USB2_PHY_ULPI:
+#ifdef CONFIG_PPC_85xx
+		temp = in_be32(non_ehci + FSL_SOC_USB_CTRL);
+		out_be32(non_ehci + FSL_SOC_USB_CTRL, temp | USB_CTRL_USB_EN |
+				ULPI_PHY_CLK_SEL);
+#endif
 		portsc |= PORT_PTS_ULPI;
 		break;
 	case FSL_USB2_PHY_SERIAL:
