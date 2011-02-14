@@ -123,6 +123,15 @@ static int caam_remove(struct of_device *ofdev)
 	return ret;
 }
 
+#ifdef CONFIG_AS_FASTPATH
+struct device *asf_caam_dev;
+
+struct device *asf_caam_device(void)
+{
+	return asf_caam_dev;
+}
+EXPORT_SYMBOL(asf_caam_device);
+#endif
 
 int caam_jq_probe(struct of_device *ofdev,
 		  struct device_node *np,
@@ -148,6 +157,9 @@ static int caam_probe(struct of_device *ofdev,
 	dev_set_drvdata(dev, ctrlpriv);
 	ctrlpriv->ofdev = ofdev;
 	nprop = ofdev->dev.of_node;
+#ifdef CONFIG_AS_FASTPATH
+	asf_caam_dev = dev;
+#endif
 
 	/* Get configuration properties from device tree */
 	/* First, get register page */

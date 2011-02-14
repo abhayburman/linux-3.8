@@ -1048,6 +1048,25 @@ static struct ipsec_esp_edesc *ipsec_esp_edesc_alloc(struct aead_request *areq,
 	return edesc;
 }
 
+#ifdef CONFIG_AS_FASTPATH
+int secfp_caam_submit(struct device *dev, u32 *desc,
+	void (*callback) (struct device *dev, u32 *desc,
+	u32 error, void *context), void *context)
+{
+	struct caam_drv_private *priv = dev_get_drvdata(dev);
+	struct device *tgt_jq_dev;
+	int ret;
+
+	tgt_jq_dev = priv->algapi_jq[per_cpu(cpu_to_job_queue,
+					     raw_smp_processor_id())];
+
+	ret = caam_jq_enqueue(tgt_jq_dev, desc, callback, context);
+
+	return ret;
+}
+EXPORT_SYMBOL(secfp_caam_submit);
+#endif
+
 static int aead_authenc_encrypt(struct aead_request *areq)
 {
 	struct aead_givcrypt_request *req =
