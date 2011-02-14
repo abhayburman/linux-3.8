@@ -1,6 +1,6 @@
 /*
  * Copyright 2005-2009 MontaVista Software, Inc.
- * Copyright 2008-2010 Freescale Semiconductor, Inc.
+ * Copyright 2008-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -231,11 +231,15 @@ static void usb_hcd_fsl_remove(struct usb_hcd *hcd,
 	usb_put_hcd(hcd);
 }
 
-static void mpc83xx_setup_phy(struct ehci_hcd *ehci,
+static void mpc83xx_setup_phy(struct usb_hcd *hcd,
 			      enum fsl_usb2_phy_modes phy_mode,
 			      unsigned int port_offset)
 {
 	u32 portsc = 0;
+	u32 temp = 0;
+	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+	void __iomem *non_ehci = hcd->regs;
+
 	switch (phy_mode) {
 	case FSL_USB2_PHY_ULPI:
 		portsc |= PORT_PTS_ULPI;
@@ -247,6 +251,12 @@ static void mpc83xx_setup_phy(struct ehci_hcd *ehci,
 		portsc |= PORT_PTS_PTW;
 		/* fall through */
 	case FSL_USB2_PHY_UTMI:
+#ifdef CONFIG_PPC_85xx
+		temp = in_be32(non_ehci + FSL_SOC_USB_CTRL);
+		out_be32(non_ehci + FSL_SOC_USB_CTRL, temp | UTMI_PHY_EN |
+				USB_CTRL_USB_EN);
+		udelay(10*1000);  /* delay for PHY clk to appear */
+#endif
 		portsc |= PORT_PTS_UTMI;
 		break;
 	case FSL_USB2_PHY_NONE:
@@ -285,7 +295,7 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 
 	if ((pdata->operating_mode == FSL_USB2_DR_HOST) ||
 			(pdata->operating_mode == FSL_USB2_DR_OTG))
-		mpc83xx_setup_phy(ehci, pdata->phy_mode, 0);
+		mpc83xx_setup_phy(hcd, pdata->phy_mode, 0);
 
 	if (pdata->operating_mode == FSL_USB2_MPH_HOST) {
 		unsigned int chip, rev, svr;
@@ -299,9 +309,9 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 			ehci->has_fsl_port_bug = 1;
 
 		if (pdata->port_enables & FSL_USB2_PORT0_ENABLED)
-			mpc83xx_setup_phy(ehci, pdata->phy_mode, 0);
+			mpc83xx_setup_phy(hcd, pdata->phy_mode, 0);
 		if (pdata->port_enables & FSL_USB2_PORT1_ENABLED)
-			mpc83xx_setup_phy(ehci, pdata->phy_mode, 1);
+			mpc83xx_setup_phy(hcd, pdata->phy_mode, 1);
 	}
 
 	/* put controller in host mode. */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005, 2009-2010 Freescale Semiconductor, Inc.
+/* Copyright (c) 2005, 2009-2011 Freescale Semiconductor, Inc.
  * Copyright (c) 2005 MontaVista Software
  *
  * This program is free software; you can redistribute  it and/or modify it
@@ -35,6 +35,16 @@
 #define FSL_SOC_USB_SICTRL	0x410	/* NOTE: big-endian */
 #define FSL_SOC_USB_CTRL	0x500	/* NOTE: big-endian */
 #define SNOOP_SIZE_2GB		0x1e
+
+/* control Register Bit Masks */
+#define ULPI_INT_EN		(1<<0)
+#define WU_INT_EN		(1<<1)
+#define USB_CTRL_USB_EN		(1<<2)
+#define LINE_STATE_FILTER__EN	(1<<3)
+#define KEEP_OTG_ON		(1<<4)
+#define OTG_PORT		(1<<5)
+#define PLL_RESET		(1<<8)
+#define UTMI_PHY_EN		(1<<9)
 #endif				/* _EHCI_FSL_H */
 
 #if defined(CONFIG_FSL_USB_OTG) || defined(CONFIG_FSL_USB_OTG_MODULE)

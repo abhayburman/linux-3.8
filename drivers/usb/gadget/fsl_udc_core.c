@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2004-2007, 2009-2010 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2004-2007, 2009-2011 Freescale Semiconductor, Inc. All
+ * rights reserved.
  *
  * Author: Li Yang <leoli@freescale.com>
  *         Jiang Bo <tanya.jiang@freescale.com>
@@ -197,6 +198,12 @@ static int dr_controller_setup(struct fsl_udc *udc)
 		portctrl |= PORTSCX_PTW_16BIT;
 		/* fall through */
 	case FSL_USB2_PHY_UTMI:
+#ifdef CONFIG_PPC_85xx
+		ctrl = __raw_readl(&usb_sys_regs->control);
+		ctrl |= (USB_CTRL_UTMI_PHY_EN | USB_CTRL_USB_EN);
+		__raw_writel(ctrl, &usb_sys_regs->control);
+		udelay(10 * 1000); /* Delay for UTMI PHY CLK to appear */
+#endif
 		portctrl |= PORTSCX_PTS_UTMI;
 		break;
 	case FSL_USB2_PHY_SERIAL:
