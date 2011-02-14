@@ -5746,6 +5746,7 @@ static int __init gfar_init(void)
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	gfar_cpu_dev_init();
 #endif
+	gfar_1588_proc_init(gfar_match, sizeof(gfar_match));
 	return of_register_platform_driver(&gfar_driver);
 }
 
@@ -5754,6 +5755,7 @@ static void __exit gfar_exit(void)
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	gfar_cpu_dev_exit();
 #endif
+	gfar_1588_proc_exit();
 	of_unregister_platform_driver(&gfar_driver);
 }
 
