@@ -3851,7 +3851,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
  * This is called by try_fastroute when a fastroute frame is ready for
  * transmission.
  */
-static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
+int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct gfar_priv_tx_q *tx_queue = NULL;
@@ -3862,20 +3862,23 @@ static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	int rq = 0;
 	unsigned long flags;
 
-	rq = skb->queue_mapping;
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (priv->sps)
+		rq = smp_processor_id();
+	else
+#endif
+		rq = skb->queue_mapping;
 	tx_queue = priv->tx_queue[rq];
 	txq = netdev_get_tx_queue(dev, rq);
 	base = tx_queue->tx_bd_base;
 	regs = tx_queue->grp->regs;
 
-	spin_lock_irqsave(&tx_queue->txlock, flags);
 
 	/* check if there is space to queue this packet */
 	if (unlikely(tx_queue->num_txbdfree < 1)) {
 		/* no space, stop the queue */
 		netif_tx_stop_queue(txq);
 		dev->stats.tx_fifo_errors++;
-		spin_unlock_irqrestore(&tx_queue->txlock, flags);
 		return NETDEV_TX_BUSY;
 	}
 
@@ -3887,12 +3890,37 @@ static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	lstatus = txbdp->lstatus | BD_LFLAG(TXBD_LAST | TXBD_INTERRUPT);
 
-	/* setup the TxBD length and buffer pointer for the first BD */
-	tx_queue->tx_skbuff[tx_queue->skb_curtx] = skb;
+#ifdef CONFIG_AS_FASTPATH
+	/* Set up checksumming */
+
+	if (CHECKSUM_PARTIAL == skb->ip_summed) {
+		struct txfcb *fcb = NULL;
+		fcb = gfar_add_fcb(skb);
+		lstatus |= BD_LFLAG(TXBD_TOE);
+		gfar_tx_checksum(skb, fcb);
+	}
+#endif
 	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
 			skb_headlen(skb), DMA_TO_DEVICE);
 
 	lstatus |= BD_LFLAG(TXBD_CRC | TXBD_READY) | skb_headlen(skb);
+	/*
+	 * We can work in parallel with gfar_clean_tx_ring(), except
+	 * when modifying num_txbdfree. Note that we didn't grab the lock
+	 * when we were reading the num_txbdfree and checking for available
+	 * space, that's because outside of this function it can only grow,
+	 * and once we've got needed space, it cannot suddenly disappear.
+	 *
+	 * The lock also protects us from gfar_error(), which can modify
+	 * regs->tstat and thus retrigger the transfers, which is why we
+	 * also must grab the lock before setting ready bit for the first
+	 * to be transmitted BD.
+	 */
+
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (!priv->sps)
+#endif
+		spin_lock_irqsave(&tx_queue->txlock, flags);
 
 	/*
 	 * The powerpc-specific eieio() is used, as wmb() has too strong
@@ -3906,6 +3934,11 @@ static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	txbdp_start->lstatus = lstatus;
 
+	eieio(); /* force lstatus write before tx_skbuff */
+
+	/* setup the TxBD length and buffer pointer for the first BD */
+	tx_queue->tx_skbuff[tx_queue->skb_curtx] = skb;
+
 	/* Update the current skb pointer to the next entry we will use
 	 * (wrapping if necessary) */
 	tx_queue->skb_curtx = (tx_queue->skb_curtx + 1) &
@@ -3915,8 +3948,6 @@ static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* reduce TxBD free count */
 	tx_queue->num_txbdfree -= 1;
-
-	txq->trans_start = jiffies;
 
 	/* If the next BD still needs to be cleaned up, then the bds
 	   are full.  We need to tell the kernel to stop sending us stuff. */
@@ -3928,10 +3959,14 @@ static inline int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Tell the DMA to go go go */
 	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
 
-	spin_unlock_irqrestore(&tx_queue->txlock, flags);
+#ifdef CONFIG_GFAR_SW_PKT_STEERING
+	if (!priv->sps)
+#endif
+		spin_unlock_irqrestore(&tx_queue->txlock, flags);
 
 	return NETDEV_TX_OK;
 }
+EXPORT_SYMBOL(gfar_fast_xmit);
 
 /* Stops the kernel queue, and halts the controller */
 static int gfar_close(struct net_device *dev)
