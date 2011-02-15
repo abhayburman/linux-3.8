@@ -414,13 +414,10 @@
 		ptp_timer: ptimer@b0e00 {
 			compatible = "fsl,gianfar-ptp-timer";
 			reg = <0xb0e00 0xb0>;
-			interrupts = <12 0x8 13 0x8>;
+			interrupts = <68 2 69 2 70 2>;
 			interrupt-parent = <&mpic>;
 			tmr-prsc = <0x2>;
 			cksel = <1>;
-			tmr-fiper1 = <999999995>;
-			tmr-fiper2 = <999999990>;
-			max-adj    = <999999999>;
 		};
 
 		enet0: ethernet@b0000 {
