@@ -123,6 +123,10 @@ devfp_hook_t	devfp_tx_hook;
 EXPORT_SYMBOL(devfp_tx_hook);
 #endif
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+#define RT_PKT_ID 0xff
+#endif
+
 #define TX_TIMEOUT      (1*HZ)
 #undef BRIEF_GFAR_ERRORS
 #undef VERBOSE_GFAR_ERRORS
@@ -199,6 +203,7 @@ static unsigned int skbuff_truesize(unsigned int buffer_size);
 static void gfar_skbr_register_truesize(struct gfar_private *priv);
 static int gfar_kfree_skb(struct sk_buff *skb, int qindex);
 static void gfar_reset_skb_handler(struct gfar_skb_handler *sh);
+static inline void gfar_clean_reclaim_skb(struct sk_buff *skb);
 #endif
 
 MODULE_AUTHOR("Freescale Semiconductor, Inc");
@@ -864,6 +869,10 @@ static int gfar_of_init(struct of_device *ofdev, struct net_device **pdev)
 		num_tx_qs = num_online_cpus();
 		sps = 1;
 	}
+#endif
+#ifdef CONFIG_RX_TX_BD_XNGE
+	/* Creating multilple queues for avoiding lock in xmit function.*/
+	num_tx_qs = (num_tx_qs < 3) ? 3 : num_tx_qs;
 #endif
 
 	rx_queues = (u32 *)of_get_property(np, "fsl,num_rx_queues", NULL);
@@ -2691,7 +2700,9 @@ static void free_grp_irqs(struct gfar_priv_grp *grp)
 	}
 #endif
 	free_irq(grp->interruptError, grp);
+#ifndef CONFIG_RX_TX_BD_XNGE
 	free_irq(grp->interruptTransmit, grp);
+#endif
 	free_irq(grp->interruptReceive, grp);
 }
 
@@ -3072,6 +3083,7 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 				goto err_irq_fail;
 		}
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 		if ((err = request_irq(grp->interruptTransmit, gfar_transmit,
 				0, grp->int_name_tx, grp)) < 0) {
 			if (netif_msg_intr(priv))
@@ -3079,6 +3091,7 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 					dev->name, grp->interruptTransmit);
 			goto tx_irq_fail;
 		}
+#endif
 
 		if ((err = request_irq(grp->interruptReceive, gfar_receive, 0,
 				grp->int_name_rx, grp)) < 0) {
@@ -3134,7 +3147,9 @@ vtx_irq_fail:
 	free_irq(grp->interruptReceive, grp);
 #endif
 rx_irq_fail:
+#ifndef CONFIG_RX_TX_BD_XNGE
 	free_irq(grp->interruptTransmit, grp);
+#endif
 tx_irq_fail:
 	free_irq(grp->interruptError, grp);
 err_irq_fail:
@@ -3667,6 +3682,9 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 bufaddr;
 	unsigned long flags;
 	unsigned int nr_frags, length;
+#ifdef CONFIG_RX_TX_BD_XNGE
+	struct sk_buff *new_skb;
+#endif
 
 #ifdef CONFIG_AS_FASTPATH
 	if (devfp_tx_hook && (skb->pkt_type != PACKET_FASTROUTE))
@@ -3674,12 +3692,16 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			return 0;
 #endif
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+	rq = smp_processor_id() + 1;
+#else
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (priv->sps)
 		rq = smp_processor_id();
 	else
 #endif
 		rq = skb->queue_mapping;
+#endif
 	tx_queue = priv->tx_queue[rq];
 	txq = netdev_get_tx_queue(dev, rq);
 	base = tx_queue->tx_bd_base;
@@ -3720,6 +3742,9 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	txq->tx_packets ++;
 
 	txbdp = txbdp_start = tx_queue->cur_tx;
+#ifdef CONFIG_RX_TX_BD_XNGE
+	txbdp->lstatus &= BD_LFLAG(TXBD_WRAP);
+#endif
 
 	if (nr_frags == 0) {
 		lstatus = txbdp->lstatus | BD_LFLAG(TXBD_LAST | TXBD_INTERRUPT);
@@ -3778,6 +3803,25 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+	new_skb = tx_queue->tx_skbuff[tx_queue->skb_curtx];
+	if (new_skb) {
+		if (skb->owner != RT_PKT_ID) {
+			/* Packet from Kernel free the skb to recycle poll */
+			gfar_kfree_skb(new_skb , new_skb->queue_mapping);
+			new_skb = NULL;
+		} else if ((new_skb->skb_owner == NULL)
+			|| skb_has_frags(new_skb)
+			|| new_skb->cloned) {
+			/* Non Re-cyclable SKB, free it */
+			dev_kfree_skb_any(new_skb);
+			new_skb = NULL;
+		}
+	}
+
+	skb->new_skb = new_skb;
+#endif
+
 	/* setup the TxBD length and buffer pointer for the first BD */
 	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
 			skb_headlen(skb), DMA_TO_DEVICE);
@@ -3796,10 +3840,12 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * also must grab the lock before setting ready bit for the first
 	 * to be transmitted BD.
 	 */
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if(!priv->sps)
 #endif
 		spin_lock_irqsave(&tx_queue->txlock, flags);
+#endif
 
 	/*
 	 * The powerpc-specific eieio() is used, as wmb() has too strong
@@ -3824,6 +3870,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	tx_queue->cur_tx = next_txbd(txbdp, base, tx_queue->tx_ring_size);
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 	/* reduce TxBD free count */
 	tx_queue->num_txbdfree -= (nr_frags + 1);
 
@@ -3834,16 +3881,22 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		dev->stats.tx_fifo_errors++;
 	}
+#endif
 
 	/* Tell the DMA to go go go */
 	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
 
 	/* Unlock priv */
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (!priv->sps)
 #endif
 		spin_unlock_irqrestore(&tx_queue->txlock, flags);
+#endif
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+	gfar_clean_reclaim_skb(skb);
+#endif
 	return NETDEV_TX_OK;
 }
 
@@ -3861,13 +3914,20 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 lstatus;
 	int rq = 0;
 	unsigned long flags;
+#ifdef CONFIG_RX_TX_BD_XNGE
+	struct sk_buff *new_skb;
+#endif
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+	rq = smp_processor_id() + 1;
+#else
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (priv->sps)
 		rq = smp_processor_id();
 	else
 #endif
 		rq = skb->queue_mapping;
+#endif
 	tx_queue = priv->tx_queue[rq];
 	txq = netdev_get_tx_queue(dev, rq);
 	base = tx_queue->tx_bd_base;
@@ -3887,6 +3947,9 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	txq->tx_packets++;
 
 	txbdp = txbdp_start = tx_queue->cur_tx;
+#ifdef CONFIG_RX_TX_BD_XNGE
+	txbdp->lstatus &= BD_LFLAG(TXBD_WRAP);
+#endif
 
 	lstatus = txbdp->lstatus | BD_LFLAG(TXBD_LAST | TXBD_INTERRUPT);
 
@@ -3899,6 +3962,25 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 		lstatus |= BD_LFLAG(TXBD_TOE);
 		gfar_tx_checksum(skb, fcb);
 	}
+#endif
+
+#ifdef CONFIG_RX_TX_BD_XNGE
+	new_skb = tx_queue->tx_skbuff[tx_queue->skb_curtx];
+	if (new_skb) {
+		if (skb->owner != RT_PKT_ID) {
+			/* Packet from Kernel free the skb to recycle poll */
+			gfar_kfree_skb(new_skb , new_skb->queue_mapping);
+			new_skb = NULL;
+		} else if ((new_skb->skb_owner == NULL)
+			|| skb_has_frags(new_skb)
+			|| new_skb->cloned) {
+			/* Non Re-cyclable SKB, free it */
+			dev_kfree_skb_any(new_skb);
+			new_skb = NULL;
+		}
+	}
+
+	skb->new_skb = new_skb;
 #endif
 	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
 			skb_headlen(skb), DMA_TO_DEVICE);
@@ -3917,10 +3999,12 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * to be transmitted BD.
 	 */
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (!priv->sps)
 #endif
 		spin_lock_irqsave(&tx_queue->txlock, flags);
+#endif
 
 	/*
 	 * The powerpc-specific eieio() is used, as wmb() has too strong
@@ -3946,6 +4030,7 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	tx_queue->cur_tx = next_txbd(txbdp, base, tx_queue->tx_ring_size);
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 	/* reduce TxBD free count */
 	tx_queue->num_txbdfree -= 1;
 
@@ -3955,14 +4040,20 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 		netif_stop_subqueue(dev, tx_queue->qindex);
 		dev->stats.tx_fifo_errors++;
 	}
+#endif
 
 	/* Tell the DMA to go go go */
 	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	if (!priv->sps)
 #endif
 		spin_unlock_irqrestore(&tx_queue->txlock, flags);
+#endif
+#ifdef CONFIG_RX_TX_BD_XNGE
+	gfar_clean_reclaim_skb(skb);
+#endif
 
 	return NETDEV_TX_OK;
 }
@@ -5102,9 +5193,10 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 #endif
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
-		struct sk_buff *newskb;
+		struct sk_buff *newskb = NULL;
 		rmb();
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 		if (!free_skb && sh->recycle_count) {
 			/* refill local buffer */
@@ -5128,6 +5220,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 		newskb = gfar_new_skb(dev);
 #endif
 
+#endif
 		skb = rx_queue->rx_skbuff[rx_queue->skb_currx];
 
 		dma_unmap_single(&priv->ofdev->dev, bdp->bufPtr,
@@ -5137,6 +5230,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				bdp->length > priv->rx_buffer_size))
 			bdp->status = RXBD_LARGE;
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 		/* We drop the frame if we failed to allocate a new buffer */
 		if (unlikely(!newskb || !(bdp->status & RXBD_LAST) ||
 				 bdp->status & RXBD_ERR)) {
@@ -5146,6 +5240,12 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				newskb = skb;
 			else if (skb)
 				dev_kfree_skb_any(skb);
+#else
+		if (unlikely(!(bdp->status & RXBD_LAST) ||
+				bdp->status & RXBD_ERR)) {
+			count_errors(bdp->status, dev);
+			newskb = skb;
+#endif
 		} else {
 			/* Increment the number of packets */
 			rx_queue->stats.rx_packets++;
@@ -5160,6 +5260,10 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 
 				if (in_irq() || irqs_disabled())
 					printk("Interrupt problem!\n");
+#ifdef CONFIG_RX_TX_BD_XNGE
+				skb->owner = RT_PKT_ID;
+				skb->new_skb = NULL;
+#endif
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 				/* Process packet here or send it to other cpu
 				   for processing based on packet headers
@@ -5184,6 +5288,11 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 #endif
 					gfar_process_frame(dev, skb, amount_pull);
 #endif
+#ifdef CONFIG_RX_TX_BD_XNGE
+				newskb = skb->new_skb;
+				skb->owner = 0;
+				skb->new_skb = NULL;
+#endif
 			} else {
 				if (netif_msg_rx_err(priv))
 					printk(KERN_WARNING
@@ -5191,9 +5300,38 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				rx_queue->stats.rx_dropped++;
 				priv->extra_stats.rx_skbmissing++;
 			}
-
 		}
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+		if (!newskb) {
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+			if (!free_skb && sh->recycle_count) {
+				/* refill local buffer */
+				spin_lock_irqsave(&sh->lock, flags);
+				local_head = sh->recycle_queue;
+				free_skb = sh->recycle_count;
+				sh->recycle_queue = NULL;
+				sh->recycle_count = 0;
+				spin_unlock_irqrestore(&sh->lock, flags);
+			}
+			if (local_head) {
+				newskb = local_head;
+				local_head = newskb->next;
+				newskb->next = NULL;
+				free_skb--;
+				howmany_reuse++;
+			} else
+				newskb = gfar_new_skb(dev);
+#else
+			/* Add another skb for the future */
+			newskb = gfar_new_skb(dev);
+#endif
+		}
+
+		if (!newskb)
+			/* All memory Exhausted,a BUG */
+			BUG();
+#endif
 		rx_queue->rx_skbuff[rx_queue->skb_currx] = newskb;
 
 		/* Setup the new bdp */
@@ -5237,9 +5375,21 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	} else {
 #endif
 		if (free_skb) {
-			/* return to local_sh for next time */
+#ifdef CONFIG_RX_TX_BD_XNGE
+			/* Return to local_sh for next time */
+			if (local_sh->recycle_queue) {
+				struct sk_buff *local_tail =
+						local_sh->recycle_queue;
+				while (local_tail->next)
+					local_tail = local_tail->next;
+				local_tail->next = local_head;
+			} else
+				local_sh->recycle_queue = local_head;
+			local_sh->recycle_count += free_skb;
+#else
 			local_sh->recycle_queue = local_head;
 			local_sh->recycle_count = free_skb;
+#endif
 		}
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	}
@@ -5428,10 +5578,12 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 				continue;
 			rx_queue = priv->rx_queue[i];
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifndef CONFIG_GFAR_TX_NONAPI
 			tx_queue = priv->tx_queue[rx_queue->qindex];
 
 			tx_cleaned += gfar_clean_tx_ring(tx_queue);
+#endif
 #endif
 			rx_cleaned_per_queue = gfar_clean_rx_ring(rx_queue,
 							budget_per_queue);
@@ -5445,11 +5597,12 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 		}
 	}
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifndef CONFIG_GFAR_TX_NONAPI
 	if (tx_cleaned)
 		return budget;
 #endif
-
+#endif
 	if (rx_cleaned < budget) {
 		napi_complete(napi);
 
@@ -5461,8 +5614,10 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 		/* If we are coalescing interrupts, update the timer */
 		/* Otherwise, clear it */
 		gfar_configure_rx_coalescing(priv, gfargrp->rx_bit_map);
+#ifndef CONFIG_RX_TX_BD_XNGE
 #ifndef CONFIG_GFAR_TX_NONAPI
 		gfar_configure_tx_coalescing(priv, gfargrp->tx_bit_map);
+#endif
 #endif
 	}
 

@@ -55,6 +55,8 @@ config AS_FASTPATH
 	select IP_NF_MANGLE
 	select GIANFAR_L2SRAM
 	select GFAR_SKBUFF_RECYCLING
+	select RX_TX_BD_XNGE
+	select GIANFAR_TXNAPI
 	---help---
 	  If you want device driver level FastPath implementations like ASF,
 	  say Y here.
@@ -2486,6 +2488,14 @@ config GFAR_SKBUFF_RECYCLING
 	 This implements a new private socket data buffer recycling algorithm
 	 used for fast IPv4 packet forwarding and TCP transmission. Select this
 	 if you would like to improve your latency and throughput performance.
+
+config RX_TX_BD_XNGE
+        default n
+	bool "RX and TX ring buffer exchange for Routed packets"
+	depends on GIANFAR && EXPERIMENTAL
+	---help---
+	  Enable this flag to get better throughput for the routing functionality.
+	  Enhances the performance for IPv4 Routing, NAT forwarding.
 
 config GIANFAR_TXNAPI
 	default n

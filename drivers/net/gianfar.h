@@ -53,10 +53,14 @@
 #endif
 
 /* The maximum number of packets to be handled in one call of gfar_poll */
+#ifdef CONFIG_RX_TX_BD_XNGE
+#define GFAR_DEV_WEIGHT 64
+#else
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 #define GFAR_DEV_WEIGHT 16
 #else
 #define GFAR_DEV_WEIGHT 64
+#endif
 #endif
 
 #define DIV_ROUND(n, d)		(((n) + ((d)/2)) / (d))
@@ -93,12 +97,17 @@ extern const char gfar_driver_version[];
 #define MAXGROUPS 0x2
 
 /* These need to be powers of 2 for this driver */
+#ifdef CONFIG_RX_TX_BD_XNGE
+#define DEFAULT_TX_RING_SIZE	32
+#define DEFAULT_RX_RING_SIZE	32
+#else
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 #define DEFAULT_TX_RING_SIZE	128
 #define DEFAULT_RX_RING_SIZE	128
 #else
 #define DEFAULT_TX_RING_SIZE	256
 #define DEFAULT_RX_RING_SIZE	256
+#endif
 #endif
 #define DEFAULT_WK_RING_SIZE	16
 

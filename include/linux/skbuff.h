@@ -419,6 +419,10 @@ struct sk_buff {
 				*data;
 	unsigned int		truesize;
 	atomic_t		users;
+#ifdef CONFIG_RX_TX_BD_XNGE
+	__u8			owner;
+	struct sk_buff		*new_skb;
+#endif
 };
 
 #ifdef __KERNEL__
