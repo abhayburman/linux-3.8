@@ -197,10 +197,12 @@ machine_device_initcall(p2020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_mbg, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1024_rdb, mpc85xxrdb_publish_devices);
+machine_device_initcall(p1025_rdb, mpc85xxrdb_publish_devices);
 machine_arch_initcall(p2020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_mbg, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1024_rdb, swiotlb_setup_bus_notifier);
+machine_arch_initcall(p1025_rdb, swiotlb_setup_bus_notifier);
 
 /*
  * Called very early, device-tree isn't unflattened
@@ -237,6 +239,15 @@ static int __init p1024_rdb_probe(void)
 	unsigned long root = of_get_flat_dt_root();
 
 	if (of_flat_dt_is_compatible(root, "fsl,P1024RDB"))
+		return 1;
+	return 0;
+}
+
+static int __init p1025_rdb_probe(void)
+{
+	unsigned long root = of_get_flat_dt_root();
+
+	if (of_flat_dt_is_compatible(root, "fsl,P1025RDB"))
 		return 1;
 	return 0;
 }
@@ -286,6 +297,20 @@ define_machine(p1020_mbg) {
 define_machine(p1024_rdb) {
 	.name			= "P1024 RDB",
 	.probe			= p1024_rdb_probe,
+	.setup_arch		= mpc85xx_rdb_setup_arch,
+	.init_IRQ		= mpc85xx_rdb_pic_init,
+#ifdef CONFIG_PCI
+	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
+#endif
+	.get_irq		= mpic_get_irq,
+	.restart		= fsl_rstcr_restart,
+	.calibrate_decr		= generic_calibrate_decr,
+	.progress		= udbg_progress,
+};
+
+define_machine(p1025_rdb) {
+	.name			= "P1025 RDB",
+	.probe			= p1025_rdb_probe,
 	.setup_arch		= mpc85xx_rdb_setup_arch,
 	.init_IRQ		= mpc85xx_rdb_pic_init,
 #ifdef CONFIG_PCI
