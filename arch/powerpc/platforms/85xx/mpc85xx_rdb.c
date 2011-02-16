@@ -261,6 +261,15 @@ static int __init p1020_utm_probe(void)
 	return 0;
 }
 
+static int __init p1021_rdb_pc_probe(void)
+{
+	unsigned long root = of_get_flat_dt_root();
+
+	if (of_flat_dt_is_compatible(root, "fsl,P1021RDB-PC"))
+		return 1;
+	return 0;
+}
+
 define_machine(p2020_rdb) {
 	.name			= "P2020 RDB",
 	.probe			= p2020_rdb_probe,
@@ -334,6 +343,20 @@ define_machine(p1025_rdb) {
 define_machine(p1020_utm) {
 	.name			= "P1020 UTM",
 	.probe			= p1020_utm_probe,
+	.setup_arch		= mpc85xx_rdb_setup_arch,
+	.init_IRQ		= mpc85xx_rdb_pic_init,
+#ifdef CONFIG_PCI
+	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
+#endif
+	.get_irq		= mpic_get_irq,
+	.restart		= fsl_rstcr_restart,
+	.calibrate_decr		= generic_calibrate_decr,
+	.progress		= udbg_progress,
+};
+
+define_machine(p1021_rdb_pc) {
+	.name			= "P1021 RDB-PC",
+	.probe			= p1021_rdb_pc_probe,
 	.setup_arch		= mpc85xx_rdb_setup_arch,
 	.init_IRQ		= mpc85xx_rdb_pic_init,
 #ifdef CONFIG_PCI
