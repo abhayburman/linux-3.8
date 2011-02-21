@@ -1,7 +1,7 @@
 /*
  * P1020 MBG Device Tree Source
  *
- * Copyright 2010 Freescale Semiconductor Inc.
+ * Copyright 2010-2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -56,7 +56,7 @@
 		interrupt-parent = <&mpic>;
 
 		/* NOR, NAND Flashes and Vitesse 5 port L2 switch */
-		ranges = <0x0 0x0 0x0 0xef000000 0x01000000
+		ranges = <0x0 0x0 0x0 0xec000000 0x04000000
 			  0x1 0x0 0x0 0xffa00000 0x00040000
 			  0x2 0x0 0x0 0xffb00000 0x00020000>;
 
@@ -64,12 +64,11 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			compatible = "cfi-flash";
-			reg = <0x0 0x0 0x1000000>;
+			reg = <0x0 0x0 0x4000000>;
 			bank-width = <2>;
 			device-width = <1>;
 
 			partition@0 {
-				/* This location must not be altered  */
 				/* 128KB for DTB Image */
 				reg = <0x0 0x00020000>;
 				label = "NOR (RO) DTB Image";
@@ -77,23 +76,24 @@
 			};
 
 			partition@20000 {
-				/* 128KB for Vitesse 7385 Switch firmware */
-				reg = <0x00020000 0x00020000>;
-				label = "NOR (RO) Vitesse-7385 Firmware";
-				read-only;
-			};
-
-			partition@40000 {
-				/* 3.75 MB for Linux Kernel Image */
-				reg = <0x00040000 0x00380000>;
+				/* 3.875 MB for Linux Kernel Image */
+				reg = <0x00020000 0x003e0000>;
 				label = "NOR (RO) Linux Kernel Image";
 				read-only;
 			};
 
 			partition@400000 {
-				/* 59MB for Root file System */
-				reg = <0x00400000 0x03b00000>;
+				/* 58MB for Root file System */
+				reg = <0x00400000 0x03a00000>;
 				label = "NOR (RW) Root File System";
+			};
+
+			partition@3e00000 {
+				/* This location must not be altered  */
+				/* 1M for Vitesse 7385 Switch firmware */
+				reg = <0x3e00000 0x00100000>;
+				label = "NOR (RO) Vitesse-7385 Firmware";
+				read-only;
 			};
 
 			partition@3f00000 {
