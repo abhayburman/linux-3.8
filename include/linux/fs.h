@@ -791,7 +791,7 @@ struct inode {
 #endif
 	void			*i_private; /* fs or device private pointer */
 #ifdef CONFIG_OPTIMIZE_SD_PERFORMANCE
-	unsigned int		format_used;	/* indicate usage to the inode */
+	unsigned int		used_for_format;/* usage of the inode */
 #endif
 };
 

@@ -61,8 +61,8 @@ config OPTIMIZE_SD_PERFORMANCE
 	default n
 	help
 	  This option allows you to improve I/O storage performance, optimized
-	  writeback, required filesystems like ext2 and ext4 call. Other
-	  filesystems are not validated.
+	  writeback via avoiding to write the metadata of device node, required
+	  filesystems like ext2 and ext4 call. Other filesystems are not validated.
 
 config DELAY_ASYNC_READAHEAD
 	bool "Enable delay async splice readahead"

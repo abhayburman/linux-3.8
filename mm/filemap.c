@@ -2392,7 +2392,7 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 #ifdef CONFIG_OPTIMIZE_SD_PERFORMANCE
 	/* tag normal write and format device */
 	if (imajor(inode))
-		inode->format_used = 1;
+		inode->used_for_format = 1;
 #endif
 	count = ocount;
 	pos = *ppos;
