@@ -1,5 +1,5 @@
 /*
- * Copyright 2008, 2010 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2008, 2010-2011 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  *  Freescale DIU Frame Buffer device driver
  *
@@ -822,14 +822,6 @@ static void update_lcdc(struct fb_info *info)
 	for (i = 0; i <= 2; i++)
 	   for (j = 0; j <= 255; j++)
 	      *gamma_table_base++ = j;
-
-	if (machine_data->monitor_port == 1) {
-		/* fix the gamma for LCD panel */
-		gamma_table_base = pool.gamma.vaddr;
-		for (i = 0; i < 256*3; i++)
-			gamma_table_base[i] = (gamma_table_base[i] << 2)
-				| ((gamma_table_base[i] >> 6) & 0x03);
-	}
 
 	diu_ops.set_gamma_table(machine_data->monitor_port, pool.gamma.vaddr);
 
