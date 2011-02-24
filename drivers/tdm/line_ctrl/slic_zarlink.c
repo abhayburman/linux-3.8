@@ -1,14 +1,14 @@
 /*
  * drivers/tdm/line/slic_zarlink.c
  *
- * Copyright (C) 2008-2010 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2008-2011 Freescale Semiconductor, Inc. All rights reserved.
  *
  * SLIC Line Control Module for Zarlink SLICs.
  * This  is a slic control and initialization module.
  *
  * Author:Poonam Aggrwal<poonam.aggrwal@freescale.com>
- * 	Hemant Agrawal <hemant@freescale.com>
- * 	Rajesh Gumasta <rajesh.gumasta@freescale.com>
+ * Hemant Agrawal <hemant@freescale.com>
+ * Rajesh Gumasta <rajesh.gumasta@freescale.com>
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -33,7 +33,6 @@
     But we have used so much of her original code and ideas that it seems
     only fair to recognize her as co-author -- Rajesh & Hemant */
 
-//#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
@@ -507,10 +506,15 @@ static int slic_init_configure(unsigned char device_handle,
 					 temp2[0], temp2[1]);
 
 	/*  Writing into the mask register */
-	temp2[0] = 0xF6;
-	temp2[1] = 0xF6;
+	temp2[0] = 0xFF;
+	temp2[1] = 0xFF;
 	len = 0x2;
 	slic_cmd(device_handle, CHANNEL1, WRITE_INT_MASK, len, &temp2[0]);
+
+	temp2[0] = 0xFF;
+	temp2[1] = 0xFF;
+	len = 0x2;
+	slic_cmd(device_handle, CHANNEL2, WRITE_INT_MASK, len, &temp2[0]);
 
 	/*  Reading the Mask register */
 	len = 0x2;
@@ -653,7 +657,7 @@ static int slic_probe(struct spi_device *spi)
 	ret = slic_init_configure(device_handle, spi, num_slics);
 	if (ret == 0) {
 		num_slics++;
-		printk(KERN_INFO "SLIC %d configuration success \n",
+		printk(KERN_INFO "SLIC %d configuration success\n",
 				num_slics);
 	} else {
 		printk(KERN_ERR "%s slic configuration failed\n", __func__);
