@@ -43,19 +43,6 @@ struct pci_inbound_window_regs {
 	u8	res2[12];
 };
 
-#if defined(CONFIG_P1010_RDB)
-struct pci_inbound_msi_window {
-	__be32	pmitar;		/* 0x00 - Address */
-	u8	res1[4];
-	__be32	pmiwbar;		/* 0x08 - Window Base Address */
-	__be32	pmiwbear;	/* 0x0c - Window Base Address Extended */
-	__be32	pmiwar;		/* 0x10 - Window Attributes */
-	u8	res2[108];
-};
-#endif /* #if defined (CONFIG_P1010_RDB) */
-
-
-
 /* PCI/PCI Express IO block registers for 85xx/86xx */
 struct ccsr_pci {
 	__be32	config_addr;		/* 0x.000 - PCI/PCIE Configuration Address Register */
@@ -63,7 +50,9 @@ struct ccsr_pci {
 	__be32	int_ack;		/* 0x.008 - PCI Interrupt Acknowledge Register */
 	__be32	pex_otb_cpl_tor;	/* 0x.00c - PCIE Outbound completion timeout register */
 	__be32	pex_conf_tor;		/* 0x.010 - PCIE configuration timeout register */
-	u8	res2[12];
+	__be32	pex_config;		/* 0x.014 - PCIE CONFIG Register */
+	__be32	pex_int_status;		/* 0x.018 - PCIE interrupt status */
+	u8	res2[4];
 	__be32	pex_pme_mes_dr;		/* 0x.020 - PCIE PME and message detect register */
 	__be32	pex_pme_mes_disr;	/* 0x.024 - PCIE PME and message disable register */
 	__be32	pex_pme_mes_ier;	/* 0x.028 - PCIE PME and message interrupt enable register */
@@ -76,19 +65,14 @@ struct ccsr_pci {
  * in all of the other outbound windows.
  */
 	struct pci_outbound_window_regs pow[5];
-
-#if defined(CONFIG_P1010_RDB)
 	u8	res14[96];
-	struct pci_inbound_msi_window pimw; /* 0xd00-0xd9c Inbound ATMU's MSI */
-#else
-	u8	res14[256];
-#endif /* #if defined (CONFIG_P1010_RDB) */
-
-/* PCI/PCI Express inbound window 3-1
+	struct pci_inbound_window_regs	pmit;	/* 0xd00 - 0xd9c Inbound MSI */
+	u8	res6[96];
+/* PCI/PCI Express inbound window 3-0
  * inbound window 1 supports only a 32-bit base address and does not
  * define an inbound window base extended address register.
  */
-	struct pci_inbound_window_regs piw[3];
+	struct pci_inbound_window_regs piw[4];
 
 	__be32	pex_err_dr;		/* 0x.e00 - PCI/PCIE error detect register */
 	u8	res21[4];
@@ -107,6 +91,7 @@ struct ccsr_pci {
 extern int fsl_add_bridge(struct device_node *dev, int is_primary);
 extern void fsl_pcibios_fixup_bus(struct pci_bus *bus);
 extern int mpc83xx_add_bridge(struct device_node *dev);
+u64 fsl_pci_immrbar_base(struct pci_controller *hose);
 
 #endif /* __POWERPC_FSL_PCI_H */
 #endif /* __KERNEL__ */
