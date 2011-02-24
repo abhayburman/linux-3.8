@@ -139,7 +139,7 @@ static void __init p1010_rdb_setup_arch(void)
 
 #ifdef CONFIG_PCI
 	for_each_node_by_type(np, "pci") {
-		if (of_device_is_compatible(np, "fsl,mpc8548-pcie")) {
+		if (of_device_is_compatible(np, "fsl,p1010-pcie")) {
 			struct resource rsrc;
 			of_address_to_resource(np, 0, &rsrc);
 			if (!is_pcie_host(get_pcie_host_agent(), rsrc.start))
