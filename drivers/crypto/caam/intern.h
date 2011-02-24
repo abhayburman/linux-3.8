@@ -53,6 +53,9 @@
 #define JOBQ_INTC_COUNT_THLD 0
 #endif
 
+#define MAX_DESC_LEN		512
+#define MAX_RECYCLE_DESC	64
+
 /*
  * Storage for tracking each in-process entry moving across a queue
  * Each entry on an output ring needs one of these
@@ -121,6 +124,13 @@ struct caam_drv_private {
 	struct device **algapi_jq;
 	/* list of registered crypto algorithms (mk generic context handle?) */
 	struct list_head alg_list;
+
+	/* pointer to the cache pool */
+	struct kmem_cache *netcrypto_cache;
+	/* pointer to edescriptor recycle queue */
+	struct ipsec_esp_edesc *edesc_rec_queue[NR_CPUS][MAX_RECYCLE_DESC];
+	/* index in edesc recycle queue */
+	u8 curr_edesc[NR_CPUS];
 
 	/*
 	 * debugfs entries for developer view into driver/device

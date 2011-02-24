@@ -118,6 +118,9 @@ static int caam_remove(struct of_device *ofdev)
 	iounmap(&ctrlpriv->ctrl);
 
 	kfree(ctrlpriv->jqdev);
+	if (ctrlpriv->netcrypto_cache != NULL)
+		kmem_cache_destroy(ctrlpriv->netcrypto_cache);
+
 	kfree(ctrlpriv);
 
 	return ret;
@@ -184,6 +187,17 @@ static int caam_probe(struct of_device *ofdev,
 
 	if (sizeof(dma_addr_t) == sizeof(u64))
 		dma_set_mask(dev, DMA_BIT_MASK(36));
+
+	ctrlpriv->netcrypto_cache = kmem_cache_create("netcrypto_cache",
+						MAX_DESC_LEN, 0,
+					SLAB_HWCACHE_ALIGN, NULL);
+	if (!ctrlpriv->netcrypto_cache) {
+		dev_err(dev, "%s: failed to create block cache\n", __func__);
+		iounmap(&ctrlpriv->ctrl);
+		kfree(ctrlpriv);
+
+		return -ENOMEM;
+	}
 
 	caam_id = (rd_reg64(&ctrlpriv->ctrl->perfmon.caam_id)) >> 32;
 

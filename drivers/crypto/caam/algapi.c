@@ -125,6 +125,34 @@ struct ipsec_deco_dpovrd {
 
 static DEFINE_PER_CPU(int, cpu_to_job_queue);
 
+struct ipsec_esp_edesc *crypto_edesc_alloc(int len, int flags,
+					struct caam_drv_private *priv)
+{
+	u32 smp_processor_id = smp_processor_id();
+	u32 current_edesc = priv->curr_edesc[smp_processor_id];
+	if (unlikely(current_edesc == 0)) {
+		return kmem_cache_alloc(priv->netcrypto_cache, flags);
+	} else {
+		 priv->curr_edesc[smp_processor_id] = current_edesc - 1;
+		return priv->edesc_rec_queue[smp_processor_id]
+					[current_edesc - 1];
+	}
+}
+
+void crypto_edesc_free(struct ipsec_esp_edesc *edesc,
+			struct caam_drv_private *priv)
+{
+	u32 smp_processor_id = smp_processor_id();
+	u32 current_edesc = priv->curr_edesc[smp_processor_id];
+	if (unlikely(current_edesc == (MAX_RECYCLE_DESC - 1))) {
+		kmem_cache_free(priv->netcrypto_cache, edesc);
+	} else {
+		priv->edesc_rec_queue[smp_processor_id][current_edesc] =
+								edesc;
+		priv->curr_edesc[smp_processor_id] = current_edesc + 1;
+	}
+}
+
 static int aead_authenc_setauthsize(struct crypto_aead *authenc,
 				    unsigned int authsize)
 {
@@ -644,10 +672,10 @@ static void ipsec_esp_encrypt_done(struct device *dev, u32 *desc, u32 err,
 {
 	struct aead_request *areq = context;
 	struct ipsec_esp_edesc *edesc = (struct ipsec_esp_edesc *)desc;
-#ifdef DEBUG
 	struct crypto_aead *aead = crypto_aead_reqtfm(areq);
 	struct caam_ctx *ctx = crypto_aead_ctx(aead);
 
+#ifdef DEBUG
 	dev_err(dev, "%s %d: err 0x%x\n", __func__, __LINE__, err);
 #endif
 
@@ -672,8 +700,7 @@ static void ipsec_esp_encrypt_done(struct device *dev, u32 *desc, u32 err,
 				sg->length + ctx->authsize + 16, 1);
 	}
 #endif
-
-	kfree(edesc);
+	crypto_edesc_free(edesc, dev_get_drvdata(ctx->dev));
 
 	aead_request_complete(areq, err);
 }
@@ -683,10 +710,11 @@ static void ipsec_esp_decrypt_done(struct device *dev, u32 *desc, u32 err,
 {
 	struct aead_request *areq = context;
 	struct ipsec_esp_edesc *edesc = (struct ipsec_esp_edesc *)desc;
-#ifdef DEBUG
 	struct crypto_aead *aead = crypto_aead_reqtfm(areq);
 	struct caam_ctx *ctx = crypto_aead_ctx(aead);
 
+#ifdef DEBUG
+	struct crypto_aead *aead = crypto_aead_reqtfm(areq);
 	dev_err(dev, "%s %d: err 0x%x\n", __func__, __LINE__, err);
 #endif
 	if (err) {
@@ -718,7 +746,7 @@ static void ipsec_esp_decrypt_done(struct device *dev, u32 *desc, u32 err,
 			sg->length + ctx->authsize + 16, 1);
 	}
 #endif
-	kfree(edesc);
+	crypto_edesc_free(edesc, dev_get_drvdata(ctx->dev));
 
 	aead_request_complete(areq, err);
 }
@@ -972,7 +1000,7 @@ static int ipsec_esp(struct ipsec_esp_edesc *edesc, struct aead_request *areq,
 		ret = -EINPROGRESS;
 	else {
 		ipsec_esp_unmap(dev, edesc, areq);
-		kfree(edesc);
+		crypto_edesc_free(edesc, priv);
 	}
 
 	return ret;
@@ -1006,6 +1034,7 @@ static struct ipsec_esp_edesc *ipsec_esp_edesc_alloc(struct aead_request *areq,
 {
 	struct crypto_aead *aead = crypto_aead_reqtfm(areq);
 	struct caam_ctx *ctx = crypto_aead_ctx(aead);
+	struct caam_drv_private *priv = dev_get_drvdata(ctx->dev);
 	gfp_t flags = areq->base.flags & CRYPTO_TFM_REQ_MAY_SLEEP ? GFP_KERNEL :
 		      GFP_ATOMIC;
 	int assoc_nents, src_nents, dst_nents, chained, dma_len = 0;
@@ -1033,8 +1062,8 @@ static struct ipsec_esp_edesc *ipsec_esp_edesc_alloc(struct aead_request *areq,
 	/*
 	 * allocate space for base edesc plus the two link tables
 	 */
-	edesc = kzalloc(sizeof(struct ipsec_esp_edesc) + dma_len,
-			GFP_DMA | flags);
+	edesc = crypto_edesc_alloc(sizeof(struct ipsec_esp_edesc) + dma_len,
+					GFP_DMA | flags, priv);
 	if (!edesc) {
 		dev_err(ctx->dev, "could not allocate extended descriptor\n");
 		return ERR_PTR(-ENOMEM);
