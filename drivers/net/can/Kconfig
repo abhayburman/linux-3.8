@@ -73,6 +73,35 @@ config CAN_JANZ_ICAN3
 	  This driver can also be built as a module. If so, the module will be
 	  called janz-ican3.ko.
 
+comment "Flexcan Platform Selection"
+
+choice
+	prompt "Flexcan Platform selection"
+	default FLEXCAN_OF
+
+config FLEXCAN_OF
+	bool "OpenFirmware Type Flexcan support"
+	help
+	  This option is used to configure the Flexcan for OpenFirmware type
+	  architecture eg. powerpc
+
+config FLEXCAN_PLTFM
+	bool "Platform Type Flexcan support"
+	help
+	  This option is used to configure the Flexcan for "platform"
+	  type architecture eg. arm
+
+endchoice
+
+config HAVE_CAN_FLEXCAN
+	bool
+
+config CAN_FLEXCAN
+	tristate "Support for FLEXCAN drivers"
+	depends on CAN_DEV && HAVE_CAN_FLEXCAN
+	---help---
+	  Say Y here if you want support for Freescale FlexCAN.
+
 source "drivers/net/can/mscan/Kconfig"
 
 source "drivers/net/can/sja1000/Kconfig"
