@@ -471,7 +471,8 @@ static int cardnet_priv_init(struct net_device *dev)
 	for_each_node_by_type(np, "pci") {
 		if (of_device_is_compatible(np, "fsl,mpc8540-pci") ||
 		    of_device_is_compatible(np, "fsl,mpc8548-pcie") ||
-		    of_device_is_compatible(np, "fsl,p1022-pcie")) {
+		    of_device_is_compatible(np, "fsl,p1022-pcie") ||
+		    of_device_is_compatible(np, "fsl,p1010-pcie")) {
 			cell_index = of_get_property(np, "cell-index", NULL);
 			if (cell_index && (*cell_index == pci_ep_n))
 				break;
