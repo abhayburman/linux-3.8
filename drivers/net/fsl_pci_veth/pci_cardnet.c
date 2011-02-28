@@ -494,7 +494,12 @@ static int cardnet_priv_init(struct net_device *dev)
 	 *used to map the share mem
 	 */
 	pci_agent_dev->local_mem_size = AGENT_MEM_SIZE;
-	pci_agent_dev->shmem_inb_win_num = 2;
+
+	if (of_device_is_compatible(np, "fsl,qoriq-pcie-v2.2"))
+		pci_agent_dev->shmem_inb_win_num = 2;
+	else
+		pci_agent_dev->shmem_inb_win_num = 3;
+
 	setup_agent_shmem_inb_win(pci_agent_dev);
 
 	/*Request message interrupt resource*/
