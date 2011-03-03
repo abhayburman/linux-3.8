@@ -55,6 +55,7 @@
 
 #define MAX_DESC_LEN		512
 #define MAX_RECYCLE_DESC	64
+#define CAAM_NAPI_WEIGHT	12
 
 /*
  * Storage for tracking each in-process entry moving across a queue
@@ -73,7 +74,10 @@ struct caam_drv_private_jq {
 	struct device *parentdev;	/* points back to controller dev */
 	int qidx;
 	struct caam_job_queue *qregs;	/* points to JobQ's register space */
-	struct tasklet_struct irqtask[NR_CPUS];
+
+	struct napi_struct *irqtask;
+	struct net_device *net_dev;
+
 	int irq;			/* One per queue */
 	int assign;			/* busy/free */
 

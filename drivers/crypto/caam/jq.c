@@ -72,22 +72,24 @@ irqreturn_t caam_jq_interrupt(int irq, void *st_dev)
 	wr_reg32(&jqp->qregs->jqintstatus, irqstate);
 
 	preempt_disable();
-	tasklet_schedule(&jqp->irqtask[smp_processor_id()]);
+	if (napi_schedule_prep(per_cpu_ptr(jqp->irqtask, smp_processor_id())))
+		__napi_schedule(per_cpu_ptr(jqp->irqtask, smp_processor_id()));
 	preempt_enable();
 
 	return IRQ_HANDLED;
 }
 
 /* Deferred service handler, run as interrupt-fired tasklet */
-void caam_jq_dequeue(unsigned long devarg)
+int caam_jq_dequeue(struct napi_struct *napi, int budget)
 {
 	int hw_idx, sw_idx, i, head, tail;
-	struct device *dev = (struct device *)devarg;
+	struct device *dev = &napi->dev->dev;
 	struct caam_drv_private_jq *jqp = dev_get_drvdata(dev);
 	void (*usercall)(struct device *dev, u32 *desc, u32 status, void *arg);
 	u32 *userdesc, userstatus;
 	void *userarg;
 	unsigned long flags;
+	u8 count = 0, ret = 1;
 
 	spin_lock_irqsave(&jqp->outlock, flags);
 
@@ -95,7 +97,7 @@ void caam_jq_dequeue(unsigned long devarg)
 	tail = jqp->tail;
 
 	while (CIRC_CNT(head, tail, JOBQ_DEPTH) >= 1 &&
-	       rd_reg32(&jqp->qregs->outring_used)) {
+	       rd_reg32(&jqp->qregs->outring_used) && (count < budget)) {
 
 		hw_idx = jqp->out_ring_read_index;
 		for (i = 0; CIRC_CNT(head, tail + i, JOBQ_DEPTH) >= 1; i++) {
@@ -156,20 +158,21 @@ void caam_jq_dequeue(unsigned long devarg)
 
 		head = ACCESS_ONCE(jqp->head);
 		tail = jqp->tail;
+		count++;
+	}
+
+	if (CIRC_CNT(head, tail, JOBQ_DEPTH) >= 1)
+		ret = 1;
+
+	if (count < budget) {
+		napi_complete(per_cpu_ptr(jqp->irqtask, smp_processor_id()));
+		clrbits32(&jqp->qregs->qconfig_lo, JQCFG_IMSK);
+		ret = 0;
 	}
 
 	spin_unlock_irqrestore(&jqp->outlock, flags);
 
-	if (rd_reg32(&jqp->qregs->outring_used)) {
-		preempt_disable();
-		tasklet_schedule(&jqp->irqtask[smp_processor_id()]);
-		preempt_enable();
-
-		return;
-	}
-
-	/* reenable / unmask IRQs */
-	clrbits32(&jqp->qregs->qconfig_lo, JQCFG_IMSK);
+	return ret;
 }
 
 /**
@@ -442,8 +445,37 @@ int caam_jq_init(struct device *dev)
 		  (JOBQ_INTC_TIME_THLD << JQCFG_ICTT_SHIFT));
 
 	/* Connect job queue interrupt handler. */
-	for_each_possible_cpu(i)
-		tasklet_init(&jqp->irqtask[i], caam_jq_dequeue, (u32)dev);
+	jqp->irqtask = alloc_percpu(struct napi_struct);
+	if (jqp->irqtask == NULL) {
+		dev_err(dev, "can't allocate memory while connecting job"
+			" queue interrupt handler\n");
+		kfree(jqp->inpring);
+		kfree(jqp->outring);
+		kfree(jqp->entinfo);
+
+		return -ENOMEM;
+	}
+
+	jqp->net_dev = alloc_percpu(struct net_device);
+	if (jqp->net_dev == NULL) {
+		dev_err(dev, "can't allocate memory while connecting job"
+			" queue interrupt handler\n");
+		kfree(jqp->inpring);
+		kfree(jqp->outring);
+		kfree(jqp->entinfo);
+		free_percpu(jqp->irqtask);
+
+		return -ENOMEM;
+	}
+
+	for_each_possible_cpu(i) {
+		(per_cpu_ptr(jqp->net_dev, i))->dev = *dev;
+		INIT_LIST_HEAD(&per_cpu_ptr(jqp->net_dev, i)->napi_list);
+		netif_napi_add(per_cpu_ptr(jqp->net_dev, i),
+				per_cpu_ptr(jqp->irqtask, i),
+				caam_jq_dequeue, CAAM_NAPI_WEIGHT);
+		napi_enable(per_cpu_ptr(jqp->irqtask, i));
+	}
 
 	error = request_irq(jqp->irq, caam_jq_interrupt, IRQF_SHARED,
 			    "caam-jobq", dev);
@@ -476,8 +508,13 @@ int caam_jq_shutdown(struct device *dev)
 
 	ret = caam_reset_hw_jq(dev);
 
-	for_each_possible_cpu(i)
-		tasklet_kill(&jqp->irqtask[i]);
+	for_each_possible_cpu(i) {
+		napi_disable(per_cpu_ptr(jqp->irqtask, i));
+		netif_napi_del(per_cpu_ptr(jqp->irqtask, i));
+	}
+
+	free_percpu(jqp->irqtask);
+	free_percpu(jqp->net_dev);
 
 	/* Release interrupt */
 	free_irq(jqp->irq, dev);
