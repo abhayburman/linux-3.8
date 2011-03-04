@@ -335,7 +335,7 @@
 		};
 
 		can0@1c000 {
-			compatible = "fsl,flexcan2.0";
+			compatible = "fsl,flexcan1.0";
 			reg = <0x1c000 0x1000>;
 			interrupts = <48 0x2>;
 			interrupt-parent = <&mpic>;
@@ -344,7 +344,7 @@
 		};
 
 		can1@1d000 {
-			compatible = "fsl,flexcan2.0";
+			compatible = "fsl,flexcan1.0";
 			reg = <0x1d000 0x1000>;
 			interrupts = <61 0x2>;
 			interrupt-parent = <&mpic>;
