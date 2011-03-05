@@ -58,7 +58,7 @@
 		/* NOR, NAND Flashes and Vitesse 5 port L2 switch */
 		ranges = <0x0 0x0 0xf 0xef000000 0x01000000
 			  0x1 0x0 0xf 0xff800000 0x00040000
-			  0x2 0x0 0xf 0xff900000 0x00020000>;
+			  0x2 0x0 0xf 0xffb00000 0x00020000>;
 
 		nor@0,0 {
 			#address-cells = <1>;
@@ -197,7 +197,7 @@
 			interrupt-parent = <&mpic>;
 			dfsrr;
 			rtc@68 {
-				compatible = "dallas,ds1339";
+				compatible = "pericom,pt7c4338";
 				reg = <0x68>;
 			};
 		};
@@ -490,6 +490,7 @@
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
+			fsl,sdhci-auto-cmd12;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
 		};
