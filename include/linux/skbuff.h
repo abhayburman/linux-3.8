@@ -406,7 +406,10 @@ struct sk_buff {
 #ifdef CONFIG_AS_FASTPATH
 	__u8                    asf;
 #endif
-
+#ifdef CONFIG_RX_TX_BD_XNGE
+	__u8			owner;
+	struct sk_buff		*new_skb;
+#endif
 	__u16			vlan_tci;
 
 	sk_buff_data_t		transport_header;
@@ -419,10 +422,6 @@ struct sk_buff {
 				*data;
 	unsigned int		truesize;
 	atomic_t		users;
-#ifdef CONFIG_RX_TX_BD_XNGE
-	__u8			owner;
-	struct sk_buff		*new_skb;
-#endif
 };
 
 #ifdef __KERNEL__

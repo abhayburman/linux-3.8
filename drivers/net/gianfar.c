@@ -127,7 +127,12 @@ EXPORT_SYMBOL(devfp_tx_hook);
 #define RT_PKT_ID 0xff
 #endif
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+#define TX_TIMEOUT      (5*HZ)
+#else
 #define TX_TIMEOUT      (1*HZ)
+#endif
+
 #undef BRIEF_GFAR_ERRORS
 #undef VERBOSE_GFAR_ERRORS
 
@@ -3729,6 +3734,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* total number of fragments in the SKB */
 	nr_frags = skb_shinfo(skb)->nr_frags;
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 	/* check if there is space to queue this packet */
 	if ((nr_frags+1) > tx_queue->num_txbdfree) {
 		/* no space, stop the queue */
@@ -3736,7 +3742,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev->stats.tx_fifo_errors++;
 		return NETDEV_TX_BUSY;
 	}
-
+#endif
 	/* Update transmit stats */
 	txq->tx_bytes += skb->len;
 	txq->tx_packets ++;
@@ -3818,8 +3824,6 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			new_skb = NULL;
 		}
 	}
-
-	skb->new_skb = new_skb;
 #endif
 
 	/* setup the TxBD length and buffer pointer for the first BD */
@@ -3896,6 +3900,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 #ifdef CONFIG_RX_TX_BD_XNGE
 	gfar_clean_reclaim_skb(skb);
+	skb->new_skb = new_skb;
 #endif
 	return NETDEV_TX_OK;
 }
@@ -3934,6 +3939,7 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	regs = tx_queue->grp->regs;
 
 
+#ifndef CONFIG_RX_TX_BD_XNGE
 	/* check if there is space to queue this packet */
 	if (unlikely(tx_queue->num_txbdfree < 1)) {
 		/* no space, stop the queue */
@@ -3941,7 +3947,7 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev->stats.tx_fifo_errors++;
 		return NETDEV_TX_BUSY;
 	}
-
+#endif
 	/* Update transmit stats */
 	txq->tx_bytes += skb->len;
 	txq->tx_packets++;
@@ -3979,8 +3985,6 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 			new_skb = NULL;
 		}
 	}
-
-	skb->new_skb = new_skb;
 #endif
 	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
 			skb_headlen(skb), DMA_TO_DEVICE);
@@ -4053,6 +4057,7 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 #ifdef CONFIG_RX_TX_BD_XNGE
 	gfar_clean_reclaim_skb(skb);
+	skb->new_skb = new_skb;
 #endif
 
 	return NETDEV_TX_OK;
@@ -5262,7 +5267,6 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 					printk("Interrupt problem!\n");
 #ifdef CONFIG_RX_TX_BD_XNGE
 				skb->owner = RT_PKT_ID;
-				skb->new_skb = NULL;
 #endif
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 				/* Process packet here or send it to other cpu
