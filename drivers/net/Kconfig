@@ -2512,6 +2512,14 @@ config GIANFAR_L2SRAM
 	help
 	  This option supports BD alloc in L2SRAM.
 
+config GFAR_SW_VLAN
+	bool "Selecting VLAN in SW"
+	depends on GIANFAR
+	help
+	  This option supports VLAN in SW.
+	  If selected, the GIANFAR will not export its VLAN HW feature to Linux.
+	  Linux will start handling the VLAN header insertion/deletion work..
+
 config NET_GIANFAR_FP
 	default y
 	bool "Fast Path routing"
