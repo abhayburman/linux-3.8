@@ -327,6 +327,8 @@
 			fixed-link = <1 1 1000 0 0>;
 			phy-handle = <&phy2>;
 			phy-connection-type = "rgmii-id";
+			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -355,6 +357,8 @@
 			phy-handle = <&phy0>;
 			tbi-handle = <&tbi0>;
 			phy-connection-type = "sgmii";
+			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -381,6 +385,8 @@
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
+			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -487,8 +493,7 @@
 		};
 
 		power@e0070{
-			compatible = "fsl,mpc8548-pmc", "fsl,mpc8536-pmc",
-				     "fsl,p2020-pmc";
+			compatible = "fsl,mpc8548-pmc";
 			reg = <0xe0070 0x20>;
 
 			etsec1_clk: soc-clk@24{
