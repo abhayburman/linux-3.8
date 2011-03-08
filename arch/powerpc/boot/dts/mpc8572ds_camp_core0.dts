@@ -278,6 +278,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <2>;
 		reg = <0xffe08000 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0x80000000 0x80000000 0x0 0x20000000
@@ -487,6 +488,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <1>;
 		reg = <0xffe09000 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0xa0000000 0xa0000000 0x0 0x20000000

@@ -209,6 +209,7 @@
 		#interrupt-cells = <1>;
 		#size-cells = <2>;
 		#address-cells = <3>;
+		cell-index = <1>;
 		reg = <0xffe0a000 0x1000>;
 		bus-range = <0 255>;
 		ranges = <0x2000000 0x0 0xc0000000 0xc0000000 0x0 0x20000000
