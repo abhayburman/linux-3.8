@@ -6,7 +6,7 @@
  * This dts file allows core0 to have memory, l2, i2c, dma1, global-util, eth0,
  * eth1, crypto, pci0, pci1.
  *
- * Copyright 2007-2010 Freescale Semiconductor Inc.
+ * Copyright 2007-2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -215,6 +215,17 @@
 			clock-frequency = <0>;
 		};
 
+		message@41400 {
+			compatible = "fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			interrupts = <
+				0xb0 2
+				0xb1 2
+				0xb2 2
+				0xb3 2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		msi@41600 {
 			compatible = "fsl,mpc8572-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
@@ -255,6 +266,7 @@
 			protected-sources = <
 			31 32 33 37 38 39       /* enet2 enet3 */
 			76 77 78 79 26 42	/* dma2 pci2 serial*/
+			0xb4 0xb5 0xb6 0xb7	/* message */
 			0xe4 0xe5 0xe6 0xe7	/* msi */
 			>;
 		};
