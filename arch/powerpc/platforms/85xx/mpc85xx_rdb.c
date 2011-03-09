@@ -196,8 +196,10 @@ static int __init mpc85xxrdb_publish_devices(void)
 machine_device_initcall(p2020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb_pc, mpc85xxrdb_publish_devices);
+machine_device_initcall(p1021_rdb_pc, mpc85xxrdb_publish_devices);
 machine_device_initcall(p2020_rdb_pc, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_mbg, mpc85xxrdb_publish_devices);
+machine_device_initcall(p1020_utm, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1024_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1025_rdb, mpc85xxrdb_publish_devices);
 machine_arch_initcall(p2020_rdb, swiotlb_setup_bus_notifier);
