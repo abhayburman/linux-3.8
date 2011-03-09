@@ -250,6 +250,8 @@ struct sdhci_host {
 #define SDHCI_QUIRK_SET_AHB2MAG_IRQ_BYPASS		(1<<27)
 /* Controller uses Auto CMD12 command to stop the transfer */
 #define SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12		(1<<28)
+/* Controller operates the cards at reduced frequency */
+#define SDHCI_QUIRK_RELAX_FREQ				(1<<29)
 
 	int			irq;		/* Device IRQ */
 	void __iomem *		ioaddr;		/* Mapped address */
