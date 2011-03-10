@@ -26,6 +26,8 @@
 #include <mm/mmu_decl.h>
 #include <asm/prom.h>
 #include <asm/udbg.h>
+#include <asm/qe.h>
+#include <asm/qe_ic.h>
 #include <asm/mpic.h>
 #include <asm/swiotlb.h>
 
@@ -78,6 +80,15 @@ void __init mpc85xx_rdb_pic_init(void)
 
 	mpic_init(mpic);
 
+#ifdef CONFIG_QUICC_ENGINE
+	np = of_find_compatible_node(NULL, NULL, "fsl,qe-ic");
+	if (np) {
+		qe_ic_init(np, 0, qe_ic_cascade_low_mpic,
+				qe_ic_cascade_high_mpic);
+		of_node_put(np);
+	} else
+		printk(KERN_ERR "Could not find qe-ic node\n");
+#endif				/* CONFIG_QUICC_ENGINE */
 }
 
 #if defined(CONFIG_PCI)
@@ -90,8 +101,12 @@ static int get_pcie_host_agent(void)
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,p2020-guts");
 	if (!np) {
-		printk(KERN_ERR "Could not find global-utilities node\n");
-		return 0;
+		np = of_find_compatible_node(NULL, NULL, "fsl,p1021-guts");
+		if (!np) {
+			printk(KERN_ERR
+			       "Could not find global-utilities	node\n");
+			return 0;
+		}
 	}
 
 	guts_regs = of_iomap(np, 0);
@@ -170,6 +185,71 @@ static void __init mpc85xx_rdb_setup_arch(void)
 	mpc85xx_smp_init();
 #endif
 
+#ifdef CONFIG_QUICC_ENGINE
+	np = of_find_compatible_node(NULL, NULL, "fsl,qe");
+	if (!np) {
+		np = of_find_node_by_name(NULL, "qe");
+		if (!np) {
+			printk(KERN_ERR "Could not find Quicc Engine node\n");
+			goto qe_fail;
+		}
+	}
+
+	qe_reset();
+	of_node_put(np);
+
+	np = of_find_node_by_name(NULL, "par_io");
+	if (np) {
+		struct device_node *ucc;
+
+		par_io_init(np);
+		of_node_put(np);
+
+		for_each_node_by_name(ucc, "ucc")
+			par_io_of_config(ucc);
+	}
+
+	if (machine_is(p1025_rdb)) {
+#define MPC85xx_PMUXCR_OFFSET           0x60
+#define MPC85xx_PMUXCR_QE0              0x00008000
+#define MPC85xx_PMUXCR_QE2              0x00002000
+#define MPC85xx_PMUXCR_QE3              0x00001000
+#define MPC85xx_PMUXCR_QE4              0x00000800
+#define MPC85xx_PMUXCR_QE5              0x00000400
+#define MPC85xx_PMUXCR_QE8              0x00000080
+#define MPC85xx_PMUXCR_QE9              0x00000040
+#define MPC85xx_PMUXCR_QE11             0x00000010
+#define MPC85xx_PMUXCR_QE12             0x00000008
+		static __be32 __iomem *pmuxcr;
+
+		np = of_find_node_by_name(NULL, "global-utilities");
+
+		if (np) {
+			pmuxcr = of_iomap(np, 0) + MPC85xx_PMUXCR_OFFSET;
+
+			if (!pmuxcr)
+				printk(KERN_EMERG "Error: Alternate function"
+					" signal multiplex control register not"
+					" mapped!\n");
+			else {
+			/* P1025 has pins muxed for QE and other functions. To
+			 * enable QE UEC mode, we need to set bit QE0 for UCC1
+			 * in Eth mode, QE0 and QE3 for UCC5 in Eth mode, QE9
+			 * and QE12 for QE MII management singals in PMUXCR
+			 * register.
+			 */
+				setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
+						  MPC85xx_PMUXCR_QE3 |
+						  MPC85xx_PMUXCR_QE9 |
+						  MPC85xx_PMUXCR_QE12);
+			}
+
+			of_node_put(np);
+		}
+	}
+qe_fail:
+#endif	/* CONFIG_QUICC_ENGINE */
+
 #ifdef CONFIG_SWIOTLB
 	if (memblock_end_of_DRAM() > max) {
 		ppc_swiotlb_enable = 1;
@@ -189,10 +269,29 @@ static struct of_device_id __initdata mpc85xxrdb_ids[] = {
 	{},
 };
 
+static struct of_device_id __initdata p1025_ids[] = {
+	{ .type = "soc", },
+	{ .compatible = "soc", },
+	{ .compatible = "simple-bus", },
+	{ .type = "qe", },
+	{ .compatible = "fsl,qe", },
+	{ .compatible = "gianfar", },
+	{},
+};
+
 static int __init mpc85xxrdb_publish_devices(void)
 {
 	return of_platform_bus_probe(NULL, mpc85xxrdb_ids, NULL);
 }
+
+static int __init p1025_publish_devices(void)
+{
+	/* Publish the QE devices */
+	of_platform_bus_probe(NULL, p1025_ids, NULL);
+
+	return 0;
+}
+
 machine_device_initcall(p2020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb_pc, mpc85xxrdb_publish_devices);
@@ -201,7 +300,7 @@ machine_device_initcall(p2020_rdb_pc, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_mbg, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_utm, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1024_rdb, mpc85xxrdb_publish_devices);
-machine_device_initcall(p1025_rdb, mpc85xxrdb_publish_devices);
+machine_device_initcall(p1025_rdb, p1025_publish_devices);
 machine_arch_initcall(p2020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_mbg, swiotlb_setup_bus_notifier);
