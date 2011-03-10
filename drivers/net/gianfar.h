@@ -289,8 +289,14 @@ static inline int devfp_register_tx_hook(devfp_hook_t hook)
 #define TR47WT_WT6_MASK		0x0000FF00
 #define TR47WT_WT7_MASK		0x000000FF
 
+
+#ifdef CONFIG_RX_TX_BD_XNGE
+#define WRRS_TR03WT		0x00202000
+#define WRRS_TR47WT		0x0
+#else
 #define WRRS_TR03WT		0xFFFFFFFF
 #define WRRS_TR47WT		0xFFFFFFFF
+#endif
 
 /* Rqueue control */
 #define RQUEUE_EX0		0x00800000
