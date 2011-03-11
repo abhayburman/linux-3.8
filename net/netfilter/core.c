@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
+#include <linux/netfilter_table_index.h>
 
 #include "nf_internals.h"
 
@@ -183,6 +184,12 @@ next_hook:
 			      verdict >> NF_VERDICT_BITS))
 			goto next_hook;
 	}
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+	if (unlikely(firewall_rules))
+		update_netfilter_table_index(
+			p_netfilter_table_index, indev,
+			(ip_hdr(skb))->daddr, verdict);
+#endif  /* end CONFIG_NETFILTER_TABLE_INDEX */
 	rcu_read_unlock();
 	return ret;
 }

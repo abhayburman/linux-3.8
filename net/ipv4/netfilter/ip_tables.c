@@ -29,6 +29,7 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <net/netfilter/nf_log.h>
 #include "../../netfilter/xt_repldata.h"
+#include <linux/netfilter_table_index.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
@@ -1312,6 +1313,10 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
 			   tmp.num_counters, tmp.counters);
 	if (ret)
 		goto free_newinfo_untrans;
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+	if (!memcmp(tmp.name, "filter", 3))
+		firewall_rules = (newinfo->number > 4) ? true : false;
+#endif  /* endif CONFIG_NETFILTER_TABLE_INDEX */
 	return 0;
 
  free_newinfo_untrans:
@@ -1878,6 +1883,9 @@ compat_do_ipt_set_ctl(struct sock *sk,	int cmd, void __user *user,
 	switch (cmd) {
 	case IPT_SO_SET_REPLACE:
 		ret = compat_do_replace(sock_net(sk), user, len);
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+		init_netfilter_table_index();
+#endif  /* endif CONFIG_NETFILTER_TABLE_INDEX */
 		break;
 
 	case IPT_SO_SET_ADD_COUNTERS:
@@ -2015,6 +2023,10 @@ do_ipt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
 	switch (cmd) {
 	case IPT_SO_SET_REPLACE:
 		ret = do_replace(sock_net(sk), user, len);
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+		init_netfilter_table_index();
+#endif  /* endif CONFIG_NETFILTER_TABLE_INDEX */
+
 		break;
 
 	case IPT_SO_SET_ADD_COUNTERS:
@@ -2232,6 +2244,9 @@ static struct xt_match ipt_builtin_mt[] __read_mostly = {
 
 static int __net_init ip_tables_net_init(struct net *net)
 {
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+	firewall_rules = false;
+#endif  /* endif CONFIG_NETFILTER_TABLE_INDEX */
 	return xt_proto_init(net, NFPROTO_IPV4);
 }
 

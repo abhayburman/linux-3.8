@@ -159,6 +159,16 @@ config NETFILTER_ADVANCED
 
 	  If unsure, say Y.
 
+config NETFILTER_TABLE_INDEX
+	bool "netfilter table index configuration"
+	depends on NETFILTER
+	default y
+	help
+	  This feature is added by Freescale, it can
+	  improve L3 Firewall performance to special applications.
+
+	  If unsure, say N.
+
 config BRIDGE_NETFILTER
 	bool "Bridged IP/ARP packets filtering"
 	depends on BRIDGE && NETFILTER && INET

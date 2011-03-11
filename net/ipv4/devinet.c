@@ -62,6 +62,7 @@
 #include <net/ip_fib.h>
 #include <net/rtnetlink.h>
 #include <net/net_namespace.h>
+#include <linux/netfilter_table_index.h>
 
 static struct ipv4_devconf ipv4_devconf = {
 	.data = {
@@ -1333,6 +1334,9 @@ static int devinet_sysctl_forward(ctl_table *ctl, int write,
 			}
 			if (valp == &IPV4_DEVCONF_ALL(net, FORWARDING)) {
 				inet_forward_change(net);
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+				init_netfilter_table_index();
+#endif  /* endif CONFIG_NETFILTER_TABLE_INDEX */
 			} else if (*valp) {
 				struct ipv4_devconf *cnf = ctl->extra1;
 				struct in_device *idev =

@@ -17,6 +17,8 @@
  *		Jos Vos		:	Call forward firewall after routing
  *					(always use output device).
  *		Mike McLagan	:	Routing by source
+ *		Adam Xie	:	Add a shorter path for ip packet before
+ *					call ip_forward_finish.
  *
  *		Copyright 2009-2011 Freescale Semiconductor, Inc.
  */
@@ -40,6 +42,10 @@
 #include <linux/route.h>
 #include <net/route.h>
 #include <net/xfrm.h>
+#include <linux/netfilter_table_index.h>
+
+bool firewall_rules;
+EXPORT_SYMBOL(firewall_rules);
 
 #ifdef CONFIG_NET_GIANFAR_FP
 extern int netdev_fastroute;
@@ -92,6 +98,9 @@ int ip_forward(struct sk_buff *skb)
 	struct iphdr *iph;	/* Our header */
 	struct rtable *rt;	/* Route we use */
 	struct ip_options * opt	= &(IPCB(skb)->opt);
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+	int verdict;
+#endif
 
 	if (skb_warn_if_lro(skb))
 		goto drop;
@@ -152,6 +161,27 @@ int ip_forward(struct sk_buff *skb)
 
 	skb->priority = rt_tos2priority(iph->tos);
 
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+	if (likely(!firewall_rules)) {
+		return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD, skb, skb->dev,
+		       rt->u.dst.dev, ip_forward_finish);
+	} else{
+	verdict = match_netfilter_table_index(
+		p_netfilter_table_index, skb->dev,
+		iph->daddr);
+		if (-1 == verdict)
+			return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
+				skb, skb->dev, rt->u.dst.dev,
+				ip_forward_finish);
+		else{
+		if (verdict == NF_ACCEPT || verdict == NF_STOP)
+			return ip_forward_finish(skb);
+		else
+			goto drop;/* process NF_DROP,
+			and we mustn't accelorate NF_QUEUE */
+		}
+	}
+#endif  /* end CONFIG_NETFILTER_TABLE_INDEX */
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD, skb, skb->dev,
 		       rt->u.dst.dev, ip_forward_finish);
 
