@@ -46,7 +46,7 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		device_type = "soc";
-		compatible = "fsl,p1021-immr", "simple-bus";
+		compatible = "fsl,p1020-immr", "simple-bus";
 		ranges = <0x0  0x0 0xffe00000 0x100000>;
 		bus-frequency = <0>;		// Filled out by uboot.
 
@@ -58,7 +58,7 @@
 		};
 
 		L2: l2-cache-controller@20000 {
-			compatible = "fsl,p1021-l2-cache-controller";
+			compatible = "fsl,p1020-l2-cache-controller";
 			reg = <0x20000 0x1000>;
 			cache-line-size = <32>;	// 32 bytes
 			cache-size = <0x40000>; // L2,256K
@@ -106,7 +106,7 @@
 		};
 
 		msi@41600 {
-			compatible = "fsl,p1021-msi", "fsl,mpic-msi";
+			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
 			msi-available-ranges = <0x80 0x80>;
 			interrupts = <

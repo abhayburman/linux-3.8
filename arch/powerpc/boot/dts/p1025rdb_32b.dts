@@ -19,9 +19,13 @@
 	aliases {
 		serial0 = &serial0;
 		serial1 = &serial1;
+		serial2 = &serial2;
+		serial3 = &serial3;
 		ethernet0 = &enet0;
 		ethernet1 = &enet1;
 		ethernet2 = &enet2;
+		ethernet3 = &enet3;
+		ethernet4 = &enet4;
 		pci0 = &pci0;
 		pci1 = &pci1;
 	};
@@ -50,15 +54,14 @@
 	localbus@ffe05000 {
 		#address-cells = <2>;
 		#size-cells = <1>;
-		compatible = "fsl,p1021-elbc", "fsl,elbc", "simple-bus";
+		compatible = "fsl,p1020-elbc", "fsl,elbc", "simple-bus";
 		reg = <0 0xffe05000 0 0x1000>;
 		interrupts = <19 2>;
 		interrupt-parent = <&mpic>;
 
 		/* NOR, NAND Flashes and Vitesse 5 port L2 switch */
-		ranges = <0x0 0x0 0x0 0xec000000 0x01000000
-			  0x1 0x0 0x0 0xff800000 0x00040000
-			  0x2 0x0 0x0 0xff900000 0x00020000>;
+		ranges = <0x0 0x0 0x0 0xef000000 0x01000000
+			  0x1 0x0 0x0 0xff800000 0x00040000>;
 
 		nor@0,0 {
 			#address-cells = <1>;
@@ -89,9 +92,16 @@
 			};
 
 			partition@400000 {
-				/* 11MB for JFFS2 based Root file System */
-				reg = <0x00400000 0x00b00000>;
+				/* 10.75MB for JFFS2 based Root file System */
+				reg = <0x00400000 0x00ac0000>;
 				label = "NOR JFFS2 Root File System";
+			};
+
+			partition@ec0000 {
+				/* 256KB for QE microcode image */
+				reg = <0x00ec0000 0x00040000>;
+				label = "Quicc Engine Microcode Image";
+				read-only;
 			};
 
 			partition@f00000 {
@@ -107,7 +117,7 @@
 		nand@1,0 {
 			#address-cells = <1>;
 			#size-cells = <1>;
-			compatible = "fsl,p1021-fcm-nand",
+			compatible = "fsl,p1020-fcm-nand",
 				     "fsl,elbc-fcm-nand";
 			reg = <0x1 0x0 0x40000>;
 
@@ -150,20 +160,13 @@
 			};
 		};
 
-		L2switch@2,0 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "vitesse-7385";
-			reg = <0x2 0x0 0x20000>;
-		};
-
 	};
 
 	soc@ffe00000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		device_type = "soc";
-		compatible = "fsl,p1021-immr", "simple-bus";
+		compatible = "fsl,p1020-immr", "simple-bus";
 		ranges = <0x0  0x0 0xffe00000 0x100000>;
 		bus-frequency = <0>;		// Filled out by uboot.
 
@@ -174,14 +177,14 @@
 		};
 
 		ecm@1000 {
-			compatible = "fsl,p1021-ecm", "fsl,ecm";
+			compatible = "fsl,p1020-ecm", "fsl,ecm";
 			reg = <0x1000 0x1000>;
 			interrupts = <16 2>;
 			interrupt-parent = <&mpic>;
 		};
 
 		memory-controller@2000 {
-			compatible = "fsl,p1021-memory-controller";
+			compatible = "fsl,p1020-memory-controller";
 			reg = <0x2000 0x1000>;
 			interrupt-parent = <&mpic>;
 			interrupts = <16 2>;
@@ -321,7 +324,7 @@
 		};
 
 		L2: l2-cache-controller@20000 {
-			compatible = "fsl,p1021-l2-cache-controller";
+			compatible = "fsl,p1020-l2-cache-controller";
 			reg = <0x20000 0x1000>;
 			cache-line-size = <32>;	// 32 bytes
 			cache-size = <0x40000>; // L2,256K
@@ -417,13 +420,10 @@
 		ptp_timer: ptimer@b0e00 {
 			compatible = "fsl,gianfar-ptp-timer";
 			reg = <0xb0e00 0xb0>;
-			interrupts = <12 0x8 13 0x8>;
+			interrupts = <68 2 69 2 70 2>;
 			interrupt-parent = <&mpic>;
 			tmr-prsc = <0x2>;
 			cksel = <1>;
-			tmr-fiper1 = <999999995>;
-			tmr-fiper2 = <999999990>;
-			max-adj    = <999999999>;
 		};
 
 		enet0: ethernet@b0000 {
@@ -441,7 +441,6 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
-			clk-handle = <&etsec1_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -473,7 +472,6 @@
 			phy-connection-type = "sgmii";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
-			clk-handle = <&etsec2_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -504,7 +502,6 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
-			clk-handle = <&etsec3_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -531,24 +528,8 @@
 			phy_type = "ulpi";
 		};
 
-		/* USB2 is shared with localbus, so it must be disabled
-		   by default. We can't put 'status = "disabled";' here
-		   since U-Boot doesn't clear the status property when
-		   it enables USB2. OTOH, U-Boot does create a new node
-		   when there isn't any. So, just comment it out.
-		usb@23000 {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			compatible = "fsl-usb2-dr";
-			reg = <0x23000 0x1000>;
-			interrupt-parent = <&mpic>;
-			interrupts = <46 0x2>;
-			phy_type = "ulpi";
-		};
-		*/
-
 		sdhci@2e000 {
-			compatible = "fsl,p1021-esdhc", "fsl,esdhc";
+			compatible = "fsl,p1020-esdhc", "fsl,esdhc";
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
@@ -581,7 +562,7 @@
 		};
 
 		message@41400 {
-			compatible = "fsl,p1021-msg", "fsl,mpic-msg";
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
 			reg = <0x41400 0x200>;
 			interrupts = <
 				0xb0 2
@@ -592,7 +573,7 @@
 		};
 
 		message@42400 {
-			compatible = "fsl,p1021-msg", "fsl,mpic-msg";
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
 			reg = <0x42400 0x200>;
 			interrupts = <
 				0xb4 2
@@ -602,30 +583,8 @@
 			interrupt-parent = <&mpic>;
 		};
 
-		timer@41100 {
-			compatible = "fsl,mpic-global-timer";
-			reg = <0x41100 0x204>;
-			interrupts = <0xf7 0x2>;
-			interrupt-parent = <&mpic>;
-		};
-
-		power@e0070{
-			compatible = "fsl,mpc8548-pmc";
-			reg = <0xe0070 0x20>;
-
-			etsec1_clk: soc-clk@24{
-				fsl,pmcdr-mask = <0x00000080>;
-			};
-			etsec2_clk: soc-clk@25{
-				fsl,pmcdr-mask = <0x00000040>;
-			};
-			etsec3_clk: soc-clk@26{
-				fsl,pmcdr-mask = <0x00000020>;
-			};
-		};
-
 		msi@41600 {
-			compatible = "fsl,p1021-msi", "fsl,mpic-msi";
+			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
 			msi-available-ranges = <0 0x100>;
 			interrupts = <
@@ -641,9 +600,75 @@
 		};
 
 		global-utilities@e0000 {        //global utilities block
-			compatible = "fsl,p1021-guts","fsl,p2020-guts";
+			compatible = "fsl,p1021-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
+		};
+
+		par_io@e0100 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0xe0100 0x60>;
+			ranges = <0x0 0xe0100 0x60>;
+			device_type = "par_io";
+			num-ports = <3>;
+			pio1: ucc_pin@01 {
+				pio-map = <
+			/* port  pin  dir  open_drain  assignment  has_irq */
+					0x1  0x13 0x1  0x0  0x1  0x0    /* QE_MUX_MDC */
+					0x1  0x14 0x3  0x0  0x1  0x0    /* QE_MUX_MDIO */
+					0x0  0x17 0x2  0x0  0x2  0x0    /* CLK12 */
+					0x0  0x18 0x2  0x0  0x1  0x0    /* CLK9 */
+					0x0  0x7  0x1  0x0  0x2  0x0    /* ENET1_TXD0_SER1_TXD0 */
+					0x0  0x9  0x1  0x0  0x2  0x0    /* ENET1_TXD1_SER1_TXD1 */
+					0x0  0xb  0x1  0x0  0x2  0x0    /* ENET1_TXD2_SER1_TXD2 */
+					0x0  0xc  0x1  0x0  0x2  0x0    /* ENET1_TXD3_SER1_TXD3 */
+					0x0  0x6  0x2  0x0  0x2  0x0    /* ENET1_RXD0_SER1_RXD0 */
+					0x0  0xa  0x2  0x0  0x2  0x0    /* ENET1_RXD1_SER1_RXD1 */
+					0x0  0xe  0x2  0x0  0x2  0x0    /* ENET1_RXD2_SER1_RXD2 */
+					0x0  0xf  0x2  0x0  0x2  0x0    /* ENET1_RXD3_SER1_RXD3 */
+					0x0  0x5  0x1  0x0  0x2  0x0    /* ENET1_TX_EN_SER1_RTS_B */
+					0x0  0xd  0x1  0x0  0x2  0x0    /* ENET1_TX_ER */
+					0x0  0x4  0x2  0x0  0x2  0x0    /* ENET1_RX_DV_SER1_CTS_B */
+					0x0  0x8  0x2  0x0  0x2  0x0    /* ENET1_RX_ER_SER1_CD_B */
+					0x0  0x11 0x2  0x0  0x2  0x0    /* ENET1_CRS */
+					0x0  0x10 0x2  0x0  0x2  0x0>;    /* ENET1_COL */
+			};
+
+			pio2: ucc_pin@02 {
+				pio-map = <
+			/* port  pin  dir  open_drain  assignment  has_irq */
+					0x1  0x13 0x1  0x0  0x1  0x0    /* QE_MUX_MDC */
+					0x1  0x14 0x3  0x0  0x1  0x0    /* QE_MUX_MDIO */
+					0x1  0xb  0x2  0x0  0x1  0x0    /* CLK13 */
+					0x1  0x7  0x1  0x0  0x2  0x0    /* ENET5_TXD0_SER5_TXD0 */
+					0x1  0xa  0x1  0x0  0x2  0x0    /* ENET5_TXD1_SER5_TXD1 */
+					0x1  0x6  0x2  0x0  0x2  0x0    /* ENET5_RXD0_SER5_RXD0 */
+					0x1  0x9  0x2  0x0  0x2  0x0    /* ENET5_RXD1_SER5_RXD1 */
+					0x1  0x5  0x1  0x0  0x2  0x0    /* ENET5_TX_EN_SER5_RTS_B */
+					0x1  0x4  0x2  0x0  0x2  0x0    /* ENET5_RX_DV_SER5_CTS_B */
+					0x1  0x8  0x2  0x0  0x2  0x0>;    /* ENET5_RX_ER_SER5_CD_B */
+			};
+
+			pio3: ucc_pin@03 {
+				pio-map = <
+			/* port  pin  dir  open_drain  assignment  has_irq */
+					0x0  0x16 0x2  0x0  0x2  0x0    /* SER7_CD_B*/
+					0x0  0x12 0x2  0x0  0x2  0x0    /* SER7_CTS_B*/
+					0x0  0x13 0x1  0x0  0x2  0x0    /* SER7_RTS_B*/
+					0x0  0x14 0x2  0x0  0x2  0x0    /* SER7_RXD0*/
+					0x0  0x15 0x1  0x0  0x2  0x0>;    /* SER7_TXD0*/
+			};
+
+			pio4: ucc_pin@04 {
+				pio-map = <
+			/* port  pin  dir  open_drain  assignment  has_irq */
+					0x1  0x0  0x2  0x0  0x2  0x0    /* SER3_CD_B*/
+					0x0  0x1c 0x2  0x0  0x2  0x0    /* SER3_CTS_B*/
+					0x0  0x1d 0x1  0x0  0x2  0x0    /* SER3_RTS_B*/
+					0x0  0x1e 0x2  0x0  0x2  0x0    /* SER3_RXD0*/
+					0x0  0x1f 0x1  0x0  0x2  0x0>;    /* SER3_TXD0*/
+			};
 		};
 	};
 
@@ -716,6 +741,122 @@
 				  0x1000000 0x0 0x0
 				  0x1000000 0x0 0x0
 				  0x0 0x100000>;
+		};
+	};
+
+	qe@ffe80000 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		device_type = "qe";
+		compatible = "fsl,qe";
+		ranges = <0x0 0x0 0xffe80000 0x40000>;
+		reg = <0 0xffe80000 0 0x480>;
+		brg-frequency = <0>;
+		bus-frequency = <0>;
+		fsl,qe-num-riscs = <1>;
+		fsl,qe-num-snums = <28>;
+		fsl,time-stamp1-clock = "qeclk";
+		fsl,time-stamp2-clock = "qeclk";
+
+		qeic: interrupt-controller@80 {
+			interrupt-controller;
+			compatible = "fsl,qe-ic";
+			#address-cells = <0>;
+			#interrupt-cells = <1>;
+			reg = <0x80 0x80>;
+			interrupts = <63 2 60 2>; //high:47 low:44
+			interrupt-parent = <&mpic>;
+		};
+
+		enet3: ucc@2000 {
+			device_type = "network";
+			compatible = "ucc_geth";
+			cell-index = <1>;
+			reg = <0x2000 0x200>;
+			interrupts = <32>;
+			interrupt-parent = <&qeic>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			rx-clock-name = "clk12";
+			tx-clock-name = "clk9";
+			pio-handle = <&pio1>;
+			phy-handle = <&qe_phy0>;
+			phy-connection-type = "mii";
+		};
+
+		mdio@2120 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x2120 0x18>;
+			compatible = "fsl,ucc-mdio";
+
+			qe_phy0: ethernet-phy@06 {
+				interrupt-parent = <&mpic>;
+				interrupts = <4 1>;
+				reg = <0x6>;
+				device_type = "ethernet-phy";
+			};
+			qe_phy1: ethernet-phy@03 {
+				interrupt-parent = <&mpic>;
+				interrupts = <5 1>;
+				reg = <0x3>;
+				device_type = "ethernet-phy";
+			};
+		};
+
+		enet4: ucc@2400 {
+			device_type = "network";
+			compatible = "ucc_geth";
+			cell-index = <5>;
+			reg = <0x2400 0x200>;
+			interrupts = <40>;
+			interrupt-parent = <&qeic>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			rx-clock-name = "none";
+			tx-clock-name = "clk13";
+			pio-handle = <&pio2>;
+			phy-handle = <&qe_phy1>;
+			phy-connection-type = "rmii";
+		};
+
+		serial2: ucc@2600 {
+			device_type = "serial";
+			compatible = "ucc_uart";
+			status = "disabled";
+			reg = <0x2600 0x200>;
+			cell-index = <7>;
+			port-number = <0>;
+			rx-clock-name = "brg6";
+			tx-clock-name = "brg6";
+			interrupts = <42>;
+			interrupt-parent = <&qeic>;
+			pio-handle = <&pio3>;
+		};
+
+		serial3: ucc@2200 {
+			device_type = "serial";
+			compatible = "ucc_uart";
+			status = "disabled";
+			reg = <0x2200 0x200>;
+			cell-index = <3>;
+			port-number = <1>;
+			rx-clock-name = "brg2";
+			tx-clock-name = "brg2";
+			interrupts = <34>;
+			interrupt-parent = <&qeic>;
+			pio-handle = <&pio4>;
+		};
+
+		muram@10000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "fsl,qe-muram", "fsl,cpm-muram";
+			ranges = <0x0 0x10000 0x6000>;
+
+			data-only@0 {
+				compatible = "fsl,qe-muram-data",
+				"fsl,cpm-muram-data";
+				reg = <0x0 0x6000>;
+			};
 		};
 	};
 };

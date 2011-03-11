@@ -50,15 +50,14 @@
 	localbus@ffe05000 {
 		#address-cells = <2>;
 		#size-cells = <1>;
-		compatible = "fsl,p1021-elbc", "fsl,elbc", "simple-bus";
+		compatible = "fsl,p1020-elbc", "fsl,elbc", "simple-bus";
 		reg = <0 0xffe05000 0 0x1000>;
 		interrupts = <19 2>;
 		interrupt-parent = <&mpic>;
 
 		/* NOR, NAND Flashes and Vitesse 5 port L2 switch */
-		ranges = <0x0 0x0 0x0 0xec000000 0x01000000
-			  0x1 0x0 0x0 0xff800000 0x00040000
-			  0x2 0x0 0x0 0xff900000 0x00020000>;
+		ranges = <0x0 0x0 0x0 0xef000000 0x01000000
+			  0x1 0x0 0x0 0xff800000 0x00040000>;
 
 		nor@0,0 {
 			#address-cells = <1>;
@@ -107,7 +106,7 @@
 		nand@1,0 {
 			#address-cells = <1>;
 			#size-cells = <1>;
-			compatible = "fsl,p1021-fcm-nand",
+			compatible = "fsl,p1020-fcm-nand",
 				     "fsl,elbc-fcm-nand";
 			reg = <0x1 0x0 0x40000>;
 
@@ -150,20 +149,13 @@
 			};
 		};
 
-		L2switch@2,0 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "vitesse-7385";
-			reg = <0x2 0x0 0x20000>;
-		};
-
 	};
 
 	soc@ffe00000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		device_type = "soc";
-		compatible = "fsl,p1021-immr", "simple-bus";
+		compatible = "fsl,p1020-immr", "simple-bus";
 		ranges = <0x0  0x0 0xffe00000 0x100000>;
 		bus-frequency = <0>;		// Filled out by uboot.
 
@@ -174,14 +166,14 @@
 		};
 
 		ecm@1000 {
-			compatible = "fsl,p1021-ecm", "fsl,ecm";
+			compatible = "fsl,p1020-ecm", "fsl,ecm";
 			reg = <0x1000 0x1000>;
 			interrupts = <16 2>;
 			interrupt-parent = <&mpic>;
 		};
 
 		memory-controller@2000 {
-			compatible = "fsl,p1021-memory-controller";
+			compatible = "fsl,p1020-memory-controller";
 			reg = <0x2000 0x1000>;
 			interrupt-parent = <&mpic>;
 			interrupts = <16 2>;
@@ -310,7 +302,7 @@
 		};
 
 		L2: l2-cache-controller@20000 {
-			compatible = "fsl,p1021-l2-cache-controller";
+			compatible = "fsl,p1020-l2-cache-controller";
 			reg = <0x20000 0x1000>;
 			cache-line-size = <32>;	// 32 bytes
 			cache-size = <0x40000>; // L2,256K
@@ -387,13 +379,10 @@
 		ptp_timer: ptimer@b0e00 {
 			compatible = "fsl,gianfar-ptp-timer";
 			reg = <0xb0e00 0xb0>;
-			interrupts = <12 0x8 13 0x8>;
+			interrupts = <68 2 69 2 70 2>;
 			interrupt-parent = <&mpic>;
 			tmr-prsc = <0x2>;
 			cksel = <1>;
-			tmr-fiper1 = <999999995>;
-			tmr-fiper2 = <999999990>;
-			max-adj    = <999999999>;
 		};
 
 		enet0: ethernet@b0000 {
@@ -464,7 +453,7 @@
 		};
 
 		sdhci@2e000 {
-			compatible = "fsl,p1021-esdhc", "fsl,esdhc";
+			compatible = "fsl,p1020-esdhc", "fsl,esdhc";
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
@@ -505,7 +494,7 @@
 		};
 
 		message@41400 {
-			compatible = "fsl,p1021-msg", "fsl,mpic-msg";
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
 			reg = <0x41400 0x200>;
 			interrupts = <
 				0xb0 2
@@ -516,7 +505,7 @@
 		};
 
 		message@42400 {
-			compatible = "fsl,p1021-msg", "fsl,mpic-msg";
+			compatible = "fsl,p1020-msg", "fsl,mpic-msg";
 			reg = <0x42400 0x200>;
 			interrupts = <
 				0xb4 2
@@ -527,7 +516,7 @@
 		};
 
 		msi@41600 {
-			compatible = "fsl,p1021-msi", "fsl,mpic-msi";
+			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
 			msi-available-ranges = <0 0x80>;
 			interrupts = <
@@ -539,7 +528,7 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p1021-guts","fsl,p2020-guts";
+			compatible = "fsl,p1021-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
