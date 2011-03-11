@@ -55,10 +55,9 @@
 		interrupts = <19 2>;
 		interrupt-parent = <&mpic>;
 
-		/* NOR, NAND Flashes and Vitesse 5 port L2 switch */
+		/* NOR, NAND Flashes */
 		ranges = <0x0 0x0 0xf 0xef000000 0x01000000
-			  0x1 0x0 0xf 0xff800000 0x00040000
-			  0x2 0x0 0xf 0xff900000 0x00020000>;
+			  0x1 0x0 0xf 0xff800000 0x00040000>;
 
 		nor@0,0 {
 			#address-cells = <1>;
@@ -149,14 +148,6 @@
 				label = "NAND Writable User area";
 			};
 		};
-
-		L2switch@2,0 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			compatible = "vitesse-7385";
-			reg = <0x2 0x0 0x20000>;
-		};
-
 	};
 
 	soc@fffe00000 {
