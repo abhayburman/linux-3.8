@@ -99,8 +99,12 @@ config HAVE_CAN_FLEXCAN
 config CAN_FLEXCAN
 	tristate "Support for FLEXCAN drivers"
 	depends on CAN_DEV && HAVE_CAN_FLEXCAN
+	select PPC_CLOCK
 	---help---
 	  Say Y here if you want support for Freescale FlexCAN.
+	  Flexcan Module is implementing the CAN Protocol
+	  version 2.0
+
 
 source "drivers/net/can/mscan/Kconfig"
 
