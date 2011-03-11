@@ -477,6 +477,7 @@
 			fsl,sdhci-dma-broken;
 			fsl,sdhci-adma-broken;
 			fsl,sdhci-adjust-timeout;
+			fsl,sdhci-relax-freq;
 			/* Filled in by U-Boot */
 			clock-frequency = <0>;
 		};
