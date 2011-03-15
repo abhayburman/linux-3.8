@@ -8,7 +8,7 @@
  *
  * Please note to add "-b 1" for core1's dts compiling.
  *
- * Copyright 2010 Freescale Semiconductor Inc.
+ * Copyright 2010-2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -312,7 +312,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "secondary";
+			fsl,multi-host-mode = "primary";
 			fsl,channel-remap = <0x3>;
 		};
 
