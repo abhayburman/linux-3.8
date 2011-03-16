@@ -3,7 +3,7 @@
  *
  * In CAMP mode, each core needs to have its own dts. Only mpic and L2 cache
  * can be shared, all the other devices must be assigned to one core only.
- * This dts file allows core1 to have l2, dma2, eth1, pcie1, spi, elbc and
+ * This dts file allows core1 to have l2, dma2, eth1, pcie1, spi, elbc tdm and
  * sata2.
  *
  * Please note to add "-b 1" for core1's dts compiling.
@@ -206,6 +206,28 @@
 					reg = <0x00700000 0x00900000>;
 				};
 			};
+
+			legerity@0{
+				compatible = "fsl,espi-slic";
+				reg = <1>;
+				linux,modalias = "legerity";
+				spi-max-frequency = <8000000>;
+				ch1-rx-slot = <0>;
+				ch1-tx-slot = <0>;
+				ch2-rx-slot = <2>;
+				ch2-tx-slot = <2>;
+			};
+
+			legerity@1{
+				compatible = "fsl,espi-slic";
+				reg = <2>;
+				linux,modalias = "legerity";
+				spi-max-frequency = <8000000>;
+				ch1-rx-slot = <4>;
+				ch1-tx-slot = <4>;
+				ch2-rx-slot = <6>;
+				ch2-tx-slot = <6>;
+			};
 		};
 
 		dma@c300 {
@@ -243,6 +265,15 @@
 				interrupt-parent = <&mpic>;
 				interrupts = <79 2>;
 			};
+		};
+
+		tdm@16000 {
+			device_type = "tdm";
+			compatible = "fsl,starlite-tdm";
+			reg = <0x16000 0x1000 0x2c000 0x2000>;
+			clock-frequency = <0>;
+			interrupts = <63 8 62 8>;
+			interrupt-parent = < &mpic >;
 		};
 
 		mdio@24000 {
