@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35
-# Tue Mar  8 20:10:18 2011
+# Wed Mar 16 18:30:56 2011
 #
 # CONFIG_PPC64 is not set
 
@@ -785,7 +785,7 @@ CONFIG_SATA_PMP=y
 #
 # Controllers with non-SFF native interface
 #
-# CONFIG_SATA_AHCI is not set
+CONFIG_SATA_AHCI=y
 # CONFIG_SATA_AHCI_PLATFORM is not set
 CONFIG_SATA_FSL=y
 # CONFIG_SATA_INIC162X is not set
@@ -991,6 +991,7 @@ CONFIG_GFAR_SKBUFF_RECYCLING=y
 # CONFIG_RX_TX_BD_XNGE is not set
 CONFIG_GIANFAR_TXNAPI=y
 # CONFIG_GIANFAR_L2SRAM is not set
+# CONFIG_GFAR_SW_VLAN is not set
 # CONFIG_NET_GIANFAR_FP is not set
 # CONFIG_1588_MUX_eTSEC1 is not set
 # CONFIG_1588_MUX_eTSEC2 is not set
