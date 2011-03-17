@@ -515,6 +515,7 @@
 			interrupt-parent = <&mpic>;
 			interrupts = <28 0x2>;
 			phy_type = "ulpi";
+			dr_mode = "host";
 		};
 
 		/* USB2 is shared with localbus. It is used
