@@ -2703,6 +2703,7 @@ static int tcp_fast_ack(struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	skb_set_owner_w(skb, sk);
 	skb->next = 0;
 	atomic_set(&skb->users, 1);
 	atomic_set(&(skb_shinfo(skb)->dataref), 1);
@@ -2752,7 +2753,8 @@ void tcp_send_ack(struct sock *sk)
 
 	buff = NULL;
 #ifdef CONFIG_TCP_FAST_ACK
-	buff = skb_dequeue(&sk->sk_ack_queue);
+	if (!skb_queue_empty(&sk->sk_ack_queue))
+		buff = __skb_dequeue_tail(&sk->sk_ack_queue);
 	if (buff && tcp_fast_ack(sk, buff))
 		return;
 #endif

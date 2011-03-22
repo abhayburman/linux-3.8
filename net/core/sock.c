@@ -1104,7 +1104,9 @@ static void __sk_free(struct sock *sk)
 
 	if (sk->sk_destruct)
 		sk->sk_destruct(sk);
-
+#ifdef CONFIG_TCP_FAST_ACK
+	skb_queue_purge(&sk->sk_ack_queue);
+#endif
 	filter = rcu_dereference_check(sk->sk_filter,
 				       atomic_read(&sk->sk_wmem_alloc) == 0);
 	if (filter) {
@@ -1127,9 +1129,6 @@ static void __sk_free(struct sock *sk)
 #endif
 	put_net(sock_net(sk));
 	sk_prot_free(sk->sk_prot_creator, sk);
-#ifdef CONFIG_TCP_FAST_ACK
-	skb_queue_purge(&sk->sk_ack_queue);
-#endif
 }
 
 void sk_free(struct sock *sk)
