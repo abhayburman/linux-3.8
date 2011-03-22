@@ -464,6 +464,28 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc";
+			reg = <0xe0070 0x20>;
+
+			etsec1_clk: soc-clk@24{
+				fsl,pmcdr-mask = <0x00000080>;
+			};
+			etsec2_clk: soc-clk@25{
+				fsl,pmcdr-mask = <0x00000040>;
+			};
+			etsec3_clk: soc-clk@26{
+				fsl,pmcdr-mask = <0x00000020>;
+			};
+		};
+
 		msi@41600 {
 			compatible = "fsl,p1020-msi", "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
