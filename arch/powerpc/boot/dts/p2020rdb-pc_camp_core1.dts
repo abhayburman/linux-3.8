@@ -166,6 +166,13 @@
 				0xe7 0>;
 			interrupt-parent = <&mpic>;
 		};
+
+		global-utilities@e0000 {
+			compatible = "fsl,p2020-guts";
+			reg = <0xe0000 0x1000>;
+			fsl,has-rstcr;
+		};
+
 	};
 
 	pci1: pcie@ffe0a000 {
@@ -177,8 +184,8 @@
 		#address-cells = <3>;
 		reg = <0 0xffe0a000 0 0x1000>;
 		bus-range = <0 255>;
-		ranges = <0x2000000 0x0 0xc0000000 0 0xc0000000 0x0 0x20000000
-			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
+		ranges = <0x2000000 0x0 0x80000000 0 0x80000000 0x0 0x20000000
+			  0x1000000 0x0 0x00000000 0 0xffc00000 0x0 0x10000>;
 		clock-frequency = <33333333>;
 		interrupt-parent = <&mpic>;
 		interrupts = <26 2>;
@@ -195,8 +202,8 @@
 			#size-cells = <2>;
 			#address-cells = <3>;
 			device_type = "pci";
-			ranges = <0x2000000 0x0 0xc0000000
-				  0x2000000 0x0 0xc0000000
+			ranges = <0x2000000 0x0 0x80000000
+				  0x2000000 0x0 0x80000000
 				  0x0 0x20000000
 
 				  0x1000000 0x0 0x0
