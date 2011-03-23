@@ -129,7 +129,7 @@
 			fsl_m25p80@0 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "fsl,espi-flash";
+				compatible = "fsl,espi-flash","spansion,s25sl12801";
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
 				modal = "s25sl128b";

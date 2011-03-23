@@ -129,7 +129,7 @@
 			fsl_m25p80@0 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "fsl,espi-flash";
+				compatible = "fsl,espi-flash","spansion,s25sl12801";
 				reg = <0>;
 				linux,modalias = "fsl_m25p80";
 				modal = "s25sl128b";
@@ -175,7 +175,7 @@
 // are sitting at same CS #0
 // either legerity or SPI flash node will be deleted by u-boot fixup at runtime.
 			legerity@0{
-				compatible = "fsl,espi-slic";
+				compatible = "fsl,espi-slic","zarlink,le88266";
 				reg = <0>;
 				linux,modalias = "legerity";
 				spi-max-frequency = <8000000>;
