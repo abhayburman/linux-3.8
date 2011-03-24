@@ -1422,9 +1422,9 @@ struct gfar_private {
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	int sps; /*flag for s/w packet steering */
 #endif
-
-	unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
-	unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];
+	u32 max_filer_rules;
+	u32 *ftp_rqfpr;
+	u32 *ftp_rqfcr;
 };
 
 #ifdef CONFIG_GFAR_SW_PKT_STEERING

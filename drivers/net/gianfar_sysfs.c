@@ -10,7 +10,7 @@
  * Maintainer: Kumar Gala (galak@kernel.crashing.org)
  * Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- * Copyright 2002-2010 Freescale Semiconductor, Inc.
+ * Copyright 2002-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -349,6 +349,18 @@ static DEVICE_ATTR(recycle_max, 0644, gfar_show_recycle_max,
 				gfar_set_recycle_max);
 #endif
 
+static ssize_t gfar_show_max_filer_rules(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%d\n", priv->max_filer_rules);
+}
+
+static DEVICE_ATTR(max_filer_rules, 0444, gfar_show_max_filer_rules,
+				NULL);
+
 void gfar_init_sysfs(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
@@ -369,6 +381,7 @@ void gfar_init_sysfs(struct net_device *dev)
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 	rc |= device_create_file(&dev->dev, &dev_attr_recycle_max);
 #endif
+	rc |= device_create_file(&dev->dev, &dev_attr_max_filer_rules);
 	if (rc)
 		dev_err(&dev->dev, "Error creating gianfar sysfs files.\n");
 }
