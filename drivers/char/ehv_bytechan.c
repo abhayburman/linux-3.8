@@ -37,7 +37,11 @@
 #include <linux/console.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/circ_buf.h>
 #include <asm/udbg.h>
+
+/* The size of the transmit circular buffer.  This must be a power of two. */
+#define BUF_SIZE	2048
 
 /* Per-byte channel private data */
 struct ehv_bc_data {
@@ -47,6 +51,13 @@ struct ehv_bc_data {
 	uint32_t handle;
 	unsigned int rx_irq;
 	unsigned int tx_irq;
+
+	spinlock_t lock;	/* lock for transmit buffer */
+	unsigned char buf[BUF_SIZE];	/* transmit circular buffer */
+	unsigned int head;	/* circular buffer head */
+	unsigned int tail;	/* circular buffer tail */
+
+	int tx_irq_enabled;	/* true == TX interrupt is enabled */
 };
 
 /* Array of byte channel objects */
@@ -59,6 +70,38 @@ static unsigned int stdout_bc;
 static unsigned int stdout_irq;
 
 /**************************** SUPPORT FUNCTIONS ****************************/
+
+/*
+ * Enable the transmit interrupt
+ *
+ * Unlike a serial device, byte channels have no mechanism for disabling their
+ * own receive or transmit interrupts.  To emulate that feature, we toggle
+ * the IRQ in the kernel.
+ *
+ * We cannot just blindly call enable_irq() or disable_irq(), because these
+ * calls are reference counted.  This means that we cannot call enable_irq()
+ * if interrupts are already enabled.  This can happen in two situations:
+ *
+ * 1. The tty layer makes two back-to-back calls to ehv_bc_tty_write()
+ * 2. A transmit interrupt occurs while executing ehv_bc_tx_dequeue()
+ *
+ * To work around this, we keep a flag to tell us if the IRQ is enabled or not.
+ */
+static void enable_tx_interrupt(struct ehv_bc_data *bc)
+{
+	if (!bc->tx_irq_enabled) {
+		enable_irq(bc->tx_irq);
+		bc->tx_irq_enabled = 1;
+	}
+}
+
+static void disable_tx_interrupt(struct ehv_bc_data *bc)
+{
+	if (bc->tx_irq_enabled) {
+		disable_irq_nosync(bc->tx_irq);
+		bc->tx_irq_enabled = 0;
+	}
+}
 
 /*
  * find the byte channel handle to use for the console
@@ -395,6 +438,47 @@ static irqreturn_t ehv_bc_tty_rx_isr(int irq, void *data)
 }
 
 /*
+ * dequeue the transmit buffer to the hypervisor
+ *
+ * This function, which can be called in interrupt context, dequeues as much
+ * data as possible from the transmit buffer to the byte channel.
+ */
+static void ehv_bc_tx_dequeue(struct ehv_bc_data *bc)
+{
+	unsigned int count;
+	unsigned int len, ret;
+	unsigned long flags;
+
+	do {
+		spin_lock_irqsave(&bc->lock, flags);
+		len = min_t(unsigned int,
+			    CIRC_CNT_TO_END(bc->head, bc->tail, BUF_SIZE),
+			    EV_BYTE_CHANNEL_MAX_BYTES);
+
+		ret = ev_byte_channel_send(bc->handle, &len, bc->buf + bc->tail);
+
+		/* 'len' is valid only if the return code is 0 or EV_EAGAIN */
+		if (!ret || (ret == EV_EAGAIN))
+			bc->tail = (bc->tail + len) & (BUF_SIZE - 1);
+
+		count = CIRC_CNT(bc->head, bc->tail, BUF_SIZE);
+		spin_unlock_irqrestore(&bc->lock, flags);
+	} while (count && !ret);
+
+	spin_lock_irqsave(&bc->lock, flags);
+	if (CIRC_CNT(bc->head, bc->tail, BUF_SIZE))
+		/*
+		 * If we haven't emptied the buffer, then enable the TX IRQ.
+		 * We'll get an interrupt when there's more room in the
+		 * hypervisor's output buffer.
+		 */
+		enable_tx_interrupt(bc);
+	else
+		disable_tx_interrupt(bc);
+	spin_unlock_irqrestore(&bc->lock, flags);
+}
+
+/*
  * byte channel transmit interupt handler
  *
  * This ISR is called whenever space becomes available for transmitting
@@ -404,37 +488,50 @@ static irqreturn_t ehv_bc_tty_tx_isr(int irq, void *data)
 {
 	struct ehv_bc_data *bc = data;
 
-	disable_irq_nosync(bc->tx_irq);
+	ehv_bc_tx_dequeue(bc);
 	tty_wakeup(bc->ttys);
 
 	return IRQ_HANDLED;
 }
 
+/*
+ * This function is called when the tty layer has data for us send.  We store
+ * the data first in a circular buffer, and then dequeue as much of that data
+ * as possible.
+ *
+ * We don't need to worry about whether there is enough room in the buffer for
+ * all the data.  The purpose of ehv_bc_tty_write_room() is to tell the tty
+ * layer how much data it can safely send to us.  We guarantee that
+ * ehv_bc_tty_write_room() will never lie, so the tty layer will never send us
+ * too much data.
+ */
 static int ehv_bc_tty_write(struct tty_struct *ttys, const unsigned char *s,
 			    int count)
 {
 	struct ehv_bc_data *bc = ttys->driver_data;
-	unsigned int ret;
+	unsigned long flags;
 	unsigned int len;
-	int written = 0;
+	unsigned int written = 0;
 
-	while (count) {
-		len = min_t(unsigned, count, EV_BYTE_CHANNEL_MAX_BYTES);
-		ret = ev_byte_channel_send(bc->handle, &len, s);
-		if (ret) {
-			if (ret == EV_EAGAIN)
-				/* If we can't write all the data at once,
-				 * then enable the TX IRQ.  We'll get an
-				 * interrupt when there's more room in the
-				 * output buffer.
-				 */
-				enable_irq(bc->tx_irq);
-			break;
+	while (1) {
+		spin_lock_irqsave(&bc->lock, flags);
+		len = CIRC_SPACE_TO_END(bc->head, bc->tail, BUF_SIZE);
+		if (count < len)
+			len = count;
+		if (len) {
+			memcpy(bc->buf + bc->head, s, len);
+			bc->head = (bc->head + len) & (BUF_SIZE - 1);
 		}
-		written += len;
-		count -= len;
+		spin_unlock_irqrestore(&bc->lock, flags);
+		if (!len)
+			break;
+
 		s += len;
+		count -= len;
+		written += len;
 	}
+
+	ehv_bc_tx_dequeue(bc);
 
 	return written;
 }
@@ -478,16 +575,14 @@ static void ehv_bc_tty_close(struct tty_struct *ttys, struct file *filp)
 static int ehv_bc_tty_write_room(struct tty_struct *ttys)
 {
 	struct ehv_bc_data *bc = ttys->driver_data;
-	unsigned int rx_count, tx_count;
-	unsigned int ret;
+	unsigned long flags;
+	int count;
 
-	/* Returns the amount of free space in the TX buffer */
-	ret = ev_byte_channel_poll(bc->handle, &rx_count, &tx_count);
-	if (ret)
-		/* Failure can occur only if the byte channel handle is wrong */
-		return -EINVAL;
+	spin_lock_irqsave(&bc->lock, flags);
+	count = CIRC_SPACE(bc->head, bc->tail, BUF_SIZE);
+	spin_unlock_irqrestore(&bc->lock, flags);
 
-	return tx_count;
+	return count;
 }
 
 /*
@@ -565,6 +660,9 @@ static int ehv_bc_tty_port_activate(struct tty_port *port,
 		return ret;
 	}
 
+	/* request_irq also enables the IRQ */
+	bc->tx_irq_enabled = 1;
+
 	ret = request_irq(bc->tx_irq, ehv_bc_tty_tx_isr, 0, "ehv-bc", bc);
 	if (ret < 0) {
 		dev_err(bc->dev, "could not request tx irq %u (ret=%i)\n",
@@ -576,7 +674,7 @@ static int ehv_bc_tty_port_activate(struct tty_port *port,
 	/* The TX IRQ is enabled only when we can't write all the data to the
 	 * byte channel at once, so by default it's disabled.
 	 */
-	disable_irq(bc->tx_irq);
+	disable_tx_interrupt(bc);
 
 	return 0;
 }
@@ -624,6 +722,9 @@ static int __devinit ehv_bc_tty_of_probe(struct of_device *of_dev,
 	bc = &bcs[i];
 
 	bc->handle = handle;
+	bc->head = 0;
+	bc->tail = 0;
+	spin_lock_init(&bc->lock);
 
 	bc->rx_irq = irq_of_parse_and_map(np, 0);
 	bc->tx_irq = irq_of_parse_and_map(np, 1);
