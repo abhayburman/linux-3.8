@@ -1,6 +1,6 @@
 /* ePAPR hypervisor byte channel device driver
  *
- * Copyright 2009-2010 Freescale Semiconductor, Inc.
+ * Copyright 2009-2011 Freescale Semiconductor, Inc.
  *
  * Author: Timur Tabi <timur@freescale.com>
  *
@@ -441,19 +441,31 @@ static int ehv_bc_tty_write(struct tty_struct *ttys, const unsigned char *s,
 
 /* This function can be called multiple times for a given tty_struct, which is
  * why we initialize bc->ttys in ehv_bc_tty_port_activate() instead.
+ *
+ * For some reason, the tty layer will still call this function even if the
+ * device was not registered (i.e. tty_register_device() was not called).  So
+ * we need to check for that.
  */
 static int ehv_bc_tty_open(struct tty_struct *ttys, struct file *filp)
 {
 	struct ehv_bc_data *bc = &bcs[ttys->index];
 
+	if (!bc->dev)
+		return -ENODEV;
+
 	return tty_port_open(&bc->port, ttys, filp);
 }
 
+/* Amazingly, if ehv_bc_tty_open() returns an error code, the tty layer will
+ * still call this function to close the tty device.  So we can't assume that
+ * the tty port has been initialized.
+ */
 static void ehv_bc_tty_close(struct tty_struct *ttys, struct file *filp)
 {
-	struct ehv_bc_data *bc = ttys->driver_data;
+	struct ehv_bc_data *bc = &bcs[ttys->index];
 
-	tty_port_close(&bc->port, ttys, filp);
+	if (bc->dev)
+		tty_port_close(&bc->port, ttys, filp);
 }
 
 /*
@@ -622,7 +634,7 @@ static int __devinit ehv_bc_tty_of_probe(struct of_device *of_dev,
 		goto error;
 	}
 
-	bc->dev = tty_register_device(ehv_bc_driver, bc - bcs, &of_dev->dev);
+	bc->dev = tty_register_device(ehv_bc_driver, i, &of_dev->dev);
 	if (IS_ERR(bc->dev)) {
 		ret = PTR_ERR(bc->dev);
 		dev_err(&of_dev->dev, "could not register tty (ret=%i)\n", ret);
@@ -635,7 +647,7 @@ static int __devinit ehv_bc_tty_of_probe(struct of_device *of_dev,
 	dev_set_drvdata(&of_dev->dev, bc);
 
 	dev_info(&of_dev->dev, "registered /dev/%s%u for byte channel %u\n",
-		ehv_bc_driver->name, index, bc->handle);
+		ehv_bc_driver->name, i, bc->handle);
 
 	return 0;
 
@@ -643,6 +655,7 @@ error:
 	irq_dispose_mapping(bc->tx_irq);
 	irq_dispose_mapping(bc->rx_irq);
 
+	memset(bc, 0, sizeof(struct ehv_bc_data));
 	return ret;
 }
 
