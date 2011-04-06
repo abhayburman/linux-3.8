@@ -61,36 +61,6 @@ static unsigned int stdout_irq;
 /**************************** SUPPORT FUNCTIONS ****************************/
 
 /*
- * return TRUE if we're running under FSL hypervisor
- *
- * This function checks to see if we're running under the Freescale
- * hypervisor, and returns zero if we're not, or non-zero if we are.
- *
- * First, it checks if MSR[GS]==1, which means we're running under some
- * hypervisor.  Then it checks if there is a hypervisor node in the device
- * tree.  Currently, that means there needs to be a node in the root called
- * "hypervisor" and which has a property named "fsl,hv-version".
- */
-static int has_fsl_hypervisor(void)
-{
-	struct device_node *node;
-	int ret;
-
-	if (!(mfmsr() & MSR_GS))
-		return 0;
-
-	node = of_find_node_by_path("/hypervisor");
-	if (!node)
-		return 0;
-
-	ret = of_find_property(node, "fsl,hv-version", NULL) != NULL;
-
-	of_node_put(node);
-
-	return ret;
-}
-
-/*
  * find the byte channel handle to use for the console
  *
  * The byte channel to be used for the console is specified via a "stdout"
@@ -700,11 +670,6 @@ static int __init ehv_bc_init(void)
 	int ret;
 
 	pr_info("ePAPR hypervisor byte channel console driver\n");
-
-	if (!has_fsl_hypervisor()) {
-		pr_info("ehv-bc: no hypervisor found\n");
-		return -ENODEV;
-	}
 
 	/* Count the number of byte channels */
 	for_each_compatible_node(np, NULL, "epapr,hv-byte-channel")
