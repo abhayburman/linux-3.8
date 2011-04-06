@@ -68,7 +68,7 @@ static unsigned int stdout_irq;
  *
  * For compatible with legacy device trees, we also look for a "stdout" alias.
  */
-static void find_console_handle(void)
+static int find_console_handle(void)
 {
 	struct device_node *np, *np2;
 	const char *sprop = NULL;
@@ -87,7 +87,7 @@ static void find_console_handle(void)
 
 	if (!sprop) {
 		of_node_put(np);
-		return;
+		return 0;
 	}
 
 	/* We don't care what the aliased node is actually called.  We only
@@ -101,28 +101,32 @@ static void find_console_handle(void)
 	np = np2;
 	if (!np) {
 		pr_warning("ehv-bc: stdout node '%s' does not exist\n", sprop);
-		return;
+		return 0;
 	}
 
 	/* Is it a byte channel? */
-	if (!of_device_is_compatible(np, "epapr,hv-byte-channel"))
-		goto exit;
+	if (!of_device_is_compatible(np, "epapr,hv-byte-channel")) {
+		of_node_put(np);
+		return 0;
+	}
 
 	stdout_irq = irq_of_parse_and_map(np, 0);
 	if (stdout_irq == NO_IRQ) {
 		pr_err("ehv-bc: no 'interrupts' property in %s node\n", sprop);
-		goto exit;
+		of_node_put(np);
+		return 0;
 	}
 
 	iprop = of_get_property(np, "reg", NULL);
 	if (!iprop) {
 		pr_err("ehv-bc: no 'reg' property in %s node\n", np->name);
-		goto exit;
+		of_node_put(np);
+		return 0;
 	}
 	stdout_bc = be32_to_cpu(*iprop);
 
-exit:
 	of_node_put(np);
+	return 1;
 }
 
 /*************************** EARLY CONSOLE DRIVER ***************************/
@@ -288,8 +292,7 @@ static struct console ehv_bc_console = {
  */
 static int __init ehv_bc_console_init(void)
 {
-	find_console_handle();
-	if (!stdout_bc) {
+	if (!find_console_handle()) {
 		pr_debug("ehv-bc: stdout is not a byte channel\n");
 		return -ENODEV;
 	}
