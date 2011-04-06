@@ -117,9 +117,16 @@ static int find_console_handle(void)
 		return 0;
 	}
 
-	iprop = of_get_property(np, "reg", NULL);
+	/* The 'hv-handle' property contains the handle for this byte channel.
+	 * For compatibility with some older hypervisors, we also look for the
+	 * 'reg' property.
+	 */
+	iprop = of_get_property(np, "hv-handle", NULL);
+	if (!iprop)
+		iprop = of_get_property(np, "reg", NULL);
 	if (!iprop) {
-		pr_err("ehv-bc: no 'reg' property in %s node\n", np->name);
+		pr_err("ehv-bc: no 'hv-handle' property in %s node\n",
+		       np->name);
 		of_node_put(np);
 		return 0;
 	}
@@ -581,15 +588,17 @@ static int __devinit ehv_bc_tty_of_probe(struct of_device *of_dev,
 {
 	struct device_node *np = of_dev->node;
 	struct ehv_bc_data *bc;
-	const uint32_t *reg;
+	const uint32_t *iprop;
 	unsigned int handle;
 	int ret;
 	static unsigned int index = 1;
 	unsigned int i;
 
-	reg = of_get_property(np, "reg", NULL);
-	if (!reg) {
-		dev_err(&of_dev->dev, "no 'reg' property in %s node\n",
+	iprop = of_get_property(np, "hv-handle", NULL);
+	if (!iprop)
+		iprop = of_get_property(np, "reg", NULL);
+	if (!iprop) {
+		dev_err(&of_dev->dev, "no 'hv-handle' property in %s node\n",
 			np->name);
 		return -ENODEV;
 	}
@@ -598,7 +607,7 @@ static int __devinit ehv_bc_tty_of_probe(struct of_device *of_dev,
 	 * device is zero, so we need to make sure that we use that index when
 	 * we probe the console byte channel node.
 	 */
-	handle = be32_to_cpu(*reg);
+	handle = be32_to_cpu(*iprop);
 	i = (handle == stdout_bc) ? 0 : index++;
 	bc = &bcs[i];
 
