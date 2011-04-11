@@ -1,7 +1,7 @@
 /*
  * P1022 DS 36Bit Physical Address Map Device Tree Source
  *
- * Copyright 2010 Freescale Semiconductor, Inc.
+ * Copyright 2010-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -57,7 +57,7 @@
 
 		ranges = <0x0 0x0 0xf 0xe8000000 0x08000000
 			  0x1 0x0 0xf 0xe0000000 0x08000000
-			  0x2 0x0 0xf 0xffa00000 0x00040000
+			  0x2 0x0 0xf 0xff800000 0x00040000
 			  0x3 0x0 0xf 0xffdf0000 0x00008000>;
 
 		nor@0,0 {
