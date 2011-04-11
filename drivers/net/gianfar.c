@@ -3903,7 +3903,12 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 
 #ifdef CONFIG_RX_TX_BD_XNGE
+	{
+	unsigned int dataref;
+	dataref = atomic_read(&(skb_shinfo(skb)->dataref));
 	gfar_clean_reclaim_skb(skb);
+	atomic_set(&(skb_shinfo(skb)->dataref), dataref);
+	}
 	skb->new_skb = new_skb;
 #endif
 	return NETDEV_TX_OK;
@@ -4060,7 +4065,12 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 		spin_unlock_irqrestore(&tx_queue->txlock, flags);
 #endif
 #ifdef CONFIG_RX_TX_BD_XNGE
+	{
+	unsigned int dataref;
+	dataref = atomic_read(&(skb_shinfo(skb)->dataref));
 	gfar_clean_reclaim_skb(skb);
+	atomic_set(&(skb_shinfo(skb)->dataref), dataref);
+	}
 	skb->new_skb = new_skb;
 #endif
 
