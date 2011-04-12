@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005,2006,2009,2010 Freescale Semiconductor, Inc.
+ * Copyright (C) 2005,2006,2009-2011 Freescale Semiconductor, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -99,20 +99,22 @@ int32_t edc_start(uint32_t cmd)
 	/* Start TSEC RMON counters */
 	if (cmd & EDC_START_RMON) {
 		/* disable RMON */
-		*G_etsec1_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec2_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec3_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec4_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec1_rmon_ctrl_reg) *G_etsec1_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec2_rmon_ctrl_reg) *G_etsec2_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec3_rmon_ctrl_reg) *G_etsec3_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec4_rmon_ctrl_reg) *G_etsec4_rmon_ctrl_reg &= ~RMON_STEN;
+
 		/* clear counters (self-resetting bit) */
-		*G_etsec1_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec2_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec3_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec4_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec1_rmon_ctrl_reg) *G_etsec1_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec2_rmon_ctrl_reg) *G_etsec2_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec3_rmon_ctrl_reg) *G_etsec3_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec4_rmon_ctrl_reg) *G_etsec4_rmon_ctrl_reg |= RMON_CLRCNT;
+
 		/* enable RMON */
-		*G_etsec1_rmon_ctrl_reg |= RMON_STEN;
-		*G_etsec2_rmon_ctrl_reg |= RMON_STEN;
-		*G_etsec3_rmon_ctrl_reg |= RMON_STEN;
-		*G_etsec4_rmon_ctrl_reg |= RMON_STEN;
+		if (G_etsec1_rmon_ctrl_reg) *G_etsec1_rmon_ctrl_reg |= RMON_STEN;
+		if (G_etsec2_rmon_ctrl_reg) *G_etsec2_rmon_ctrl_reg |= RMON_STEN;
+		if (G_etsec3_rmon_ctrl_reg) *G_etsec3_rmon_ctrl_reg |= RMON_STEN;
+		if (G_etsec4_rmon_ctrl_reg) *G_etsec4_rmon_ctrl_reg |= RMON_STEN;
 	}
 
 	if (!(cmd & (EDC_START_CORE | EDC_START_SYS | EDC_START_RMON |
@@ -145,10 +147,10 @@ int32_t edc_stop(uint32_t cmd)
 	/* Stop TSEC RMON counters */
 	if (cmd & EDC_STOP_RMON) {
 		/* disable RMON */
-		*G_etsec1_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec2_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec3_rmon_ctrl_reg &= ~RMON_STEN;
-		*G_etsec4_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec1_rmon_ctrl_reg) *G_etsec1_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec2_rmon_ctrl_reg) *G_etsec2_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec3_rmon_ctrl_reg) *G_etsec3_rmon_ctrl_reg &= ~RMON_STEN;
+		if (G_etsec4_rmon_ctrl_reg) *G_etsec4_rmon_ctrl_reg &= ~RMON_STEN;
 	}
 
 	if (!(cmd & (EDC_STOP_CORE | EDC_STOP_SYS | EDC_STOP_RMON |
@@ -216,10 +218,10 @@ int32_t edc_reset(uint32_t cmd)
 	/* Reset TSEC RMON counters */
 	if (cmd & EDC_RESET_RMON) {
 		/* clear counters (self-resetting bit) */
-		*G_etsec1_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec2_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec3_rmon_ctrl_reg |= RMON_CLRCNT;
-		*G_etsec4_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec1_rmon_ctrl_reg) *G_etsec1_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec2_rmon_ctrl_reg) *G_etsec2_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec3_rmon_ctrl_reg) *G_etsec3_rmon_ctrl_reg |= RMON_CLRCNT;
+		if (G_etsec4_rmon_ctrl_reg) *G_etsec4_rmon_ctrl_reg |= RMON_CLRCNT;
 	}
 
 	#else
@@ -384,6 +386,7 @@ int32_t edc_config_rmon(uint32_t **ptr_write_buffer)
 	return EDC_NO_ERROR;
 }
 
+extern int num_etsec;
 int32_t edc_read(uint32_t count, uint32_t *read_buffer)
 {
 	/* CLARIFY: Explain the comment below. If count is not going to be used
@@ -415,19 +418,19 @@ int32_t edc_read(uint32_t count, uint32_t *read_buffer)
 		*(read_buffer+j++) = G_pmon_regs[SPMON_PMC(i)];
 
 	/* RMON registers */
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[0]));
+	if (num_etsec > 0) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[0]));
 	DEBUG_PRINT("G_rmon_base+G_rmon_offset[0] = 0x%x\n",
 			G_rmon_base+G_rmon_offset[0]);
 	DEBUG_PRINT("TSEC_ID (for MPC8548 expecting 0x1240000) = 0x%x\n",
 			*((uint32_t *)G_rmon_base));
 
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[1]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[2]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[3]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[4]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[5]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[6]));
-	*(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[7]));
+	if (num_etsec > 1) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[1]));
+	if (num_etsec > 2) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[2]));
+	if (num_etsec > 3) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[3]));
+	if (num_etsec > 4) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[4]));
+	if (num_etsec > 5) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[5]));
+	if (num_etsec > 6) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[6]));
+	if (num_etsec > 7) *(read_buffer+j++) = *((uint32_t *)(G_rmon_base+G_rmon_offset[7]));
 
 	/* return number of bytes read out */
 	/* ???: Should this be sizeof(uint64_t) for 64-bit architectures? */

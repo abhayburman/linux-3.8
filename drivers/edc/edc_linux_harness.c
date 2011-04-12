@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005,2006,2009,2010 Freescale Semiconductor, Inc.
+ * Copyright (C) 2005,2006,2009-2011 Freescale Semiconductor, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -51,6 +51,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/proc_fs.h>
+#include <linux/of.h>
 
 #include <asm/io.h>        /* For ioremap */
 #include <asm/reg_booke.h> /* For register definitions */
@@ -59,13 +60,6 @@
 
 #include "perfmon.h"
 #include "edc.h"
-
-/* CMME: What does CCSRBAR stand for? Very ambiguous. Also what is 0xff70000? */
-/* CLARIFY: per u-boot decision */
-#ifndef CCSRBAR
-#warning CCSRBAR is not defined
-#define  CCSRBAR ((uint32_t) 0xe0000000)
-#endif
 
 /*! \name Linux Module Definition Functions */
 /*@{*/
@@ -223,8 +217,11 @@ static struct file_operations G_edc_linux_fileops = {
  Function Definitions
 ******************************************************************************/
 
+int num_etsec = 0;
+extern phys_addr_t get_immrbase(void);
 int32_t __init edc_linux_init(void)
 {
+	struct device_node *np;
 	DEBUG_PRINT("SWIM EDC: Function = %s, Line = %i\n",
 		__func__, __LINE__);
 
@@ -239,36 +236,48 @@ int32_t __init edc_linux_init(void)
 	}
 	printk(KERN_INFO "SWIM EDC: major num is %d\n", G_major);
 
+	for_each_compatible_node(np, NULL, "fsl,etsec2") {
+		num_etsec++;
+	}
+
 	/* Set the performance monitor register base address */
 	/* This maps 256 bytes worth of IO memory, offset at 0xe1000 */
-	G_pmon_regs = (uint32_t *) ioremap(((uint32_t)CCSRBAR + 0xe1000),
+	G_pmon_regs = (uint32_t *) ioremap(((uint32_t)get_immrbase() + 0xe1000),
 		0x100);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. PerfMon base address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_pmon_regs);
+	printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. PerfMon base address= %x\n",
+		(uint32_t)get_immrbase(), (uint32_t)G_pmon_regs);
 
 	/* Set TSEC RMON registers base address */
 	/* Each TSEC block has its additional offset from the base */
-	G_rmon_base = (char *) ioremap(((uint32_t)CCSRBAR + 0x24000), 0x4000);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. eTSEC RMON base address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_rmon_base);
+	G_rmon_base = (char *) ioremap(((uint32_t)get_immrbase() + 0x24000), 0x4000);
+	printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. eTSEC RMON base address= %x\n",
+		(uint32_t)get_immrbase(), (uint32_t)G_rmon_base);
 
 	/* Set TSEC RMON control registers base addresses for each TSEC block */
-	G_etsec1_rmon_ctrl_reg =
-		(uint32_t *) ioremap(((uint32_t)CCSRBAR + 0x24020), 0x4);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. TSEC1 RMON ctrl address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_etsec1_rmon_ctrl_reg);
-	G_etsec2_rmon_ctrl_reg =
-		(uint32_t *) ioremap(((uint32_t)CCSRBAR + 0x25020), 0x4);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. TSEC2 RMON ctrl address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_etsec2_rmon_ctrl_reg);
-	G_etsec3_rmon_ctrl_reg =
-		(uint32_t *) ioremap(((uint32_t)CCSRBAR + 0x26020), 0x4);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. TSEC3 RMON ctrl address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_etsec3_rmon_ctrl_reg);
-	G_etsec4_rmon_ctrl_reg =
-		(uint32_t *) ioremap(((uint32_t)CCSRBAR + 0x27020), 0x4);
-	printk(KERN_INFO "SWIM EDC: CCSRBAR=%x. TSEC4 RMON ctrl address= %x\n",
-		(uint32_t)CCSRBAR, (uint32_t)G_etsec4_rmon_ctrl_reg);
+	if (num_etsec > 0) {
+		G_etsec1_rmon_ctrl_reg =
+			(uint32_t *) ioremap(((uint32_t)get_immrbase() + 0x24020), 0x4);
+		printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. TSEC1 RMON ctrl address= %x\n",
+			(uint32_t)get_immrbase(), (uint32_t)G_etsec1_rmon_ctrl_reg);
+	}
+	if (num_etsec > 1) {
+		G_etsec2_rmon_ctrl_reg =
+			(uint32_t *) ioremap(((uint32_t)get_immrbase() + 0x25020), 0x4);
+		printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. TSEC2 RMON ctrl address= %x\n",
+			(uint32_t)get_immrbase(), (uint32_t)G_etsec2_rmon_ctrl_reg);
+	}
+	if (num_etsec > 2) {
+		G_etsec3_rmon_ctrl_reg =
+			(uint32_t *) ioremap(((uint32_t)get_immrbase() + 0x26020), 0x4);
+		printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. TSEC3 RMON ctrl address= %x\n",
+			(uint32_t)get_immrbase(), (uint32_t)G_etsec3_rmon_ctrl_reg);
+	}
+	if (num_etsec > 3) {
+		G_etsec4_rmon_ctrl_reg =
+			(uint32_t *) ioremap(((uint32_t)get_immrbase() + 0x27020), 0x4);
+		printk(KERN_INFO "SWIM EDC: get_immrbase()=%x. TSEC4 RMON ctrl address= %x\n",
+			(uint32_t)get_immrbase(), (uint32_t)G_etsec4_rmon_ctrl_reg);
+	}
 
 	return 0;
 }
@@ -406,13 +415,13 @@ void __exit edc_linux_cleanup(void)
 		printk(KERN_INFO "SWIM EDC: unmap rmon registers\n");
 		iounmap(G_rmon_base);
 		G_rmon_base = NULL;
-		iounmap(G_etsec1_rmon_ctrl_reg);
+		if (G_etsec1_rmon_ctrl_reg) iounmap(G_etsec1_rmon_ctrl_reg);
 		G_etsec1_rmon_ctrl_reg = NULL;
-		iounmap(G_etsec2_rmon_ctrl_reg);
+		if (G_etsec2_rmon_ctrl_reg) iounmap(G_etsec2_rmon_ctrl_reg);
 		G_etsec2_rmon_ctrl_reg = NULL;
-		iounmap(G_etsec3_rmon_ctrl_reg);
+		if (G_etsec3_rmon_ctrl_reg) iounmap(G_etsec3_rmon_ctrl_reg);
 		G_etsec3_rmon_ctrl_reg = NULL;
-		iounmap(G_etsec4_rmon_ctrl_reg);
+		if (G_etsec4_rmon_ctrl_reg) iounmap(G_etsec4_rmon_ctrl_reg);
 		G_etsec4_rmon_ctrl_reg = NULL;
 	}
 
