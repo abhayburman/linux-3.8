@@ -363,7 +363,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			24 16 3 42 45		/* MEM L2 mdio serial SEC-int1*/
+			24 16 3 42 58		/* MEM L2 mdio serial SEC-int1*/
 			29 30 34 17 18 24	/* eth0 */
 			20 21 22 23 75		/* dma1 ssi*/
 			43 28 72		/* i2c usb esdhc */

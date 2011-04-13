@@ -273,7 +273,7 @@
 			compatible = "chrp,open-pic";
 			device_type = "open-pic";
 			protected-sources = <
-			35 36 40 51 52 67 58	/* enet1 SEC-int2*/
+			35 36 40 51 52 67 45	/* enet1 SEC-int2*/
 			76 77 78 79 9 42	/* dma2 mdio-phy1 serial*/
 			19 41 59		/* elbc sata2 spi */
 			0 1 2 3			/* pcie1 intx */
