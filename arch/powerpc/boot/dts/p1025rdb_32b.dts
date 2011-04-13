@@ -441,6 +441,7 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -472,6 +473,7 @@
 			phy-connection-type = "sgmii";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -502,6 +504,7 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -581,6 +584,28 @@
 				0xb6 2
 				0xb7 2>;
 			interrupt-parent = <&mpic>;
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		power@e0070{
+			compatible = "fsl,mpc8548-pmc";
+			reg = <0xe0070 0x20>;
+
+			etsec1_clk: soc-clk@24{
+				fsl,pmcdr-mask = <0x00000080>;
+			};
+			etsec2_clk: soc-clk@25{
+				fsl,pmcdr-mask = <0x00000040>;
+			};
+			etsec3_clk: soc-clk@26{
+				fsl,pmcdr-mask = <0x00000020>;
+			};
 		};
 
 		msi@41600 {
