@@ -676,7 +676,7 @@ int gfar_ptp_cal_attr(struct gfar_ptp_attr_t *ptp_attr)
 	}
 	sysclock_freq = (u32 *)of_get_property(np, "timer-frequency", NULL);
 	if (sysclock_freq == NULL) {
-		printk(KERN_ERR "1588: Cannot find timer-frequency property \r\n");
+		printk(KERN_DEBUG "1588: Cannot find timer-frequency property \r\n");
 		return 1;
 	}
 	printk(KERN_DEBUG "1588 is running at system-clock"
