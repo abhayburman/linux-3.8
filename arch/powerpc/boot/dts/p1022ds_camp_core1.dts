@@ -26,7 +26,6 @@
 	aliases {
 		ethernet1 = &enet1;
 		serial0 = &serial0;
-		pci1 = &pci1;
 	};
 
 	cpus {
@@ -369,44 +368,12 @@
 			43 28 72		/* i2c usb esdhc */
 			74 			/* sata1 pcie0 pcie1 */
 			8 10 11 12 4 5 6 7	/* pcie intx */
+			0 1  2  3
+			0xb0 0xb1 0xb2 0xb3
+			0xb4 0xb5 0xb6 0xb7	/* message */
 			0xe0 0xe1 0xe2 0xe3	/* msi */
 			0xe4 0xe5 0xe6 0xe7
 			>;
-		};
-	};
-
-	pci1: pcie@ffe0a000 {
-		compatible = "fsl,p1022-pcie";
-		device_type = "pci";
-		#interrupt-cells = <1>;
-		#size-cells = <2>;
-		#address-cells = <3>;
-		reg = <0xffe0a000 0x1000>;
-		bus-range = <0 255>;
-		ranges = <0x2000000 0x0 0xc0000000 0xc0000000 0x0 0x20000000
-			  0x1000000 0x0 0x00000000 0xffc20000 0x0 0x10000>;
-		clock-frequency = <33333333>;
-		interrupt-parent = <&mpic>;
-		interrupt-map-mask = <0xf800 0 0 7>;
-		interrupt-map = <
-			/* IDSEL 0x0 */
-			0000 0 0 1 &mpic 0 1
-			0000 0 0 2 &mpic 1 1
-			0000 0 0 3 &mpic 2 1
-			0000 0 0 4 &mpic 3 1
-			>;
-		pcie@0 {
-			reg = <0x0 0x0 0x0 0x0 0x0>;
-			#size-cells = <2>;
-			#address-cells = <3>;
-			device_type = "pci";
-			ranges = <0x2000000 0x0 0xc0000000
-				  0x2000000 0x0 0xc0000000
-				  0x0 0x20000000
-
-				  0x1000000 0x0 0x0
-				  0x1000000 0x0 0x0
-				  0x0 0x100000>;
 		};
 	};
 };

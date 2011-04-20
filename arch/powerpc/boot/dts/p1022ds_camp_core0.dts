@@ -25,6 +25,7 @@
 		ethernet0 = &enet0;
 		serial0 = &serial0;
 		pci0 = &pci0;
+		pci1 = &pci1;
 		pci2 = &pci2;
 	};
 
@@ -249,6 +250,22 @@
 			interrupt-parent = <&mpic>;
 		};
 
+		message@41400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			reg = <0x41400 0x200>;
+			cell-index = <1>;
+			interrupts = <0xb0 2 0xb1 2 0xb2 2 0xb3 2>;
+			interrupt-parent = < &mpic >;
+		};
+
+		message@42400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			cell-index = <2>;
+			interrupts = <0xb4 2 0xb5 2 0xb6 2 0xb7 2>;
+			interrupt-parent = < &mpic >;
+		};
+
 		msi@41600 {
 			compatible = "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
@@ -276,13 +293,13 @@
 			35 36 40 51 52 67 45	/* enet1 SEC-int2*/
 			76 77 78 79 9 42	/* dma2 mdio-phy1 serial*/
 			19 41 59		/* elbc sata2 spi */
-			0 1 2 3			/* pcie1 intx */
 			62 63			/* tdm */
 			>;
 		};
 	};
 
 	pci0: pcie@ffe09000 {
+		cell-index = <2>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -317,7 +334,44 @@
 		};
 	};
 
+	pci1: pcie@ffe0a000 {
+		cell-index = <1>;
+		compatible = "fsl,p1022-pcie";
+		device_type = "pci";
+		#interrupt-cells = <1>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0xffe0a000 0x1000>;
+		bus-range = <0 255>;
+		ranges = <0x2000000 0x0 0xc0000000 0xc0000000 0x0 0x20000000
+			  0x1000000 0x0 0x00000000 0xffc20000 0x0 0x10000>;
+		clock-frequency = <33333333>;
+		interrupt-parent = <&mpic>;
+		interrupt-map-mask = <0xf800 0 0 7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0 0 1 &mpic 0 1
+			0000 0 0 2 &mpic 1 1
+			0000 0 0 3 &mpic 2 1
+			0000 0 0 4 &mpic 3 1
+			>;
+		pcie@0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			#size-cells = <2>;
+			#address-cells = <3>;
+			device_type = "pci";
+			ranges = <0x2000000 0x0 0xc0000000
+				  0x2000000 0x0 0xc0000000
+				  0x0 0x20000000
+
+				  0x1000000 0x0 0x0
+				  0x1000000 0x0 0x0
+				  0x0 0x100000>;
+		};
+	};
+
 	pci2: pcie@ffe0b000 {
+		cell-index = <3>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
