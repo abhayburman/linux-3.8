@@ -1507,7 +1507,7 @@ static int get_cpu_number(unsigned char *eth_pkt, int len)
 static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 {
 	struct gfar_cpu_dev *cpu_dev = &__get_cpu_var(gfar_cpu_dev);
-	struct sk_buff *skb = NULL;
+	struct sk_buff *skb = NULL, *new_recycle_head = NULL;
 	int cpu = smp_processor_id();
 	int rx_cleaned = 0;
 	struct net_device *dev;
@@ -1526,9 +1526,10 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 			skb = buf->buffer[buf->out];
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
 			if (sh->recycle_count > 0) {
+				new_recycle_head = sh->recycle_queue->next;
 				buf->buffer[buf->out] = sh->recycle_queue;
-				sh->recycle_queue = buf->buffer[buf->out]->next;
-				buf->buffer[buf->out]->next = NULL;
+				sh->recycle_queue->next = NULL;
+				sh->recycle_queue = new_recycle_head;
 				sh->recycle_count--;
 			} else {
 				buf->buffer[buf->out] = NULL;
@@ -3626,13 +3627,15 @@ static int gfar_tso(struct sk_buff *skb, struct net_device *dev, int rq)
 			len = mss;
 
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-		if (!free_skb && sh->recycle_count) {
-			/* refill local buffer */
+		if (!free_skb) {
 			spin_lock_irqsave(&sh->lock, flags);
-			local_head = sh->recycle_queue;
-			free_skb = sh->recycle_count;
-			sh->recycle_queue = NULL;
-			sh->recycle_count = 0;
+			if (!free_skb && sh->recycle_count) {
+				/* refill local buffer */
+				local_head = sh->recycle_queue;
+				free_skb = sh->recycle_count;
+				sh->recycle_queue = NULL;
+				sh->recycle_count = 0;
+			}
 			spin_unlock_irqrestore(&sh->lock, flags);
 		}
 		if (local_head) {
@@ -4846,14 +4849,17 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 			return 1;
 		} else {
 			sh = &priv->skb_handler;
+			gfar_clean_reclaim_skb(skb);
+			spin_lock_irqsave(&sh->lock, flags);
 			if (likely(sh->recycle_count < sh->recycle_max)) {
-				if (!atomic_dec_and_test(&skb->users))
+				if (!atomic_dec_and_test(&skb->users)) {
+					spin_unlock_irqrestore(&sh->lock,
+							flags);
 					return 0;
-				gfar_clean_reclaim_skb(skb);
-				/* lock sh for add one */
-				spin_lock_irqsave(&sh->lock, flags);
+				}
 				if (unlikely(!sh->recycle_enable)) {
-					spin_unlock_irqrestore(&sh->lock, flags);
+					spin_unlock_irqrestore(&sh->lock,
+							flags);
 					return 0;
 				}
 				skb->next = sh->recycle_queue;
@@ -4861,7 +4867,9 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 				sh->recycle_count++;
 				spin_unlock_irqrestore(&sh->lock, flags);
 				return 1;
-			}
+			} else
+				spin_unlock_irqrestore(&sh->lock, flags);
+
 		}
 	}
 _normal_free:
@@ -4885,10 +4893,10 @@ int gfar_recycle_skb(struct sk_buff *skb)
 	if (skb->truesize == priv->skbuff_truesize) {
 		sh = &priv->skb_handler;
 		/* loosly checking */
+		gfar_clean_reclaim_skb(skb);
+		spin_lock_irqsave(&sh->lock, flags);
 		if (likely(sh->recycle_count < sh->recycle_max)) {
-			gfar_clean_reclaim_skb(skb);
 			/* lock sh for add one */
-			spin_lock_irqsave(&sh->lock, flags);
 			if (unlikely(!sh->recycle_enable)) {
 				spin_unlock_irqrestore(&sh->lock, flags);
 				return 0;
@@ -4899,7 +4907,8 @@ int gfar_recycle_skb(struct sk_buff *skb)
 			spin_unlock_irqrestore(&sh->lock, flags);
 			priv->extra_stats.rx_skbr_free++;
 			return 1;
-		}
+		} else
+			spin_unlock_irqrestore(&sh->lock, flags);
 	}
 	/* skb is not recyclable */
 	return 0;
@@ -5227,6 +5236,8 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	struct sk_buff *local_head;
 	unsigned long flags;
 	struct gfar_skb_handler *local_sh;
+	int global_skb_handler = 0; /* 0 if per-cpu SKB handler is in use,
+				       1 if global (stored in 'priv') in use */
 #ifdef CONFIG_GFAR_SW_PKT_STEERING
 	struct sk_buff *local_tail;
 	int temp;
@@ -5268,9 +5279,10 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	}
 #endif
 
-	if (sh->recycle_count == 0 &&
-		priv->skb_handler.recycle_count > 0)
+	if ((sh->recycle_count == 0) && (priv->skb_handler.recycle_count > 0)) {
+		global_skb_handler = 1;
 		sh = &priv->skb_handler;
+	}
 #endif
 
 	while (!((bdp->status & RXBD_EMPTY) || (--rx_work_limit < 0))) {
@@ -5279,15 +5291,21 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 
 #ifndef CONFIG_RX_TX_BD_XNGE
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
-		if (!free_skb && sh->recycle_count) {
-			/* refill local buffer */
-			spin_lock_irqsave(&sh->lock, flags);
-			local_head = sh->recycle_queue;
-			free_skb = sh->recycle_count;
-			sh->recycle_queue = NULL;
-			sh->recycle_count = 0;
-			spin_unlock_irqrestore(&sh->lock, flags);
+		if(!free_skb) {
+			if (global_skb_handler)
+				spin_lock_irqsave(&sh->lock, flags);
+
+			if (sh->recycle_count) {
+				/* refill local buffer */
+				local_head = sh->recycle_queue;
+				free_skb = sh->recycle_count;
+				sh->recycle_queue = NULL;
+				sh->recycle_count = 0;
+			}
+			if (global_skb_handler)
+				spin_unlock_irqrestore(&sh->lock, flags);
 		}
+
 		if (local_head) {
 			newskb = local_head;
 			local_head = newskb->next;
@@ -5385,15 +5403,19 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 #ifdef CONFIG_RX_TX_BD_XNGE
 		if (!newskb) {
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+			if (global_skb_handler)
+				spin_lock_irqsave(&sh->lock, flags);
+
 			if (!free_skb && sh->recycle_count) {
 				/* refill local buffer */
-				spin_lock_irqsave(&sh->lock, flags);
 				local_head = sh->recycle_queue;
 				free_skb = sh->recycle_count;
 				sh->recycle_queue = NULL;
 				sh->recycle_count = 0;
-				spin_unlock_irqrestore(&sh->lock, flags);
 			}
+			if (global_skb_handler)
+				spin_unlock_irqrestore(&sh->lock, flags);
+
 			if (local_head) {
 				newskb = local_head;
 				local_head = newskb->next;
@@ -5431,6 +5453,8 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	if (rcv_pkt_steering && priv->sps) {
 		if (free_skb > 0) {
 			/* return left over skb to cpu's recycle buffer */
+			if (global_skb_handler)
+				spin_lock_irqsave(&sh->lock, flags);
 			if (sh->recycle_max >= (sh->recycle_count + free_skb)) {
 				temp = free_skb - 1;
 				local_tail = local_head;
@@ -5440,7 +5464,13 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				local_tail->next = sh->recycle_queue;
 				sh->recycle_queue = local_head;
 				sh->recycle_count += free_skb;
+				if (global_skb_handler)
+					spin_unlock_irqrestore(&sh->lock,
+							flags);
 			} else {
+				if (global_skb_handler)
+					spin_unlock_irqrestore(&sh->lock,
+							flags);
 				/* free the left over skbs if recycle buffer
 				cant accomodate */
 				temp = free_skb;
