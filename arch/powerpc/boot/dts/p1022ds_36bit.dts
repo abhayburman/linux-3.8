@@ -571,6 +571,22 @@
 			device_type = "open-pic";
 		};
 
+		message@41400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			cell-index = <1>;
+			reg = <0x41400 0x200>;
+			interrupts = <0xb0 2 0xb1 2 0xb2 2 0xb3 2>;
+			interrupt-parent = < &mpic >;
+		};
+
+		message@42400 {
+			compatible = "fsl,p1022-msg","fsl,mpic-msg";
+			reg = <0x42400 0x200>;
+			cell-index = <2>;
+			interrupts = <0xb4 2 0xb5 2 0xb6 2 0xb7 2>;
+			interrupt-parent = < &mpic >;
+		};
+
 		msi@41600 {
 			compatible = "fsl,mpic-msi";
 			reg = <0x41600 0x80>;
@@ -595,6 +611,7 @@
 	};
 
 	pci0: pcie@fffe09000 {
+		cell-index = <2>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -631,6 +648,7 @@
 	};
 
 	pci1: pcie@fffe0a000 {
+		cell-index = <1>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
@@ -668,6 +686,7 @@
 
 
 	pci2: pcie@fffe0b000 {
+		cell-index = <3>;
 		compatible = "fsl,p1022-pcie";
 		device_type = "pci";
 		#interrupt-cells = <1>;
