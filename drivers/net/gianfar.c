@@ -4821,7 +4821,9 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 
 	if ((skb->skb_owner == NULL) ||
 		skb_has_frags(skb) ||
-		skb->cloned)
+		skb_cloned(skb) ||
+		skb_header_cloned(skb) ||
+		(atomic_read(&skb->users) > 1))
 			goto _normal_free;
 
 	priv = netdev_priv(skb->skb_owner);
@@ -4840,8 +4842,6 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 							smp_processor_id());
 		/* loosly checking */
 		if (likely(sh->recycle_count < sh->recycle_max)) {
-			if (!atomic_dec_and_test(&skb->users))
-				return 0;
 			gfar_clean_reclaim_skb(skb);
 			skb->next = sh->recycle_queue;
 			sh->recycle_queue = skb;
@@ -4852,11 +4852,6 @@ static int gfar_kfree_skb(struct sk_buff *skb, int qindex)
 			gfar_clean_reclaim_skb(skb);
 			spin_lock_irqsave(&sh->lock, flags);
 			if (likely(sh->recycle_count < sh->recycle_max)) {
-				if (!atomic_dec_and_test(&skb->users)) {
-					spin_unlock_irqrestore(&sh->lock,
-							flags);
-					return 0;
-				}
 				if (unlikely(!sh->recycle_enable)) {
 					spin_unlock_irqrestore(&sh->lock,
 							flags);
@@ -4886,8 +4881,11 @@ int gfar_recycle_skb(struct sk_buff *skb)
 
 	if ((skb->skb_owner == NULL) ||
 		skb_has_frags(skb) ||
-		skb->cloned)
-		return 0;
+		skb_cloned(skb) ||
+		skb_header_cloned(skb) ||
+		(atomic_read(&skb->users) > 1))
+			return 0;
+
 
 	priv = netdev_priv(skb->skb_owner);
 	if (skb->truesize == priv->skbuff_truesize) {
