@@ -337,6 +337,15 @@
 			};
 		};
 
+		ptp_timer: ptimer@24e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0x24e00 0xb0>;
+			interrupts = <68 2 69 2 70 2>;
+			interrupt-parent = <&mpic>;
+			tmr-prsc = <0x2>;
+			cksel = <1>;
+		};
+
 		enet0: ethernet@24000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -351,6 +360,7 @@
 			interrupt-parent = <&mpic>;
 			tbi-handle = <&tbi0>;
 			phy-handle = <&phy0>;
+			ptimer-handle = <&ptp_timer>;
 			phy-connection-type = "rgmii-id";
 
 			mdio@520 {
@@ -401,6 +411,7 @@
 			interrupt-parent = <&mpic>;
 			tbi-handle = <&tbi1>;
 			phy-handle = <&phy1>;
+			ptimer-handle = <&ptp_timer>;
 			phy-connection-type = "rgmii-id";
 
 			mdio@520 {
@@ -430,6 +441,7 @@
 			interrupt-parent = <&mpic>;
 			tbi-handle = <&tbi2>;
 			phy-handle = <&phy2>;
+			ptimer-handle = <&ptp_timer>;
 			phy-connection-type = "rgmii-id";
 
 			mdio@520 {
@@ -459,6 +471,7 @@
 			interrupt-parent = <&mpic>;
 			tbi-handle = <&tbi3>;
 			phy-handle = <&phy3>;
+			ptimer-handle = <&ptp_timer>;
 			phy-connection-type = "rgmii-id";
 
 			mdio@520 {
