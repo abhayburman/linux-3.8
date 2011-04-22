@@ -1520,7 +1520,10 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 
 	while (budget--) {
 		smp_rmb();
-		if (atomic_read(&buf->buff_cnt) == 0) {
+
+		spin_lock_irq(&buf->lock);
+		if (buf->buff_cnt == 0) {
+			spin_unlock_irq(&buf->lock);
 			break;
 		} else {
 			skb = buf->buffer[buf->out];
@@ -1536,7 +1539,8 @@ static int gfar_cpu_poll(struct napi_struct *napi, int budget)
 			}
 #endif
 			buf->out = (buf->out + 1) % GFAR_CPU_BUFF_SIZE;
-			atomic_dec(&buf->buff_cnt);
+			buf->buff_cnt--;
+			spin_unlock_irq(&buf->lock);
 
 			dev = skb->dev;
 			priv = netdev_priv(dev);
@@ -1613,6 +1617,7 @@ void gfar_cpu_dev_init(void)
 		cpu_dev->enabled = 0;
 
 		init_dummy_netdev(&cpu_dev->dev);
+		spin_lock_init(&cpu_dev->tx_queue.lock);
 		netif_napi_add(&cpu_dev->dev,
 			&cpu_dev->napi, gfar_cpu_poll, GFAR_DEV_WEIGHT);
 
@@ -1643,7 +1648,7 @@ void gfar_cpu_dev_init(void)
 
 		cpu_dev->tx_queue.in = 0;
 		cpu_dev->tx_queue.out = 0;
-		cpu_dev->tx_queue.buff_cnt.counter = 0;
+		cpu_dev->tx_queue.buff_cnt = 0;
 
 		napi_enable(&cpu_dev->napi);
 
@@ -1735,8 +1740,10 @@ int distribute_packet(struct net_device *dev,
 		return -1;
 
 	buf = &cpu_dev->tx_queue;
-	if (atomic_read(&buf->buff_cnt) == (GFAR_CPU_BUFF_SIZE - 1)) {
+	spin_lock_irq(&buf->lock);
+	if (buf->buff_cnt == (GFAR_CPU_BUFF_SIZE - 1)) {
 		dev_kfree_skb_any(skb);    /* buffer full, drop packet */
+		spin_unlock_irq(&buf->lock);
 		return 0;
 	}
 #ifdef CONFIG_GFAR_SKBUFF_RECYCLING
@@ -1762,7 +1769,8 @@ int distribute_packet(struct net_device *dev,
 	buf->buffer[buf->in] = skb;
 	buf->in = (buf->in + 1) % GFAR_CPU_BUFF_SIZE;
 	smp_wmb();
-	atomic_inc(&buf->buff_cnt);
+	buf->buff_cnt++;
+	spin_unlock_irq(&buf->lock);
 
 	/* raise other core's msg intr */
 	if (0 == cpu_dev->intr_coalesce_cnt++) {

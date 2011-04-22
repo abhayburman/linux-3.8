@@ -1434,10 +1434,11 @@ struct gfar_private {
 
 /* producer-consumer buffer for inter cpu packet transfer */
 struct shared_buffer {
+	spinlock_t	lock;
 	struct sk_buff *buffer[GFAR_CPU_BUFF_SIZE];
 	int in;
 	int out;
-	atomic_t buff_cnt;
+	unsigned int buff_cnt;
 };
 
 struct gfar_cpu_dev {
