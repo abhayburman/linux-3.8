@@ -1423,9 +1423,11 @@ static void gfar_init_filer_table(struct gfar_private *priv)
 		priv->ftp_rqfpr[i] = rqfpr;
 		gfar_write_filer(priv, i, rqfcr, rqfpr);
 	}
+	return;
 out:
 	kfree(priv->ftp_rqfcr);
 	kfree(priv->ftp_rqfpr);
+	priv->ftp_rqfpr = priv->ftp_rqfcr = NULL;
 
 }
 
