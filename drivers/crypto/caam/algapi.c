@@ -125,7 +125,7 @@ struct ipsec_deco_dpovrd {
 
 static DEFINE_PER_CPU(int, cpu_to_job_queue);
 
-struct ipsec_esp_edesc *crypto_edesc_alloc(int len, int flags,
+static struct ipsec_esp_edesc *crypto_edesc_alloc(int len, int flags,
 					struct caam_drv_private *priv)
 {
 	u32 smp_processor_id = smp_processor_id();
@@ -139,7 +139,7 @@ struct ipsec_esp_edesc *crypto_edesc_alloc(int len, int flags,
 	}
 }
 
-void crypto_edesc_free(struct ipsec_esp_edesc *edesc,
+static void crypto_edesc_free(struct ipsec_esp_edesc *edesc,
 			struct caam_drv_private *priv)
 {
 	u32 smp_processor_id = smp_processor_id();
