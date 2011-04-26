@@ -2,7 +2,7 @@
  * Suspend/resume support
  *
  * Copyright 2009  MontaVista Software, Inc.
- * Copyright 2007-2010 Freescale Semiconductor Inc.
+ * Copyright 2007-2011 Freescale Semiconductor Inc.
  *
  * Author: Anton Vorontsov <avorontsov@ru.mvista.com>
  *
@@ -41,7 +41,9 @@ static struct pmc_regs __iomem *pmc_regs;
 #define PMCSR_LOSSLESS	0x00400000
 static int has_deep_sleep, has_lossless;
 
-void mpc85xx_enter_deep_sleep(phys_addr_t ccsrbar, u32 powmgtreq);
+/* Cast the ccsrbar to 64-bit parameter so that the assembly
+ * code can be compatible with both 32-bit & 36-bit */
+void mpc85xx_enter_deep_sleep(u64 ccsrbar, u32 powmgtreq);
 
 /**
  * pmc_enable_wake - enable OF device as wakeup event source

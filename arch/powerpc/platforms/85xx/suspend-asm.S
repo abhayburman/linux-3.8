@@ -3,7 +3,7 @@
  *
  * Author: Scott Wood <scottwood@freescale.com>
  *
- * Copyright (C) 2006-2010 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2006-2011 Freescale Semiconductor, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -42,7 +42,9 @@
 	.align	5
 mpc85xx_sleep_save_area:
 	.space	STATE_SAVE_SIZE
-ccsrbase:
+ccsrbase_low:
+	.long	0
+ccsrbase_high:
 	.long	0
 powmgtreq:
 	.long	0
@@ -51,16 +53,19 @@ powmgtreq:
 	.align	12
 
 	/*
-	 * r3 = physical address of CCSR
-	 * r4 = JOG or deep sleep request
+	 * r3 = high word of physical address of CCSR
+	 * r4 = low word of physical address of CCSR
+	 * r5 = JOG or deep sleep request
 	 *      JOG-0x00200000, deep sleep-0x00100000
 	 */
 _GLOBAL(mpc85xx_enter_deep_sleep)
-	lis	r5, ccsrbase@ha
-	stw	r3, ccsrbase@l(r5)
+	lis	r6, ccsrbase_low@ha
+	stw	r4, ccsrbase_low@l(r6)
+	lis	r6, ccsrbase_high@ha
+	stw	r3, ccsrbase_high@l(r6)
 
-	lis	r5, powmgtreq@ha
-	stw	r4, powmgtreq@l(r5)
+	lis	r6, powmgtreq@ha
+	stw	r5, powmgtreq@l(r6)
 
 	lis	r10, mpc85xx_sleep_save_area@h
 	ori	r10, r10, mpc85xx_sleep_save_area@l
@@ -203,30 +208,31 @@ _GLOBAL(mpc85xx_enter_deep_sleep)
 	stw	r4, SS_TB+0(r10)
 	stw	r5, SS_TB+4(r10)
 
-	lis	r4, ccsrbase@ha
-	lwz	r3, ccsrbase@l(r4)
+	lis	r5, ccsrbase_low@ha
+	lwz	r4, ccsrbase_low@l(r5)
+	lis	r5, ccsrbase_high@ha
+	lwz	r3, ccsrbase_high@l(r5)
 
 	/* Disable machine checks and critical exceptions */
-	mfmsr	r4
-	rlwinm	r4, r4, 0, ~MSR_CE
-	rlwinm	r4, r4, 0, ~MSR_ME
-	mtmsr	r4
+	mfmsr	r5
+	rlwinm	r5, r5, 0, ~MSR_CE
+	rlwinm	r5, r5, 0, ~MSR_ME
+	mtmsr	r5
 	isync
 
 	/* Use TLB1[15] to map the CCSR at 0xf0000000 */
-	lis	r4, 0x100f
-	mtspr	SPRN_MAS0, r4
-	lis	r4, 0xc000
-	ori	r4, r4, 0x0500
-	mtspr	SPRN_MAS1, r4
-	lis	r4, 0xf000
-	ori	r4, r4, 0x000a
-	mtspr	SPRN_MAS2, r4
-	rlwinm	r4, r3, 0, 0xfffff000
-	ori	r4, r4, 0x0005
-	mtspr	SPRN_MAS3, r4
-	li	r4, 0
-	mtspr	SPRN_MAS7, r4
+	lis	r5, 0x100f
+	mtspr	SPRN_MAS0, r5
+	lis	r5, 0xc000
+	ori	r5, r5, 0x0500
+	mtspr	SPRN_MAS1, r5
+	lis	r5, 0xf000
+	ori	r5, r5, 0x000a
+	mtspr	SPRN_MAS2, r5
+	rlwinm	r5, r4, 0, 0xfffff000
+	ori	r5, r5, 0x0005
+	mtspr	SPRN_MAS3, r5
+	mtspr	SPRN_MAS7, r3
 	isync
 	tlbwe
 	isync
@@ -308,6 +314,7 @@ _GLOBAL(mpc85xx_enter_deep_sleep)
 2:	mfspr	r4, SPRN_PIR
 	andi.	r4, r4, 1
 99:	bne	99b
+
 	/* Establish a temporary 64MB 0->0 mapping in TLB1[1]. */
 	lis	r4, 0x1001
 	mtspr	SPRN_MAS0, r4
@@ -359,23 +366,24 @@ mpc85xx_deep_resume:
 	isync
 
 	/* Access the ccsrbase address with TLB1[0] */
-	lis	r4, ccsrbase@ha
-	lwz	r3, ccsrbase@l(r4)
+	lis	r5, ccsrbase_low@ha
+	lwz	r4, ccsrbase_low@l(r5)
+	lis	r5, ccsrbase_high@ha
+	lwz	r3, ccsrbase_high@l(r5)
 
 	/* Use TLB1[15] to map the CCSR at 0xf0000000 */
-	lis	r4, 0x100f
-	mtspr	SPRN_MAS0, r4
-	lis	r4, 0xc000
-	ori	r4, r4, 0x0500
-	mtspr	SPRN_MAS1, r4
-	lis	r4, 0xf000
-	ori	r4, r4, 0x000a
-	mtspr	SPRN_MAS2, r4
-	rlwinm	r4, r3, 0, 0xfffff000
-	ori	r4, r4, 0x0005
-	mtspr	SPRN_MAS3, r4
-	li	r4, 0
-	mtspr	SPRN_MAS7, r4
+	lis	r5, 0x100f
+	mtspr	SPRN_MAS0, r5
+	lis	r5, 0xc000
+	ori	r5, r5, 0x0500
+	mtspr	SPRN_MAS1, r5
+	lis	r5, 0xf000
+	ori	r5, r5, 0x000a
+	mtspr	SPRN_MAS2, r5
+	rlwinm	r5, r4, 0, 0xfffff000
+	ori	r5, r5, 0x0005
+	mtspr	SPRN_MAS3, r5
+	mtspr	SPRN_MAS7, r3
 	isync
 	tlbwe
 	isync
