@@ -474,7 +474,6 @@
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
 			fsl,sdhci-auto-cmd12;
-			fsl,sdhci-dma-broken;
 			fsl,sdhci-adma-broken;
 			fsl,sdhci-adjust-timeout;
 			fsl,sdhci-relax-freq;
