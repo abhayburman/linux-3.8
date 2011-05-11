@@ -252,6 +252,8 @@ struct sdhci_host {
 #define SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12		(1<<28)
 /* Controller operates the cards at reduced frequency */
 #define SDHCI_QUIRK_RELAX_FREQ				(1<<29)
+/* Controller has weird bit setting for Protocol Control Register */
+#define SDHCI_QUIRK_QORIQ_PROCTL_WEIRD			(1<<30)
 
 	int			irq;		/* Device IRQ */
 	void __iomem *		ioaddr;		/* Mapped address */

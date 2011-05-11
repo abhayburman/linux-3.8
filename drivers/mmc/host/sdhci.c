@@ -661,7 +661,7 @@ static void sdhci_set_transfer_irqs(struct sdhci_host *host)
 static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_data *data)
 {
 	u8 count;
-	u8 ctrl;
+	u32 ctrl;
 	int ret;
 
 	WARN_ON(host->data);
@@ -790,14 +790,28 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_data *data)
 	 * is ADMA.
 	 */
 	if (host->version >= SDHCI_SPEC_200) {
-		ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
-		ctrl &= ~SDHCI_CTRL_DMA_MASK;
-		if ((host->flags & SDHCI_REQ_USE_DMA) &&
-			(host->flags & SDHCI_USE_ADMA))
-			ctrl |= SDHCI_CTRL_ADMA32;
-		else
-			ctrl |= SDHCI_CTRL_SDMA;
-		sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+		if (host->quirks & SDHCI_QUIRK_QORIQ_PROCTL_WEIRD) {
+#define ESDHCI_PROCTL_DMAS_MASK	0x00000300
+#define ESDHCI_PROCTL_ADMA32		0x00000200
+#define ESDHCI_PROCTL_SDMA		0x00000000
+			ctrl = sdhci_readl(host, SDHCI_HOST_CONTROL);
+			ctrl &= ~ESDHCI_PROCTL_DMAS_MASK;
+			if ((host->flags & SDHCI_REQ_USE_DMA) &&
+				(host->flags & SDHCI_USE_ADMA))
+				ctrl |= ESDHCI_PROCTL_ADMA32;
+			else
+				ctrl |= ESDHCI_PROCTL_SDMA;
+			sdhci_writel(host, ctrl, SDHCI_HOST_CONTROL);
+		} else {
+			ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
+			ctrl &= ~SDHCI_CTRL_DMA_MASK;
+			if ((host->flags & SDHCI_REQ_USE_DMA) &&
+				(host->flags & SDHCI_USE_ADMA))
+				ctrl |= SDHCI_CTRL_ADMA32;
+			else
+				ctrl |= SDHCI_CTRL_SDMA;
+			sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+		}
 	}
 
 	if (!(host->flags & SDHCI_REQ_USE_DMA)) {
@@ -1050,21 +1064,34 @@ out:
 static void sdhci_set_power(struct sdhci_host *host, unsigned short power)
 {
 	u8 pwr;
+	u8 volt = 0;
 
 	if (power == (unsigned short)-1)
 		pwr = 0;
 	else {
+#define	ESDHCI_FSL_POWER_MASK	0x40
+#define	ESDHCI_FSL_POWER_180	0x00
+#define	ESDHCI_FSL_POWER_300	0x40
 		switch (1 << power) {
 		case MMC_VDD_165_195:
-			pwr = SDHCI_POWER_180;
+			if (host->quirks & SDHCI_QUIRK_QORIQ_PROCTL_WEIRD)
+				pwr = ESDHCI_FSL_POWER_180;
+			else
+				pwr = SDHCI_POWER_180;
 			break;
 		case MMC_VDD_29_30:
 		case MMC_VDD_30_31:
-			pwr = SDHCI_POWER_300;
+			if (host->quirks & SDHCI_QUIRK_QORIQ_PROCTL_WEIRD)
+				pwr = ESDHCI_FSL_POWER_300;
+			else
+				pwr = SDHCI_POWER_300;
 			break;
 		case MMC_VDD_32_33:
 		case MMC_VDD_33_34:
-			pwr = SDHCI_POWER_330;
+			if (host->quirks & SDHCI_QUIRK_QORIQ_PROCTL_WEIRD)
+				pwr = ESDHCI_FSL_POWER_300;
+			else
+				pwr = SDHCI_POWER_330;
 			break;
 		default:
 			BUG();
@@ -1073,6 +1100,17 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned short power)
 
 	if (host->pwr == pwr)
 		return;
+
+	/* Now FSL ESDHC Controller has no Bus Power bit,
+	 * and PROCTL[21] bit is for voltage selection */
+	if (host->quirks & SDHCI_QUIRK_QORIQ_PROCTL_WEIRD) {
+		volt = sdhci_readb(host, SDHCI_POWER_CONTROL);
+		volt &= ~ESDHCI_FSL_POWER_MASK;
+		volt |= pwr;
+		sdhci_writeb(host, volt, SDHCI_POWER_CONTROL);
+
+		return;
+	}
 
 	host->pwr = pwr;
 
