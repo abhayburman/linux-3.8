@@ -3,7 +3,7 @@
  *
  * Authors: Jiang Yutang <b14898@freescale.com>
  *
- * Copyright 2010 Freescale Semiconductor, Inc
+ * Copyright 2010 - 2011 Freescale Semiconductor, Inc
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -84,6 +84,12 @@ struct ccsr_guts {
 	__be32  iodelay2;	/* 0x.0228 - IO Delay Control Register 2 */
 	u8	res9[0x800 - 0x22c];
 	__be32  clkdvdr;	/* 0x.0800 - Clock Divide Register */
+#define CCSR_GUTS_CLKDVDR_PXCKEN	0x80000000
+#define CCSR_GUTS_CLKDVDR_SSICKEN	0x20000000
+#define CCSR_GUTS_CLKDVDR_PXCKINV	0x10000000
+#define CCSR_GUTS_CLKDVDR_PXCKDLY	0x06000000
+#define CCSR_GUTS_CLKDVDR_PXCLK_MASK	0x00ff0000
+#define CCSR_GUTS_CLKDVDR_SSICLK_MASK	0x000000ff
 	u8	res10[0xb28 - 0x804];
 	__be32	ddrclkdr;	/* 0x.0b28 - DDR Clock Disable Register */
 	u8	res11[0xc00 - 0xB2c];
