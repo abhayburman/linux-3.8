@@ -1,7 +1,7 @@
 /*
  * P1022 DS Board Setup
  *
- * Copyright 2010 Freescale Semiconductor, Inc.
+ * Copyright 2010 - 2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -28,29 +28,12 @@
 #include <asm/udbg.h>
 #include <asm/mpic.h>
 #include <asm/swiotlb.h>
+#include <asm/immap_85xx.h>
 
 #include <sysdev/fsl_soc.h>
 #include <sysdev/fsl_pci.h>
 
 #if defined(CONFIG_FB_FSL_DIU) || defined(CONFIG_FB_FSL_DIU_MODULE)
-
-static u32 get_busfreq(void)
-{
-	struct device_node *node;
-
-	u32 fs_busfreq = 0;
-	node = of_find_node_by_type(NULL, "cpu");
-	if (node) {
-		unsigned int size;
-		const unsigned int *prop =
-			of_get_property(node, "bus-frequency", &size);
-		if (prop)
-			fs_busfreq = *prop;
-		of_node_put(node);
-	};
-	return fs_busfreq;
-}
-
 unsigned int p1022ds_get_pixel_format(unsigned int bits_per_pixel,
 					int monitor_port)
 {
@@ -93,71 +76,42 @@ void p1022ds_set_monitor_port(int monitor_port)
 
 void p1022ds_set_pixel_clock(unsigned int pixclock)
 {
-	u32 __iomem *clkdvdr;
-	u32 temp;
-	/* variables for pixel clock calcs */
-	ulong  bestval, bestfreq, speed_ccb, minpixclock, maxpixclock;
-	ulong pixval;
-	long err;
-	int i;
+	struct device_node *guts_np = NULL;
+	struct ccsr_guts __iomem *guts;
+	unsigned long freq;
+	u64 temp;
+	u32 pxclk;
 
-	clkdvdr = ioremap(get_immrbase() + 0xe0800, sizeof(u32));
-	if (!clkdvdr) {
-		printk(KERN_ERR "Err: can't map clock divider register!\n");
+	/* Map the global utilities registers. */
+	guts_np = of_find_compatible_node(NULL, NULL, "fsl,p1022-guts");
+	if (!guts_np) {
+		printk(KERN_ERR "Could not find GUTS node\n");
 		return;
 	}
 
-	/* Pixel Clock configuration */
-	pr_debug("DIU: Bus Frequency = %d\n", get_busfreq());
-	speed_ccb = get_busfreq();
-
-	/* Calculate the pixel clock with the smallest error */
-	/* calculate the following in steps to avoid overflow */
-	pr_debug("DIU pixclock in ps - %d\n", pixclock);
-	temp = 1000000000/pixclock;
-	temp *= 1000;
-	pixclock = temp;
-	pr_debug("DIU pixclock freq - %u\n", pixclock);
-
-	temp = pixclock * 5 / 100;
-	pr_debug("deviation = %d\n", temp);
-	minpixclock = pixclock - temp;
-	maxpixclock = pixclock + temp;
-	pr_debug("DIU minpixclock - %lu\n", minpixclock);
-	pr_debug("DIU maxpixclock - %lu\n", maxpixclock);
-	pixval = speed_ccb/pixclock;
-	pr_debug("DIU pixval = %lu\n", pixval);
-
-	err = 100000000;
-	bestval = pixval;
-	pr_debug("DIU bestval = %lu\n", bestval);
-
-	bestfreq = 0;
-	for (i = -1; i <= 1; i++) {
-		temp = speed_ccb / ((pixval+i) + 1);
-		pr_debug("DIU test pixval i= %d, pixval=%lu, temp freq. = %u\n",
-							i, pixval, temp);
-		if ((temp < minpixclock) || (temp > maxpixclock))
-			pr_debug("DIU exceeds monitor range (%lu to %lu)\n",
-				minpixclock, maxpixclock);
-		else if (abs(temp - pixclock) < err) {
-			pr_debug("Entered the else if block %d\n", i);
-			err = abs(temp - pixclock);
-			bestval = pixval+i;
-			bestfreq = temp;
-		}
+	guts = of_iomap(guts_np, 0);
+	of_node_put(guts_np);
+	if (!guts) {
+		printk(KERN_ERR "Failed to map GUTS register space\n");
+		return;
 	}
 
-	pr_debug("DIU chose = %lx\n", bestval);
-	pr_debug("DIU error = %ld\n NomPixClk ", err);
-	pr_debug("DIU: Best Freq = %lx\n", bestfreq);
-	/* Modify PXCLK in GUTS CLKDVDR */
-	pr_debug("DIU: Current value of CLKDVDR = 0x%08x\n", (*clkdvdr));
-	temp = (*clkdvdr) & 0x2000FFFF;
-	*clkdvdr = temp;		/* turn off clock */
-	*clkdvdr = temp | 0x80000000 | (((bestval) & 0x1F) << 16);
-	pr_debug("DIU: Modified value of CLKDVDR = 0x%08x\n", (*clkdvdr));
-	iounmap(clkdvdr);
+	/* Convert pixclock from a wavelength to a frequency */
+	temp = 1000000000000ULL;
+	do_div(temp, pixclock);
+	freq = temp;
+
+	/* pixclk is the ratio of the platform clock to the pixel clock */
+	pxclk = DIV_ROUND_CLOSEST(fsl_get_sys_freq(), freq);
+
+	/* Disable the pixel clock, and set it to non-inverted and no delay */
+	clrbits32(&guts->clkdvdr, CCSR_GUTS_CLKDVDR_PXCKEN |
+		CCSR_GUTS_CLKDVDR_PXCKDLY | CCSR_GUTS_CLKDVDR_PXCLK_MASK);
+
+	/* Enable the clock and set the pxclk */
+	setbits32(&guts->clkdvdr, CCSR_GUTS_CLKDVDR_PXCKEN | (pxclk << 16));
+
+	iounmap(guts);
 }
 
 ssize_t p1022ds_show_monitor_port(int monitor_port, char *buf)
