@@ -3757,6 +3757,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned int nr_frags, length;
 #ifdef CONFIG_RX_TX_BD_XNGE
 	struct sk_buff *new_skb;
+	int skb_curtx = 0;
 #endif
 
 #ifdef CONFIG_AS_FASTPATH
@@ -3830,6 +3831,9 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 			length = skb_shinfo(skb)->frags[i].size;
 
+#ifdef CONFIG_RX_TX_BD_XNGE
+			txbdp->lstatus &= BD_LFLAG(TXBD_WRAP);
+#endif
 			lstatus = txbdp->lstatus | length |
 				BD_LFLAG(TXBD_READY);
 
@@ -3879,18 +3883,11 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 #ifdef CONFIG_RX_TX_BD_XNGE
 	new_skb = tx_queue->tx_skbuff[tx_queue->skb_curtx];
-	if (new_skb) {
-		if (skb->owner != RT_PKT_ID) {
+	skb_curtx = tx_queue->skb_curtx;
+	if (new_skb && skb->owner != RT_PKT_ID) {
 			/* Packet from Kernel free the skb to recycle poll */
 			gfar_kfree_skb(new_skb , new_skb->queue_mapping);
 			new_skb = NULL;
-		} else if ((new_skb->skb_owner == NULL)
-			|| skb_has_frags(new_skb)
-			|| new_skb->cloned) {
-			/* Non Re-cyclable SKB, free it */
-			dev_kfree_skb_any(new_skb);
-			new_skb = NULL;
-		}
 	}
 #endif
 
@@ -3967,11 +3964,15 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 
 #ifdef CONFIG_RX_TX_BD_XNGE
-	{
-	unsigned int dataref;
-	dataref = atomic_read(&(skb_shinfo(skb)->dataref));
-	gfar_clean_reclaim_skb(skb);
-	atomic_set(&(skb_shinfo(skb)->dataref), dataref);
+	if ((skb->skb_owner == NULL) ||
+		skb_has_frags(skb) ||
+		skb_cloned(skb) ||
+		skb_header_cloned(skb) ||
+		(atomic_read(&skb->users) > 1)) {
+		dev_kfree_skb_any(skb);
+		tx_queue->tx_skbuff[skb_curtx] = NULL;
+	} else {
+		gfar_clean_reclaim_skb(skb);
 	}
 	skb->new_skb = new_skb;
 #endif
@@ -3994,6 +3995,7 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 #ifdef CONFIG_RX_TX_BD_XNGE
 	struct sk_buff *new_skb;
+	int skb_curtx = 0;
 #endif
 
 #ifdef CONFIG_RX_TX_BD_XNGE
@@ -4045,18 +4047,11 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 
 #ifdef CONFIG_RX_TX_BD_XNGE
 	new_skb = tx_queue->tx_skbuff[tx_queue->skb_curtx];
-	if (new_skb) {
-		if (skb->owner != RT_PKT_ID) {
+	skb_curtx =  tx_queue->skb_curtx;
+	if (new_skb && (skb->owner != RT_PKT_ID)) {
 			/* Packet from Kernel free the skb to recycle poll */
 			gfar_kfree_skb(new_skb , new_skb->queue_mapping);
 			new_skb = NULL;
-		} else if ((new_skb->skb_owner == NULL)
-			|| skb_has_frags(new_skb)
-			|| new_skb->cloned) {
-			/* Non Re-cyclable SKB, free it */
-			dev_kfree_skb_any(new_skb);
-			new_skb = NULL;
-		}
 	}
 #endif
 	txbdp_start->bufPtr = dma_map_single(&priv->ofdev->dev, skb->data,
@@ -4129,11 +4124,15 @@ int gfar_fast_xmit(struct sk_buff *skb, struct net_device *dev)
 		spin_unlock_irqrestore(&tx_queue->txlock, flags);
 #endif
 #ifdef CONFIG_RX_TX_BD_XNGE
-	{
-	unsigned int dataref;
-	dataref = atomic_read(&(skb_shinfo(skb)->dataref));
-	gfar_clean_reclaim_skb(skb);
-	atomic_set(&(skb_shinfo(skb)->dataref), dataref);
+	if ((skb->skb_owner == NULL) ||
+		skb_has_frags(skb) ||
+		skb_cloned(skb) ||
+		skb_header_cloned(skb) ||
+		(atomic_read(&skb->users) > 1)) {
+		dev_kfree_skb_any(skb);
+		tx_queue->tx_skbuff[skb_curtx] = NULL;
+	} else {
+		gfar_clean_reclaim_skb(skb);
 	}
 	skb->new_skb = new_skb;
 #endif
