@@ -1323,6 +1323,7 @@
 		#size-cells = <1>;
 
 		ranges = <0 0 0xf 0xe8000000 0x08000000
+			  2 0 0xf 0xffa00000 0x00040000
 			  3 0 0xf 0xffdf0000 0x00008000>;
 
 		flash@0,0 {
@@ -1330,6 +1331,46 @@
 			reg = <0 0 0x08000000>;
 			bank-width = <2>;
 			device-width = <2>;
+		};
+
+		nand@2,0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "fsl,elbc-fcm-nand";
+			reg = <0x2 0x0 0x40000>;
+
+			u-boot@0 {
+				reg = <0x0 0x02000000>;
+				label = "NAND (RO) U-Boot Image";
+				read-only;
+			};
+
+			jffs2@2000000 {
+				reg = <0x02000000 0x10000000>;
+				label = "NAND (RW) JFFS2 Root File System";
+			};
+
+			ramdisk@12000000 {
+				reg = <0x12000000 0x08000000>;
+				label = "NAND (RO) Compressed RFS Image";
+				read-only;
+			};
+
+			kernel@1a000000 {
+				reg = <0x1a000000 0x04000000>;
+				label = "NAND (RO) Linux Kernel Image";
+			};
+
+			dtb@1e000000 {
+				reg = <0x1e000000 0x01000000>;
+				label = "NAND (RO) DTB Image";
+				read-only;
+			};
+
+			empty@1f000000 {
+				reg = <0x1f000000 0x21000000>;
+				label = "NAND (RW) Writable User area";
+			};
 		};
 
 		board-control@3,0 {
