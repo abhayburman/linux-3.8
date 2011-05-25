@@ -209,6 +209,14 @@ static void __init mpc85xx_rdb_setup_arch(void)
 			par_io_of_config(ucc);
 	}
 
+#if defined CONFIG_SPI_MPC8xxx
+{
+		struct device_node *qe_spi;
+		for_each_node_by_name(qe_spi, "spi")
+			par_io_of_config(qe_spi);
+}
+#endif
+
 	if (machine_is(p1025_rdb)) {
 #define MPC85xx_PMUXCR_OFFSET           0x60
 #define MPC85xx_PMUXCR_QE0              0x00008000
@@ -216,8 +224,11 @@ static void __init mpc85xx_rdb_setup_arch(void)
 #define MPC85xx_PMUXCR_QE3              0x00001000
 #define MPC85xx_PMUXCR_QE4              0x00000800
 #define MPC85xx_PMUXCR_QE5              0x00000400
+#define MPC85xx_PMUXCR_QE6		0x00000200
+#define MPC85xx_PMUXCR_QE7              0x00000100
 #define MPC85xx_PMUXCR_QE8              0x00000080
 #define MPC85xx_PMUXCR_QE9              0x00000040
+#define MPC85xx_PMUXCR_QE10		0x00000020
 #define MPC85xx_PMUXCR_QE11             0x00000010
 #define MPC85xx_PMUXCR_QE12             0x00000008
 		static __be32 __iomem *pmuxcr;
@@ -243,6 +254,30 @@ static void __init mpc85xx_rdb_setup_arch(void)
 						  MPC85xx_PMUXCR_QE9 |
 						  MPC85xx_PMUXCR_QE12);
 			}
+
+#ifdef CONFIG_FSL_UCC_TDM
+			/* Clear QE12 for releasing the LBCTL */
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE12);
+			/* TDMA */
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE5 |
+					  MPC85xx_PMUXCR_QE11);
+			/* TDMB */
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE0 |
+					  MPC85xx_PMUXCR_QE9);
+			/* TDMC */
+			 setbits32(pmuxcr, MPC85xx_PMUXCR_QE0);
+			/* TDMD */
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE8 |
+					  MPC85xx_PMUXCR_QE7);
+#endif /* CONFIG_FSL_UCC_TDM */
+
+#ifdef CONFIG_SPI_MPC8xxx
+			clrbits32(pmuxcr, MPC85xx_PMUXCR_QE12);
+			/*QE-SPI*/
+			setbits32(pmuxcr, MPC85xx_PMUXCR_QE6 |
+					  MPC85xx_PMUXCR_QE9 |
+					  MPC85xx_PMUXCR_QE10);
+#endif
 
 			of_node_put(np);
 		}
