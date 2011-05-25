@@ -1,6 +1,6 @@
 /* driver/tdm/tdm-core.c
  *
- * Copyright (C) 2010 Freescale Semiconductor, Inc, All rights reserved.
+ * Copyright (C) 2010-2011 Freescale Semiconductor, Inc, All rights reserved.
  *
  * TDM core is the interface between TDM ports and devices.
  *
@@ -378,6 +378,43 @@ module_exit(tdm_exit);
 /* if read write debug required
 #define TDM_CORE_DEBUG
 */
+
+int tdm_read_direct(struct tdm_adapter *adap, u8 *buf, u32 len)
+{
+	int res;
+
+	if (adap->algo->tdm_read_simple)
+		res = adap->algo->tdm_read_simple(adap, buf, len);
+	else {
+		pr_err("TDM level read not supported\n");
+		return -EOPNOTSUPP;
+	}
+	/* If everything went ok (i.e. frame received), return #bytes
+	transmitted, else error code. */
+
+	return res;
+
+
+}
+EXPORT_SYMBOL(tdm_read_direct);
+
+int tdm_write_direct(struct tdm_adapter *adap, u8 *buf, u32 len)
+{
+	int res;
+
+	if (adap->algo->tdm_write_simple)
+		res = adap->algo->tdm_write_simple(adap, buf, len);
+	else {
+		pr_err("TDM level write not supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	return res;
+}
+EXPORT_SYMBOL(tdm_write_direct);
+
+
+
 
 /* the functional interface to the tdm device. */
 /*
