@@ -60,6 +60,10 @@ struct slic_channel {
 };
 struct slic_channel slic_ch[MAX_NUM_OF_SLICS];
 static int num_slics;
+static enum {
+	ZARLINK_LE88266,
+	ZARLINK_LE88506
+} slic_chip_type;
 
 /** \brief      Driver's license
  ** \details    GPL
@@ -164,6 +168,15 @@ static int slic_init_configure(unsigned char device_handle,
 	len = 0x01;
 	slic_cmd(device_handle, CHANNEL1, 0x04, len, &temp3[0]);
 
+	temp3[0] = 0x0;
+	temp3[1] = 0x0;
+	len = 0x02;
+	slic_cmd(device_handle, CHANNEL1, READ_PRODUCT_CODE, len, &temp3[0]);
+	if ((temp3[0] == 0x04) && (temp3[1] == 0xb3))
+		slic_chip_type = ZARLINK_LE88266;
+	else if ((temp3[0] == 0x04) && (temp3[1] == 0xbc))
+		slic_chip_type = ZARLINK_LE88506;
+
 #ifdef TESTING_PRODUCT_CODE
 	get_slic_product_code();
 #endif
@@ -223,7 +236,10 @@ static int slic_init_configure(unsigned char device_handle,
 	len = 0x01;
 	slic_cmd(device_handle, CHANNEL2, WRITE_SYSTEM_STATE, len, &temp3[0]);
 
-	temp3[0] = 0x2b;
+	if (slic_chip_type == ZARLINK_LE88266)
+		temp3[0] = 0x2b;
+	else if (slic_chip_type == ZARLINK_LE88506)
+		temp3[0] = 0x23;
 	len = 0x01;
 	slic_cmd(device_handle, CHANNEL1, WRITE_SYSTEM_STATE, len, &temp3[0]);
 
@@ -241,15 +257,22 @@ static int slic_init_configure(unsigned char device_handle,
 	len = 0x01;
 	slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len, &temp3[0]);
 
-	/* Set Switching Paramenters as for Le88266
-	 * 1. BSI[1:0] = 00b (sense pin VBL is SWVSY, VBH is SWVSZ)
-	 * 2. SWFS[1:0] = 00b (setting frequency as 384kHz in high power mode)
-	 * 3. SWYV[4:0] = 00101b (setting to -25V)
-	 * 4. SWZV[4:0] = 00000b (setting to 0V)
-	 */
-	temp3[0] = 0x00;
-	temp3[1] = 0x05;
-	temp3[2] = 0x00;
+	if (slic_chip_type == ZARLINK_LE88266) {
+		/* Set Switching Paramenters as for Le88266
+		 * 1. BSI[1:0] = 00b (sense pin VBL is SWVSY, VBH is SWVSZ)
+		 * 2. SWFS[1:0] = 00b (setting frequency as 384kHz in
+		 *    high power mode)
+		 * 3. SWYV[4:0] = 00101b (setting to -25V)
+		 * 4. SWZV[4:0] = 00000b (setting to 0V)
+		 */
+		temp3[0] = 0x00;
+		temp3[1] = 0x05;
+		temp3[2] = 0x00;
+	} else if (slic_chip_type == ZARLINK_LE88506) {
+		temp3[0] = 0x00;
+		temp3[1] = 0x84;
+		temp3[2] = 0x80;
+	}
 	len = 0x03;
 	slic_cmd(device_handle, CHANNEL1, WRITE_SWITCH_REGULATOR_PARAMS, len,
 			&temp3[0]);
@@ -294,23 +317,32 @@ static int slic_init_configure(unsigned char device_handle,
 	len = 0x01;
 	slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len, &temp3[0]);
 
-	temp3[0] = 0x3;
-	len = 0x01;
-	slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len, &temp3[0]);
-
-	temp3[0] = 0x3;
-	len = 0x01;
-	slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len, &temp3[0]);
-
-	/* Set Switching Paramenters as for Le88266
-	 * 1. BSI[1:0] = 00b (sense pin VBL is SWVSY, VBH is SWVSZ)
-	 * 2. SWFS[1:0] = 00b (setting frequency as 384kHz in high power mode)
-	 * 3. SWYV[4:0] = 00101b (setting to -25V)
-	 * 4. SWZV[4:0] = 00000b (setting to 0V)
-	 */
-	temp3[0] = 0x00;
-	temp3[1] = 0x05;
-	temp3[2] = 0x00;
+	if (slic_chip_type == ZARLINK_LE88266) {
+		temp3[0] = 0x3;
+		len = 0x01;
+		slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len,
+				&temp3[0]);
+		temp3[0] = 0x3;
+		len = 0x01;
+		slic_cmd(device_handle, CHANNEL1, WRITE_CONVERTER_CFG, len,
+				&temp3[0]);
+	}
+	if (slic_chip_type == ZARLINK_LE88266) {
+		/* Set Switching Paramenters as for Le88266
+		 * 1. BSI[1:0] = 00b (sense pin VBL is SWVSY, VBH is SWVSZ)
+		 * 2. SWFS[1:0] = 00b (setting frequency as 384kHz in high
+		 *    power mode)
+		 * 3. SWYV[4:0] = 00101b (setting to -25V)
+		 * 4. SWZV[4:0] = 00000b (setting to 0V)
+		 */
+		temp3[0] = 0x00;
+		temp3[1] = 0x05;
+		temp3[2] = 0x00;
+	} else if (slic_chip_type == ZARLINK_LE88506) {
+		temp3[0] = 0x00;
+		temp3[1] = 0x84;
+		temp3[2] = 0x80;
+	}
 	len = 0x03;
 	slic_cmd(device_handle, CHANNEL1, WRITE_SWITCH_REGULATOR_PARAMS, len,
 			&temp3[0]);
@@ -358,8 +390,13 @@ static int slic_init_configure(unsigned char device_handle,
 		slic_cmd(device_handle, channel_id, WRITE_OPERATING_CONDITIONS,
 				len, &temp3[0]);
 
-		temp3[0] = 0x0;
-		temp3[1] = 0x2;
+		if (slic_chip_type == ZARLINK_LE88266) {
+			temp3[0] = 0x0;
+			temp3[1] = 0x2;
+		} else if (slic_chip_type == ZARLINK_LE88506) {
+			temp3[0] = 0x0;
+			temp3[1] = 0x0;
+		}
 		len = 0x02;
 		slic_cmd(device_handle, channel_id, WRITE_DC_CALIBRATION, len,
 			       &temp3[0]);
@@ -470,13 +507,22 @@ static int slic_init_configure(unsigned char device_handle,
 		slic_cmd(device_handle, channel_id, WRITE_OPERATING_CONDITIONS,
 				len, &temp3[0]);
 
-		temp3[0] = 0x0;
-		temp3[1] = 0x2;
+		if (slic_chip_type == ZARLINK_LE88266) {
+			temp3[0] = 0x0;
+			temp3[1] = 0x2;
+		} else if (slic_chip_type == ZARLINK_LE88506) {
+			temp3[0] = 0x0;
+			temp3[1] = 0x0;
+		}
+
 		len = 0x02;
 		slic_cmd(device_handle, channel_id, WRITE_DC_CALIBRATION, len,
 				&temp3[0]);
 
-		temp3[0] = 0x2b;
+		if (slic_chip_type == ZARLINK_LE88266)
+			temp3[0] = 0x2b;
+		else if (slic_chip_type == ZARLINK_LE88506)
+			temp3[0] = 0x23;
 		len = 0x01;
 		slic_cmd(device_handle, channel_id, WRITE_SYSTEM_STATE, len,
 				&temp3[0]);
@@ -586,7 +632,10 @@ static int slic_init_configure(unsigned char device_handle,
 		printk(KERN_INFO "Cadence Timer Reg for CH%d after is %x %x"
 				"%x %x\n", channel_id, cad[0], cad[1], cad[2],
 				cad[3]);
-		temp1 = 0x20;
+		if (slic_chip_type == ZARLINK_LE88266)
+			temp1 = 0x20;
+		 else if (slic_chip_type == ZARLINK_LE88506)
+			temp1 = 0x21;
 		len = 0x01;
 		slic_cmd(device_handle, channel_id, WRITE_SYSTEM_STATE_CFG,
 				len, &temp1);

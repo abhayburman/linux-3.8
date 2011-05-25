@@ -66,44 +66,77 @@ static int pq_mds_t1_clock_set(struct pq_mds_t1 *pq_mds_t1_info)
 	struct ds26528_mem *ds26528 = pq_mds_t1_info->ds26528_base;
 	struct pld_mem *pld = pq_mds_t1_info->pld_base;
 
-	if (pq_mds_t1_info->line_rate == LINE_RATE_T1) {
+	if (pq_mds_t1_info->card_support == ZARLINK_LE71HR8820G) {
 		/* General clock configuration
 		   Altera register setting: Framer DIGIOEN and TXEN active */
 		out_8(&pld->pinset, 0x03);
-		/* Drive MCLK & REFCLKIO with 1.544MHz */
-		out_8(&pld->csr, 0x00);
-		/* Drive TSYSCLK & RSYSCLK with 1.544MHz */
-		out_8(&pld->sysclk_tr, 0x00);
-
+		/* Drive MCLK & REFCLKIO with 2.048MHz */
+		out_8(&pld->csr, 0x41);
+		/* Drive TSYSCLK & RSYSCLK with 2.048MHz */
+		out_8(&pld->sysclk_tr, 0x41);
+		out_8(&pld->synctss, 0x00);
+		/* Drive TCLK1..4 with 2.048MHz*/
+		out_8(&pld->tcsr1, 0x55);
+		/* Drive TCLK5..8 with 2.048MHz*/
+		out_8(&pld->tcsr2, 0x55);
+		out_8(&pld->tsyncs1, 0x00);
+		out_8(&pld->ds3set, 0x00);
+		/* Connect tdm port A to LM card */
+		out_8(&pld->gcr, 0x42);
 		/* Framer setting
-		   Select MCLK - 1.544MHz, REFCLKIO - 1.544MHz (GTCCR) */
-		out_8(&ds26528->link[0].gbl.gtccr, 0xac);
-		/* Wait 10msec */
-		msleep(10);
+		    Select MCLK - 2.048MHz, REFCLKIO - 2.048MHz (GTCCR) */
+		out_8(&ds26528->link[0].gbl.gtccr, 0xa0);
+		/* Wait 1msec */
+		msleep(1);
 
 		/* Set TSSYNCIO -> OUTPUT (GTCR2) */
 		out_8(&ds26528->link[0].gbl.gtcr2, 0x02);
 		/* Select BPCLK=2.048MHz (GFCR) */
 		out_8(&ds26528->link[0].gbl.gfcr, 0x00);
 	} else {
-		/* General clock configuration
-		    Altera register setting: Framer DIGIOEN and TXEN active */
-		out_8(&pld->pinset, 0x03);
-		/* Drive MCLK & REFCLKIO with 2.048MHz */
-		out_8(&pld->csr, 0x41);
-		/* Drive TSYSCLK & RSYSCLK with 2.048MHz */
-		out_8(&pld->sysclk_tr, 0x41);
+		if (pq_mds_t1_info->line_rate == LINE_RATE_T1) {
+			/* General clock configuration
+			   Altera register setting:
+			   Framer DIGIOEN and TXEN active */
+			out_8(&pld->pinset, 0x03);
+			/* Drive MCLK & REFCLKIO with 1.544MHz */
+			out_8(&pld->csr, 0x00);
+			/* Drive TSYSCLK & RSYSCLK with 1.544MHz */
+			out_8(&pld->sysclk_tr, 0x00);
 
-		/* Framer setting
-		    Select MCLK - 2.048MHz, REFCLKIO - 2.048MHz (GTCCR) */
-		out_8(&ds26528->link[0].gbl.gtccr, 0xa0);
-		/* Wait 10msec */
-		msleep(10);
+			/* Framer setting
+			   Select MCLK - 1.544MHz,
+			   REFCLKIO - 1.544MHz (GTCCR) */
+			out_8(&ds26528->link[0].gbl.gtccr, 0xac);
+			/* Wait 1msec */
+			msleep(1);
 
-		/* Set TSSYNCIO -> OUTPUT (GTCR2) */
-		out_8(&ds26528->link[0].gbl.gtcr2, 0x02);
-		/* Select BPCLK=2.048MHz (GFCR) */
-		out_8(&ds26528->link[0].gbl.gfcr, 0x00);
+			/* Set TSSYNCIO -> OUTPUT (GTCR2) */
+			out_8(&ds26528->link[0].gbl.gtcr2, 0x02);
+			/* Select BPCLK=2.048MHz (GFCR) */
+			out_8(&ds26528->link[0].gbl.gfcr, 0x00);
+		} else {
+			/* General clock configuration
+			    Altera register setting:
+			    Framer DIGIOEN and TXEN active */
+			out_8(&pld->pinset, 0x03);
+			/* Drive MCLK & REFCLKIO with 2.048MHz */
+			out_8(&pld->csr, 0x41);
+			/* Drive TSYSCLK & RSYSCLK with 2.048MHz */
+			out_8(&pld->sysclk_tr, 0x41);
+
+			/* Framer setting
+			    Select MCLK - 2.048MHz,
+			    REFCLKIO - 2.048MHz (GTCCR) */
+			out_8(&ds26528->link[0].gbl.gtccr, 0xa0);
+			/* Wait 1msec */
+			msleep(1);
+
+			/* Set TSSYNCIO -> OUTPUT (GTCR2) */
+			out_8(&ds26528->link[0].gbl.gtcr2, 0x02);
+			/* Select BPCLK=2.048MHz (GFCR) */
+			out_8(&ds26528->link[0].gbl.gfcr, 0x00);
+		}
 	}
 
 	return 0;
@@ -147,7 +180,7 @@ static int card_pld_t1_clk_set(struct pq_mds_t1 *pq_mds_t1_info)
 	out_8(&pld->tcsr1, 0x00);
 	/* Drive TCLK5..8 with 1.544MHz*/
 	out_8(&pld->tcsr2, 0x00);
-	msleep(10);
+	msleep(1);
 
 	return 0;
 }
@@ -159,7 +192,7 @@ static int card_pld_e1_clk_set(struct pq_mds_t1 *pq_mds_t1_info)
 	out_8(&pld->tcsr1, 0x55);
 	/* Drive TCLK5..8 with 2.048MHz*/
 	out_8(&pld->tcsr2, 0x55);
-	msleep(10);
+	msleep(1);
 
 	return 0;
 }
@@ -331,7 +364,6 @@ int ds26528_t1_e1_config(struct pq_mds_t1 *pq_mds_t1_info, u8 phy_id)
 		break;
 	}
 	ds26528_bulk_write_unset(card_info);
-	msleep(10);
 
 	return 0;
 }
@@ -356,6 +388,15 @@ static enum tdm_trans_mode_t set_phy_trans_mode(const char *trans_mode)
 		return NORMAL;
 }
 
+static enum card_support_type set_card_support_type(const char *card_type)
+{
+	if (strcasecmp(card_type, "zarlink,le71hr8820g") == 0)
+		return ZARLINK_LE71HR8820G;
+	else if (strcasecmp(card_type, "dallas,ds26528") == 0)
+		return DS26528_CARD;
+	else
+		return DS26528_CARD;
+}
 
 static int __devinit pq_mds_t1_probe(struct of_device *ofdev,
 				const struct of_device_id *match)
@@ -387,35 +428,43 @@ static int __devinit pq_mds_t1_probe(struct of_device *ofdev,
 		goto err_miss_pld_property;
 	}
 	t1_info->pld_base = ioremap(res.start, res.end - res.start + 1);
+
+	prop = (unsigned char *)of_get_property(np, "fsl,card-support", NULL);
+	if (!prop) {
+		err = -ENODEV;
+		printk(KERN_ERR"%s: Invalid card-support property\n", __func__);
+		goto err_card_support;
+	}
+	t1_info->card_support = set_card_support_type(prop);
 	of_node_put(np);
+
+	err = pq_mds_t1_connect(t1_info);
+	if (err) {
+		err = -ENODEV;
+		printk(KERN_ERR"%s: No PQ_MDS_T1 CARD\n", __func__);
+		goto err_card_support;
+	}
 
 	np = of_find_compatible_node(NULL, NULL, "dallas,ds26528");
 	if (!np) {
 		printk(KERN_ERR
 			"%s: Invalid dallas,ds26528 property\n", __func__);
 		err = -ENODEV;
-		goto err_miss_phy_property;
+		goto err_card_support;
 
 	}
 	err = of_address_to_resource(np, 0, &res);
 	if (err) {
 		err = -ENODEV;
-		goto err_miss_phy_property;
+		goto err_card_support;
 	}
 	t1_info->ds26528_base = ioremap(res.start, res.end - res.start + 1);
-
-	err = pq_mds_t1_connect(t1_info);
-	if (err) {
-		err = -ENODEV;
-		printk(KERN_ERR"%s: No PQ_MDS_T1 CARD\n", __func__);
-		goto err_card_unplugin;
-	}
 
 	prop = (unsigned char *)of_get_property(np, "line-rate", NULL);
 	if (!prop) {
 		err = -ENODEV;
 		printk(KERN_ERR"%s: Invalid line-rate property\n", __func__);
-		goto err_card_unplugin;
+		goto err_line_rate;
 	}
 
 	t1_info->line_rate = set_phy_line_rate(prop);
@@ -424,19 +473,20 @@ static int __devinit pq_mds_t1_probe(struct of_device *ofdev,
 	if (!prop) {
 		err = -ENODEV;
 		printk(KERN_ERR"%s: Invalid trans-mode property\n", __func__);
-		goto err_card_unplugin;
+		goto err_line_rate;
 	}
 	t1_info->trans_mode = set_phy_trans_mode(prop);
 	of_node_put(np);
 
 	pq_mds_t1_clock_set(t1_info);
-	ds26528_t1_e1_config(t1_info, 0);
+	if (t1_info->card_support == DS26528_CARD)
+		ds26528_t1_e1_config(t1_info, 0);
 
 	return 0;
 
-err_card_unplugin:
+err_line_rate:
 	iounmap(t1_info->ds26528_base);
-err_miss_phy_property:
+err_card_support:
 	iounmap(t1_info->pld_base);
 err_miss_pld_property:
 	kfree(t1_info);

@@ -288,10 +288,16 @@ enum tdm_trans_mode_t {
     FRAMER_LB
 };
 
+enum card_support_type {
+    DS26528_CARD = 0,
+    ZARLINK_LE71HR8820G
+};
+
 struct pq_mds_t1 {
 	u32 irq;
 	struct ds26528_mem *ds26528_base;
 	struct pld_mem *pld_base;
+	enum card_support_type card_support;
 	enum tdm_trans_mode_t	trans_mode;
 	enum line_rate_t	line_rate;
 };
