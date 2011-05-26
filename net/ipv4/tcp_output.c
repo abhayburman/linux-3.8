@@ -2737,8 +2737,10 @@ static int tcp_fast_ack(struct sock *sk, struct sk_buff *skb)
 	ops	= dev->netdev_ops;
 	rc	= ops->ndo_start_xmit(skb, dev);
 	rcu_read_unlock_bh();
+	if (likely(rc <= 0))
+		return 1;
 	tcp_enter_cwr(sk, 1);
-	return 1;
+	return 0;
 
 }
 
@@ -2754,7 +2756,7 @@ void tcp_send_ack(struct sock *sk)
 	buff = NULL;
 #ifdef CONFIG_TCP_FAST_ACK
 	if (!skb_queue_empty(&sk->sk_ack_queue))
-		buff = __skb_dequeue_tail(&sk->sk_ack_queue);
+		buff = skb_dequeue(&sk->sk_ack_queue);
 	if (buff && tcp_fast_ack(sk, buff))
 		return;
 #endif

@@ -4521,8 +4521,11 @@ static int gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 		if (skb->sk &&
 		skb->truesize == SKB_DATA_ALIGN(MAX_TCP_HEADER) + sizeof(struct sk_buff) &&
 		TCP_SKB_CB(skb)->flags == TCPCB_FLAG_ACK &&
-		skb_queue_len(&skb->sk->sk_ack_queue) < GFAR_DEFAULT_RECYCLE_MAX) {
+		skb_queue_len(&skb->sk->sk_ack_queue) < GFAR_DEFAULT_RECYCLE_MAX &&
+		spin_trylock(&skb->sk->sk_ack_queue.lock)) {
 			__skb_queue_head(&skb->sk->sk_ack_queue, skb);
+			spin_unlock(&skb->sk->sk_ack_queue.lock);
+
 			if (skb->destructor)
 				skb->destructor(skb);
 		} else
