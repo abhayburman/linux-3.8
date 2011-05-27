@@ -1316,9 +1316,12 @@
 */
 
 	localbus@ffe124000 {
-		compatible = "fsl,p5020-elbc", "fsl,elbc", "simple-bus";
+		compatible = "fsl,p3041-rev1.0-elbc", "simple-bus";
 		reg = <0xf 0xfe124000 0 0x1000>;
-		interrupts = <25 2 0 0>;
+		interrupts = <
+			25 2 0 0
+			16 2 1 19
+			>;
 		#address-cells = <2>;
 		#size-cells = <1>;
 
