@@ -17,7 +17,7 @@
  *
  * Copyright (C) 2011 Freescale Semiconductor, Inc. All rights reserved.
  *
- * Authors: Jianhua Xie(Adam) <b29408@freescale.net>
+ * Authors: Jianhua Xie(Adam) <jianhua.xie@freescale.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,6 +43,10 @@
 #include <linux/in.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/skbuff.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <linux/if_arp.h>
 
 #ifdef CONFIG_NETFILTER_TABLE_INDEX
 
@@ -50,12 +54,14 @@
 #define MAXLINES_OF_TABLE 8
 
 struct TABLE_INDEX{
-	/* Income interface index */
-	int	ifindex;
-	/* Destination IP address */
-	__be32 dst;
+	__u8	Protocol; /* L3 protocol: TCP/UDP */
+	__be32	Saddr;	/* Source IP address */
+	__be32	Daddr;	/* Destination IP address */
+	__be16	SourcePort; /* Source Port */
+	__be16	DestPort; /* Destination Port */
+
 	/* Response from hook functions. */
-	int response;
+	unsigned int response;
 };
 
 struct NF_TABLE_INDEX{
@@ -77,19 +83,25 @@ int init_netfilter_table_index(void);
  * The function returns 0 forever.
  */
 int update_netfilter_table_index(
+		u_int8_t pf, /* NFPROTO_IPV4 */
+		unsigned int hook, /* NF_INET_FORWARD */
+		struct sk_buff *skb,
+		struct net_device *indev,
+		struct net_device *outdev,
 		struct NF_TABLE_INDEX *p_netfilter_table_index,
-		struct net_device *dev,
-		__be32  dst,
-		int     response);
+		unsigned int response);
 
 /* Search a new ip packet from the acceleration table, if it is found,
  * the function returns the response in the same line of the table,
  * else it returns -1.
  */
 int match_netfilter_table_index(
-		struct NF_TABLE_INDEX *p_netfilter_table_index,
-		struct net_device *dev,
-		__be32  dst);
+		u_int8_t pf, /* NFPROTO_IPV4 */
+		unsigned int hook, /* NF_INET_FORWARD */
+		struct sk_buff *skb,
+		struct net_device *indev,
+		struct net_device *outdev,
+		struct NF_TABLE_INDEX *p_netfilter_table_index);
 
 #endif	/*endif	CONFIG_NETFILTER_TABLE_INDEX*/
 #endif	/*endif __H_NETFILTER_TABLE_INDEX_H__*/

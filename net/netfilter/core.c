@@ -5,6 +5,7 @@
  * way.
  *
  * Rusty Russell (C)2000 -- This code is GPL.
+ * Copyright (C) 2011 Freescale Semiconductor, Inc.
  */
 #include <linux/kernel.h>
 #include <linux/netfilter.h>
@@ -177,6 +178,23 @@ next_hook:
 	if (verdict == NF_ACCEPT || verdict == NF_STOP) {
 		ret = 1;
 	} else if (verdict == NF_DROP) {
+#ifdef CONFIG_NETFILTER_TABLE_INDEX
+		/* I am interested in IPV4 and FORWARD infomations,
+		 * others go the old path pls. and thanks Rajan
+		 * for finding the bug.
+		 * DROP action should be cached as well.
+		 */
+		if ((pf == NFPROTO_IPV4) &&
+			(hook == NF_INET_FORWARD))
+			update_netfilter_table_index(
+				pf, /* NFPROTO_IPV4 */
+				hook, /* NF_INET_FORWARD */
+				skb,
+				indev,
+				outdev,
+				p_netfilter_table_index,
+				verdict);
+#endif  /* end CONFIG_NETFILTER_TABLE_INDEX */
 		kfree_skb(skb);
 		ret = -EPERM;
 	} else if ((verdict & NF_VERDICT_MASK) == NF_QUEUE) {
@@ -185,10 +203,20 @@ next_hook:
 			goto next_hook;
 	}
 #ifdef CONFIG_NETFILTER_TABLE_INDEX
-	if (unlikely(firewall_rules))
+	/* I am only interested in IPV4 and FORWARD
+	 * infomations, others go the old path.
+	 */
+	if ((pf == NFPROTO_IPV4) &&
+		(hook == NF_INET_FORWARD) &&
+		(ret != -EPERM))
 		update_netfilter_table_index(
-			p_netfilter_table_index, indev,
-			(ip_hdr(skb))->daddr, verdict);
+			pf, /* NFPROTO_IPV4 */
+			hook, /* NF_INET_FORWARD */
+			skb,
+			indev,
+			outdev,
+			p_netfilter_table_index,
+			verdict);
 #endif  /* end CONFIG_NETFILTER_TABLE_INDEX */
 	rcu_read_unlock();
 	return ret;

@@ -162,14 +162,10 @@ int ip_forward(struct sk_buff *skb)
 	skb->priority = rt_tos2priority(iph->tos);
 
 #ifdef CONFIG_NETFILTER_TABLE_INDEX
-	if (likely(!firewall_rules)) {
-		return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD, skb, skb->dev,
-		       rt->u.dst.dev, ip_forward_finish);
-	} else{
 	verdict = match_netfilter_table_index(
-		p_netfilter_table_index, skb->dev,
-		iph->daddr);
-		if (-1 == verdict)
+		NFPROTO_IPV4, NF_INET_FORWARD, skb, skb->dev, rt->u.dst.dev,
+		p_netfilter_table_index);
+		if (-1 == verdict) /* not found, go along the old path */
 			return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
 				skb, skb->dev, rt->u.dst.dev,
 				ip_forward_finish);
@@ -177,10 +173,13 @@ int ip_forward(struct sk_buff *skb)
 		if (verdict == NF_ACCEPT || verdict == NF_STOP)
 			return ip_forward_finish(skb);
 		else
-			goto drop;/* process NF_DROP,
-			and we mustn't accelorate NF_QUEUE */
+			goto drop;
+			/* We only recorded 3 kinds of results,
+			 * NF_ACCEPT, NF_STOP, NF DROP.
+			 * NF_DROP will be processed.
+			 * we don't accelorate NF_QUEUE
+			 */
 		}
-	}
 #endif  /* end CONFIG_NETFILTER_TABLE_INDEX */
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD, skb, skb->dev,
 		       rt->u.dst.dev, ip_forward_finish);

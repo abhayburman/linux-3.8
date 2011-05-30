@@ -162,10 +162,11 @@ config NETFILTER_ADVANCED
 config NETFILTER_TABLE_INDEX
 	bool "netfilter table index configuration"
 	depends on NETFILTER
-	default y
+	default n
 	help
 	  This feature is added by Freescale, it can
-	  improve L3 Firewall performance to special applications.
+	  improve IPv4 L3 Firewall performance to special applications.
+	  It supports Source/Dest IP, Tcp/Udp Source and Dest Port now.
 
 	  If unsure, say N.
 

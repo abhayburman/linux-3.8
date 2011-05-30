@@ -17,7 +17,7 @@
  *
  * Copyright (C) 2011 Freescale Semiconductor, Inc. All rights reserved.
  *
- * Authors: Jianhua Xie(Adam) <b29408@freescale.net>
+ * Authors: Jianhua Xie(Adam) <jianhua.xie@freescale.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,7 +42,6 @@
 #include <linux/icmp.h>
 #include <linux/netdevice.h>
 #include <net/sock.h>
-#include <net/ip.h>
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <net/icmp.h>
@@ -82,23 +81,50 @@ EXPORT_SYMBOL_GPL(init_netfilter_table_index);
  * The function returns 0 forever.
  */
 int update_netfilter_table_index(
+	u_int8_t pf, /* NFPROTO_IPV4 */
+	unsigned int hook, /* NF_INET_FORWARD */
+	struct sk_buff *skb,
+	struct net_device *indev,
+	struct net_device *outdev,
 	struct NF_TABLE_INDEX *p_netfilter_table_index,
-	struct net_device *dev,
-	__be32	dst,
-	int     response)
+	unsigned int response)
 {
-	if (response < 2) {
-		write_lock_bh(&(p_netfilter_table_index->lock));
-		memmove((void *)&(p_netfilter_table_index->table_index[1]),
-			(void *)&(p_netfilter_table_index->table_index[0]),
-			(MAXLINES_OF_TABLE - 1)*sizeof(struct TABLE_INDEX));
-		if (dev)
-			p_netfilter_table_index->table_index[0].ifindex =
-				dev->ifindex;
-		p_netfilter_table_index->table_index[0].dst = dst;
-		p_netfilter_table_index->table_index[0].response = response;
-	    write_unlock_bh(&(p_netfilter_table_index->lock));
+	struct TABLE_INDEX *p = (struct TABLE_INDEX *)
+		&(p_netfilter_table_index->table_index[0]);
+	/* we only cache IPV4 and Forwarding */
+	if (NFPROTO_IPV4 != pf)
+		return 0;
+	if (NF_INET_FORWARD != hook)
+		return 0;
+	/* we only cache TCP/UDP protocol, others go the slow path */
+	if ((IPPROTO_TCP != ip_hdr(skb)->protocol) &&
+		(IPPROTO_UDP != ip_hdr(skb)->protocol))
+			return 0;
+	/* we only cache NF_STOP/NF_DROP/NF_ACCEPT actions */
+	if ((NF_DROP != response) && (NF_STOP != response) &&
+		(NF_ACCEPT != response))
+			return 0;
+	write_lock_bh(&(p_netfilter_table_index->lock));
+	memmove((void *)&(p_netfilter_table_index->table_index[1]),
+		(void *)&(p_netfilter_table_index->table_index[0]),
+		(MAXLINES_OF_TABLE - 1)*sizeof(struct TABLE_INDEX));
+
+	if (IPPROTO_TCP == ip_hdr(skb)->protocol) {
+		p[0].Saddr	= ip_hdr(skb)->saddr;
+		p[0].Daddr	= ip_hdr(skb)->daddr;
+		p[0].Protocol	= ip_hdr(skb)->protocol;
+		p[0].SourcePort	= tcp_hdr(skb)->source;
+		p[0].DestPort	= tcp_hdr(skb)->dest;
+		p[0].response	= response;
+	} else if (IPPROTO_UDP == ip_hdr(skb)->protocol) {
+		p[0].Saddr	= ip_hdr(skb)->saddr;
+		p[0].Daddr	= ip_hdr(skb)->daddr;
+		p[0].Protocol	= ip_hdr(skb)->protocol;
+		p[0].SourcePort	= udp_hdr(skb)->source;
+		p[0].DestPort	= udp_hdr(skb)->dest;
+		p[0].response	= response;
 	}
+	write_unlock_bh(&(p_netfilter_table_index->lock));
 	return 0;
 }
 EXPORT_SYMBOL_GPL(update_netfilter_table_index);
@@ -108,35 +134,65 @@ EXPORT_SYMBOL_GPL(update_netfilter_table_index);
  * else it returns -1.
  */
 int match_netfilter_table_index(
-	struct NF_TABLE_INDEX *p_netfilter_table_index,
-	struct net_device *dev,
-	__be32	dst)
+		u_int8_t pf, /* NFPROTO_IPV4 */
+		unsigned int hook, /* NF_INET_FORWARD */
+		struct sk_buff *skb,
+		struct net_device *indev,
+		struct net_device *outdev,
+		struct NF_TABLE_INDEX *p_netfilter_table_index)
 {
 	bool found = false;
-	unsigned    long    i;
-	int     response;
-	read_lock_bh(&(p_netfilter_table_index->lock));
-	for (i = 0; i < MAXLINES_OF_TABLE; i++) {
-		if (p_netfilter_table_index->table_index[i].ifindex ==
-				dev->ifindex) {
-			if (p_netfilter_table_index->table_index[i].dst ==
-					dst) {
+	unsigned long i;
+	unsigned int response = -1;
+	struct TABLE_INDEX *p = (struct TABLE_INDEX *)
+		&(p_netfilter_table_index->table_index[0]);
+	/* we only cache IPV4 and Forwarding */
+	if (NFPROTO_IPV4 != pf)
+		return -1;
+	if (NF_INET_FORWARD != hook)
+		return -1;
+	/* we only search TCP/UDP protocol, others go the slow path */
+	if ((IPPROTO_TCP != ip_hdr(skb)->protocol) &&
+		(IPPROTO_UDP != ip_hdr(skb)->protocol))
+		return -1;
+	if (IPPROTO_TCP == ip_hdr(skb)->protocol) {
+		read_lock_bh(&(p_netfilter_table_index->lock));
+		for (i = 0; i < MAXLINES_OF_TABLE; i++) {
+			if ((p[i].Saddr == ip_hdr(skb)->saddr) &&
+				(p[i].Daddr == ip_hdr(skb)->daddr) &&
+				(p[i].Protocol == ip_hdr(skb)->protocol) &&
+				(p[i].SourcePort == tcp_hdr(skb)->source) &&
+				(p[i].DestPort == tcp_hdr(skb)->dest)) {
+
+				response = p[i].response;
+				read_unlock_bh(
+					&(p_netfilter_table_index->lock));
 				found = true;
-				response = p_netfilter_table_index->
-					table_index[i].response;
-				read_unlock_bh(&(p_netfilter_table_index->
-							lock));
 				goto out;
-			} else
-				continue;
-		} else
-			continue;
+				}
+		}
+	read_unlock_bh(&(p_netfilter_table_index->lock));
+	} else if (IPPROTO_UDP == ip_hdr(skb)->protocol) {
+		read_lock_bh(&(p_netfilter_table_index->lock));
+		for (i = 0; i < MAXLINES_OF_TABLE; i++) {
+			if ((p[i].Saddr == ip_hdr(skb)->saddr) &&
+				(p[i].Daddr == ip_hdr(skb)->daddr) &&
+				(p[i].Protocol == ip_hdr(skb)->protocol) &&
+				(p[i].SourcePort == udp_hdr(skb)->source) &&
+				(p[i].DestPort == udp_hdr(skb)->dest)) {
+
+				response = p[i].response;
+				read_unlock_bh(
+					&(p_netfilter_table_index->lock));
+				found = true;
+				goto out;
+				}
+		}
+		read_unlock_bh(&(p_netfilter_table_index->lock));
 	}
 out:
-	if (found)
-		return response;
-	else
-		return -1;
+	/* if not found, the response is -1 just like the initial value */
+	return response;
 }
 EXPORT_SYMBOL_GPL(match_netfilter_table_index);
 
