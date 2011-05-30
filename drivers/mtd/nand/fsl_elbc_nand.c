@@ -156,8 +156,17 @@ static void set_addr(struct mtd_info *mtd, int column, int page_addr, int oob)
 
 	elbc_fcm_ctrl->page = page_addr;
 
-	out_be32(&lbc->fbar,
-	         page_addr >> (chip->phys_erase_shift - chip->page_shift));
+	/* when the block/page size is 256KB/2KB, we will treat the low bit
+	 * of FBAR as being the high bit of the page address, it simply uses
+	 * the low 6-bits (for large page) of the combined block/page address
+	 * as the FPAR component,and rather than considering the actual
+	 * block size.
+	 */
+	if ((mtd->erasesize == 256 * 1024) && (mtd->writesize == 2 * 1024))
+		out_be32(&lbc->fbar, page_addr >> 6);
+	else
+		out_be32(&lbc->fbar,
+		    page_addr >> (chip->phys_erase_shift - chip->page_shift));
 
 	if (priv->page_size) {
 		out_be32(&lbc->fpar,
