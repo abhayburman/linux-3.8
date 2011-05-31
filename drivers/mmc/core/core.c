@@ -5,6 +5,7 @@
  *  SD support Copyright (C) 2004 Ian Molton, All Rights Reserved.
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
  *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
+ *  Copyright (C) 2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -194,8 +195,37 @@ mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 
 static void mmc_wait_done(struct mmc_request *mrq)
 {
-	complete(mrq->done_data);
+	complete(&mrq->completion);
 }
+
+/**
+ *	mmc_start_req - start a request
+ *	@host: MMC host to start command
+ *	@mrq: MMC request to start
+ *	Start a new MMC custom command request for a host.
+ *	Does not wait for the command to complete.
+ */
+void mmc_start_req(struct mmc_host *host, struct mmc_request *mrq)
+{
+	init_completion(&mrq->completion);
+	mrq->done = mmc_wait_done;
+
+	mmc_start_request(host, mrq);
+}
+EXPORT_SYMBOL(mmc_start_req);
+
+/**
+ *	mmc_wait_for_req_done - wait for completion of request
+ *	@mrq: MMC request to wait for
+ *
+ *	Wait for the command to complete. Does not attempt to parse the
+ *	response.
+ */
+void mmc_wait_for_req_done(struct mmc_request *mrq)
+{
+	wait_for_completion(&mrq->completion);
+}
+EXPORT_SYMBOL(mmc_wait_for_req_done);
 
 /**
  *	mmc_wait_for_req - start a request and wait for completion
@@ -208,14 +238,8 @@ static void mmc_wait_done(struct mmc_request *mrq)
  */
 void mmc_wait_for_req(struct mmc_host *host, struct mmc_request *mrq)
 {
-	DECLARE_COMPLETION_ONSTACK(complete);
-
-	mrq->done_data = &complete;
-	mrq->done = mmc_wait_done;
-
-	mmc_start_request(host, mrq);
-
-	wait_for_completion(&complete);
+	mmc_start_req(host, mrq);
+	mmc_wait_for_req_done(mrq);
 }
 
 EXPORT_SYMBOL(mmc_wait_for_req);
