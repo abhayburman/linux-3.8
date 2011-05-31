@@ -236,99 +236,111 @@ static u32 get_card_status(struct mmc_card *card, struct request *req)
 	return cmd.resp[0];
 }
 
+static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
+			       struct mmc_card *card,
+			       int disable_multi,
+			       struct mmc_queue *mq)
+{
+	u32 readcmd, writecmd;
+	struct mmc_blk_request *brq = &mq->mqrq_cur->brq;
+	struct request *req = mqrq->req;
+
+	memset(brq, 0, sizeof(struct mmc_blk_request));
+
+	brq->mrq.cmd = &brq->cmd;
+	brq->mrq.data = &brq->data;
+
+	brq->cmd.arg = blk_rq_pos(req);
+	if (!mmc_card_blockaddr(card))
+		brq->cmd.arg <<= 9;
+	brq->cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
+	brq->data.blksz = 512;
+	brq->stop.opcode = MMC_STOP_TRANSMISSION;
+	brq->stop.arg = 0;
+	brq->stop.flags = MMC_RSP_SPI_R1B | MMC_RSP_R1B | MMC_CMD_AC;
+	brq->data.blocks = blk_rq_sectors(req);
+
+	/*
+	 * The block layer doesn't support all sector count
+	 * restrictions, so we need to be prepared for too big
+	 * requests.
+	 */
+	if (brq->data.blocks > card->host->max_blk_count)
+		brq->data.blocks = card->host->max_blk_count;
+
+	/*
+	 * After a read error, we redo the request one sector at a time
+	 * in order to accurately determine which sectors can be read
+	 * successfully.
+	 */
+	if (disable_multi && brq->data.blocks > 1)
+		brq->data.blocks = 1;
+
+	if (brq->data.blocks > 1) {
+		/* SPI multiblock writes terminate using a special
+		 * token, not a STOP_TRANSMISSION request.
+		 */
+		if (!mmc_host_is_spi(card->host)
+		    || rq_data_dir(req) == READ)
+			brq->mrq.stop = &brq->stop;
+		readcmd = MMC_READ_MULTIPLE_BLOCK;
+		writecmd = MMC_WRITE_MULTIPLE_BLOCK;
+	} else {
+		brq->mrq.stop = NULL;
+		readcmd = MMC_READ_SINGLE_BLOCK;
+		writecmd = MMC_WRITE_BLOCK;
+	}
+	if (rq_data_dir(req) == READ) {
+		brq->cmd.opcode = readcmd;
+		brq->data.flags |= MMC_DATA_READ;
+	} else {
+		brq->cmd.opcode = writecmd;
+		brq->data.flags |= MMC_DATA_WRITE;
+	}
+
+	mmc_set_data_timeout(&brq->data, card);
+
+	brq->data.sg = mqrq->sg;
+	brq->data.sg_len = mmc_queue_map_sg(mq, mqrq);
+
+	/*
+	 * Adjust the sg list so it is the same size as the
+	 * request.
+	 */
+	if (brq->data.blocks != blk_rq_sectors(req)) {
+		int i, data_size = brq->data.blocks << 9;
+		struct scatterlist *sg;
+
+		for_each_sg(brq->data.sg, sg, brq->data.sg_len, i) {
+			data_size -= sg->length;
+			if (data_size <= 0) {
+				sg->length += data_size;
+				i++;
+				break;
+			}
+		}
+		brq->data.sg_len = i;
+	}
+
+	mmc_queue_bounce_pre(mqrq);
+}
+
 static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
-	struct mmc_blk_request brq;
+	struct mmc_blk_request *brq = &mq->mqrq_cur->brq;
 	int ret = 1, disable_multi = 0;
 
 	mmc_claim_host(card->host);
 
 	do {
 		struct mmc_command cmd;
-		u32 readcmd, writecmd, status = 0;
+		u32 status = 0;
 
-		memset(&brq, 0, sizeof(struct mmc_blk_request));
-		brq.mrq.cmd = &brq.cmd;
-		brq.mrq.data = &brq.data;
+		mmc_blk_rw_rq_prep(mq->mqrq_cur, card, disable_multi, mq);
 
-		brq.cmd.arg = blk_rq_pos(req);
-		if (!mmc_card_blockaddr(card))
-			brq.cmd.arg <<= 9;
-		brq.cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
-		brq.data.blksz = 512;
-		brq.stop.opcode = MMC_STOP_TRANSMISSION;
-		brq.stop.arg = 0;
-		brq.stop.flags = MMC_RSP_SPI_R1B | MMC_RSP_R1B | MMC_CMD_AC;
-		brq.data.blocks = blk_rq_sectors(req);
-
-		/*
-		 * The block layer doesn't support all sector count
-		 * restrictions, so we need to be prepared for too big
-		 * requests.
-		 */
-		if (brq.data.blocks > card->host->max_blk_count)
-			brq.data.blocks = card->host->max_blk_count;
-
-		/*
-		 * After a read error, we redo the request one sector at a time
-		 * in order to accurately determine which sectors can be read
-		 * successfully.
-		 */
-		if (disable_multi && brq.data.blocks > 1)
-			brq.data.blocks = 1;
-
-		if (brq.data.blocks > 1) {
-			/* SPI multiblock writes terminate using a special
-			 * token, not a STOP_TRANSMISSION request.
-			 */
-			if (!mmc_host_is_spi(card->host)
-					|| rq_data_dir(req) == READ)
-				brq.mrq.stop = &brq.stop;
-			readcmd = MMC_READ_MULTIPLE_BLOCK;
-			writecmd = MMC_WRITE_MULTIPLE_BLOCK;
-		} else {
-			brq.mrq.stop = NULL;
-			readcmd = MMC_READ_SINGLE_BLOCK;
-			writecmd = MMC_WRITE_BLOCK;
-		}
-
-		if (rq_data_dir(req) == READ) {
-			brq.cmd.opcode = readcmd;
-			brq.data.flags |= MMC_DATA_READ;
-		} else {
-			brq.cmd.opcode = writecmd;
-			brq.data.flags |= MMC_DATA_WRITE;
-		}
-
-		mmc_set_data_timeout(&brq.data, card);
-
-		brq.data.sg = mq->mqrq_cur->sg;
-		brq.data.sg_len = mmc_queue_map_sg(mq, mq->mqrq_cur);
-
-		/*
-		 * Adjust the sg list so it is the same size as the
-		 * request.
-		 */
-		if (brq.data.blocks != blk_rq_sectors(req)) {
-			int i, data_size = brq.data.blocks << 9;
-			struct scatterlist *sg;
-
-			for_each_sg(brq.data.sg, sg, brq.data.sg_len, i) {
-				data_size -= sg->length;
-				if (data_size <= 0) {
-					sg->length += data_size;
-					i++;
-					break;
-				}
-			}
-			brq.data.sg_len = i;
-		}
-
-		mmc_queue_bounce_pre(mq->mqrq_cur);
-
-		mmc_wait_for_req(card->host, &brq.mrq);
+		mmc_wait_for_req(card->host, &brq->mrq);
 
 		mmc_queue_bounce_post(mq->mqrq_cur);
 
@@ -337,8 +349,8 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		 * until later as we need to wait for the card to leave
 		 * programming mode even when things go wrong.
 		 */
-		if (brq.cmd.error || brq.data.error || brq.stop.error) {
-			if (brq.data.blocks > 1 && rq_data_dir(req) == READ) {
+		if (brq->cmd.error || brq->data.error || brq->stop.error) {
+			if (brq->data.blocks > 1 && rq_data_dir(req) == READ) {
 				/* Redo read one sector at a time */
 				printk(KERN_WARNING "%s: retrying using single "
 				       "block read\n", req->rq_disk->disk_name);
@@ -348,29 +360,29 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 			status = get_card_status(card, req);
 		}
 
-		if (brq.cmd.error) {
+		if (brq->cmd.error) {
 			printk(KERN_ERR "%s: error %d sending read/write "
 			       "command, response %#x, card status %#x\n",
-			       req->rq_disk->disk_name, brq.cmd.error,
-			       brq.cmd.resp[0], status);
+			       req->rq_disk->disk_name, brq->cmd.error,
+			       brq->cmd.resp[0], status);
 		}
 
-		if (brq.data.error) {
-			if (brq.data.error == -ETIMEDOUT && brq.mrq.stop)
+		if (brq->data.error) {
+			if (brq->data.error == -ETIMEDOUT && brq->mrq.stop)
 				/* 'Stop' response contains card status */
-				status = brq.mrq.stop->resp[0];
+				status = brq->mrq.stop->resp[0];
 			printk(KERN_ERR "%s: error %d transferring data,"
 			       " sector %u, nr %u, card status %#x\n",
-			       req->rq_disk->disk_name, brq.data.error,
+			       req->rq_disk->disk_name, brq->data.error,
 			       (unsigned)blk_rq_pos(req),
 			       (unsigned)blk_rq_sectors(req), status);
 		}
 
-		if (brq.stop.error) {
+		if (brq->stop.error) {
 			printk(KERN_ERR "%s: error %d sending stop command, "
 			       "response %#x, card status %#x\n",
-			       req->rq_disk->disk_name, brq.stop.error,
-			       brq.stop.resp[0], status);
+			       req->rq_disk->disk_name, brq->stop.error,
+			       brq->stop.resp[0], status);
 		}
 
 		if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ) {
@@ -403,7 +415,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 #endif
 		}
 
-		if (brq.cmd.error || brq.stop.error || brq.data.error) {
+		if (brq->cmd.error || brq->stop.error || brq->data.error) {
 			if (rq_data_dir(req) == READ) {
 				/*
 				 * After an error, we redo I/O one sector at a
@@ -411,7 +423,8 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 				 * read a single sector.
 				 */
 				spin_lock_irq(&md->lock);
-				ret = __blk_end_request(req, -EIO, brq.data.blksz);
+				ret = __blk_end_request(req, -EIO,
+						brq->data.blksz);
 				spin_unlock_irq(&md->lock);
 				continue;
 			}
@@ -422,7 +435,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		 * A block was successfully transferred.
 		 */
 		spin_lock_irq(&md->lock);
-		ret = __blk_end_request(req, 0, brq.data.bytes_xfered);
+		ret = __blk_end_request(req, 0, brq->data.bytes_xfered);
 		spin_unlock_irq(&md->lock);
 	} while (ret);
 
@@ -450,7 +463,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		}
 	} else {
 		spin_lock_irq(&md->lock);
-		ret = __blk_end_request(req, 0, brq.data.bytes_xfered);
+		ret = __blk_end_request(req, 0, brq->data.bytes_xfered);
 		spin_unlock_irq(&md->lock);
 	}
 
