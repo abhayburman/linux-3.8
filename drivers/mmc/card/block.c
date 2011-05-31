@@ -3,6 +3,7 @@
  *
  * Copyright 2002 Hewlett-Packard Company
  * Copyright 2005-2008 Pierre Ossman
+ * Copyright (C) 2011 Freescale Semiconductor, Inc.
  *
  * Use consistent with the GNU GPL is permitted,
  * provided that this copyright notice is
@@ -143,13 +144,6 @@ static const struct block_device_operations mmc_bdops = {
 	.release		= mmc_blk_release,
 	.getgeo			= mmc_blk_getgeo,
 	.owner			= THIS_MODULE,
-};
-
-struct mmc_blk_request {
-	struct mmc_request	mrq;
-	struct mmc_command	cmd;
-	struct mmc_command	stop;
-	struct mmc_data		data;
 };
 
 static u32 mmc_sd_num_wr_blocks(struct mmc_card *card)
@@ -310,8 +304,8 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 
 		mmc_set_data_timeout(&brq.data, card);
 
-		brq.data.sg = mq->sg;
-		brq.data.sg_len = mmc_queue_map_sg(mq);
+		brq.data.sg = mq->mqrq_cur->sg;
+		brq.data.sg_len = mmc_queue_map_sg(mq, mq->mqrq_cur);
 
 		/*
 		 * Adjust the sg list so it is the same size as the
@@ -332,11 +326,11 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 			brq.data.sg_len = i;
 		}
 
-		mmc_queue_bounce_pre(mq);
+		mmc_queue_bounce_pre(mq->mqrq_cur);
 
 		mmc_wait_for_req(card->host, &brq.mrq);
 
-		mmc_queue_bounce_post(mq);
+		mmc_queue_bounce_post(mq->mqrq_cur);
 
 		/*
 		 * Check for errors here, but don't jump to cmd_err
