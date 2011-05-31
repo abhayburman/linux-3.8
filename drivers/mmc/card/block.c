@@ -442,11 +442,11 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *rqc)
 	if (!rqc && !rqp)
 		return 0;
 
+	/* Claim/Release host every time, for avoiding the detect thread
+	 * of SD was hung
+	 */
+	mmc_claim_host(card->host);
 	if (rqc) {
-		/* Claim host for the first request in a serie of requests */
-		if (!rqp)
-			mmc_claim_host(card->host);
-
 		/* Prepare a new request */
 		mmc_blk_rw_rq_prep(mq->mqrq_cur, card, 0, mq);
 	}
@@ -457,11 +457,47 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *rqc)
 		 */
 		if (rqp)
 			mmc_wait_for_req_done(&brqp->mrq);
+		else if (rq_data_dir(rqc) == READ) {
+			mmc_start_req(card->host, &brqc->mrq);
+			mmc_wait_for_req_done(&brqc->mrq);
+			mmc_queue_bounce_post(mq->mqrq_cur);
+
+			status = mmc_blk_get_status(brqc, rqc, card, md);
+			switch (status) {
+			case MMC_BLK_SUCCESS:
+				spin_lock_irq(&md->lock);
+				ret = __blk_end_request(rqc, 0,
+						brqc->data.bytes_xfered);
+				spin_unlock_irq(&md->lock);
+				break;
+			case MMC_BLK_RETRY:
+				ret = 1;
+				disable_multi = 1;
+				break;
+			case MMC_BLK_DATA_ERR:
+				spin_lock_irq(&md->lock);
+				ret = __blk_end_request(rqc, -EIO,
+						brqc->data.blksz);
+				spin_unlock_irq(&md->lock);
+				break;
+			}
+
+			mmc_release_host(card->host);
+			if (unlikely(ret)) {
+				mmc_blk_rw_rq_prep(mq->mqrq_cur, card,
+						disable_multi, mq);
+				mmc_start_req(card->host, &brqc->mrq);
+				goto out;
+			}
+
+			return 1;
+		}
 		else {
 			/* start a new asynchronous request */
 			mmc_start_req(card->host, &brqc->mrq);
 			goto out;
 		}
+
 		status = mmc_blk_get_status(brqp, rqp, card, md);
 		if (status != MMC_BLK_SUCCESS) {
 			mmc_queue_bounce_post(mqrqp);
@@ -545,14 +581,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *rqc)
 	/* 1 indicates one request has been completed */
 	ret = 1;
 out:
-	/*
-	 * TODO: Find out if it is OK to only release host after the
-	 *       last request. For the last request the current request
-	 *        is NULL, which means no requests are pending.
-	 */
-	/* Release host for the last request in a serie of requests */
-	if (!rqc)
-		mmc_release_host(card->host);
+	mmc_release_host(card->host);
 
 	/* Current request becomes previous request and vice versa. */
 	mqrqp->brq.mrq.data = NULL;
@@ -596,6 +625,7 @@ cmd_err:
 	if (rqc) {
 		mmc_claim_host(card->host);
 		mmc_start_req(card->host, &brqc->mrq);
+		mmc_release_host(card->host);
 	}
 
 	/* Current request becomes previous request and vice versa. */
