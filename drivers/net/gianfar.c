@@ -3951,7 +3951,7 @@ static int gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev->stats.tx_fifo_errors++;
 	}
 #endif
-
+	dev->trans_start = jiffies;
 	/* Tell the DMA to go go go */
 	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
 
