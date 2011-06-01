@@ -4292,12 +4292,7 @@ static inline int try_fastroute(struct sk_buff *skb,
 					      dev->name);
 				}
 				priv->extra_stats.rx_fast++;
-			}
-			/* Semi Fast Route Path: Mark the packet as needing
-			 * fast routing, but let the stack handle getting it
-			 * to the device */
-			else {
-				skb->pkt_type = PACKET_FASTROUTE;
+			} else {
 				skb_reset_network_header(skb);
 				/* Tell the skb what kind of packet this is*/
 				skb->protocol = eth_type_trans(skb, dev);
