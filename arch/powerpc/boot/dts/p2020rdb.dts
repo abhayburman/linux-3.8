@@ -393,6 +393,7 @@
 			interrupt-parent = <&mpic>;
 			interrupts = <28 0x2>;
 			phy_type = "ulpi";
+			dr_mode = "host";
 		};
 
 		ptp_timer: ptimer@24e00 {

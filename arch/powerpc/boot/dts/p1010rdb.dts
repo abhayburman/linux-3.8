@@ -345,14 +345,13 @@
 		usb@22000 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			cell-index = <0>;
 			compatible = "fsl-usb2-dr";
 			reg = <0x22000 0x1000>;
 			interrupt-parent = <&mpic>;
 			interrupts = <28 0x2>;
 			dr_mode = "host";
 			phy_type = "utmi";
-			};
+		};
 
 		crypto: crypto@30000 {
 			compatible = "fsl,p4080-sec4.0", "fsl,sec4.0";
