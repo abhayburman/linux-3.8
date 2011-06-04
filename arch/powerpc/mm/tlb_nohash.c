@@ -392,16 +392,30 @@ void tlb_flush_pgtable(struct mmu_gather *tlb, unsigned long address)
 	}
 }
 
+static void __patch_exception(int exc, unsigned long addr)
+{
+	extern unsigned int interrupt_base_book3e;
+	unsigned int *ibase = &interrupt_base_book3e;
+ 
+	/* Our exceptions vectors start with a NOP and -then- a branch
+	 * to deal with single stepping from userspace which stops on
+	 * the second instruction. Thus we need to patch the second
+	 * instruction of the exception, not the first one
+	 */
+
+	patch_branch(ibase + (exc / 4) + 1, addr, 0);
+}
+
+#define patch_exception(exc, name) do { \
+	extern unsigned int name; \
+	__patch_exception((exc), (unsigned long)&name); \
+} while (0)
+
 /*
  * Early initialization of the MMU TLB code
  */
 static void __early_init_mmu(int boot_cpu)
 {
-	extern unsigned int interrupt_base_book3e;
-	extern unsigned int exc_data_tlb_miss_htw_book3e;
-	extern unsigned int exc_instruction_tlb_miss_htw_book3e;
-
-	unsigned int *ibase = &interrupt_base_book3e;
 	unsigned int mas4;
 
 	/* XXX This will have to be decided at runtime, but right
@@ -439,10 +453,8 @@ static void __early_init_mmu(int boot_cpu)
 		/* Check if HW loader is supported */
 		if ((tlb0cfg & TLBnCFG_IND) &&
 		    (tlb0cfg & TLBnCFG_PT)) {
-			patch_branch(ibase + (0x1c0 / 4),
-			     (unsigned long)&exc_data_tlb_miss_htw_book3e, 0);
-			patch_branch(ibase + (0x1e0 / 4),
-			     (unsigned long)&exc_instruction_tlb_miss_htw_book3e, 0);
+			patch_exception(0x1c0, exc_data_tlb_miss_htw_book3e);
+			patch_exception(0x1e0, exc_instruction_tlb_miss_htw_book3e);
 			book3e_htw_enabled = 1;
 		}
 		pr_info("MMU: Book3E Page Tables %s\n",
@@ -487,6 +499,9 @@ static void __early_init_mmu(int boot_cpu)
 		/* limit memory so we dont have linear faults */
 		lmb_enforce_memory_limit(linear_map_top);
 		lmb_analyze();
+
+		patch_exception(0x1c0, exc_data_tlb_miss_bolted_book3e);
+		patch_exception(0x1e0, exc_instruction_tlb_miss_bolted_book3e);
 	}
 #endif
 

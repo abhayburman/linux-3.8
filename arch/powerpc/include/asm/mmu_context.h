@@ -48,6 +48,7 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	/* 64-bit Book3E keeps track of current PGD in the PACA */
 #ifdef CONFIG_PPC_BOOK3E_64
 	get_paca()->pgd = next->pgd;
+	get_paca()->extlb[EX_TLB_PGD / 8] = (unsigned long)next->pgd;
 #endif
 	/* Nothing else to do if we aren't actually switching */
 	if (prev == next)
@@ -98,6 +99,7 @@ static inline void enter_lazy_tlb(struct mm_struct *mm,
 	/* 64-bit Book3E keeps track of current PGD in the PACA */
 #ifdef CONFIG_PPC_BOOK3E_64
 	get_paca()->pgd = NULL;
+	get_paca()->extlb[EX_TLB_PGD / 8] = 0;
 #endif
 }
 
