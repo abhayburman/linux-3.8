@@ -404,6 +404,7 @@ static inline int devfp_register_tx_hook(devfp_hook_t hook)
 
 #define RSTAT_CLEAR_RHALT       0x00800000
 #define RSTAT_RXF_ALL_MASK	0x000000FF
+#define RSTAT_RHALT_ALL_MASK	0x00FF0000
 #define RSTAT_RXF0_MASK		0x00000080
 
 #define TCTRL_IPCSEN		0x00004000
@@ -476,7 +477,6 @@ static inline int devfp_register_tx_hook(devfp_hook_t hook)
 #define IMASK_FIQ		0x00000004
 #define IMASK_DPE		0x00000002
 #define IMASK_PERR		0x00000001
-#define IMASK_RX_DISABLED (~(IMASK_RXFEN0 | IMASK_BSY))
 #define IMASK_DEFAULT  (IMASK_TXEEN | IMASK_TXFEN | IMASK_TXBEN | \
 		IMASK_RXFEN0 | IMASK_BSY | IMASK_EBERR | IMASK_BABR | \
 		IMASK_XFUN | IMASK_RXC | IMASK_BABT | IMASK_FGPI | \
@@ -488,6 +488,7 @@ static inline int devfp_register_tx_hook(devfp_hook_t hook)
 #define IMASK_DEFAULT_TX	(IMASK_TXFEN | IMASK_TXBEN)
 #define IMASK_DEFAULT_RX	(IMASK_RXFEN0 | IMASK_RXB0 | IMASK_BSY)
 
+#define IMASK_RX_DISABLED ((~IMASK_DEFAULT_RX) & IMASK_DEFAULT)
 #define IMASK_TX_DISABLED	((~IMASK_DEFAULT_TX) \
 				& IMASK_DEFAULT)
 #endif
