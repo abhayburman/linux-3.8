@@ -710,6 +710,14 @@ config FSL_LBC
 	  controller.  Also contains some common code used by
 	  drivers for specific local bus peripherals.
 
+config FSL_IFC
+        bool "Freescale Integrated Flash Controller support"
+        depends on FSL_SOC
+        help
+          Enables reporting of errors from the Freescale integrated
+          flash controller.  Also contains some common code used by
+          drivers for specific ifc controller peripherals.
+
 config FSL_GTM
 	bool
 	depends on PPC_83xx || QUICC_ENGINE || CPM2
