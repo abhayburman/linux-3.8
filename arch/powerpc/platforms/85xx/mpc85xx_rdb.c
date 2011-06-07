@@ -207,17 +207,17 @@ static void __init mpc85xx_rdb_setup_arch(void)
 
 		for_each_node_by_name(ucc, "ucc")
 			par_io_of_config(ucc);
-	}
 
-#if defined CONFIG_SPI_MPC8xxx
-{
+#ifdef CONFIG_SPI_MPC8xxx
+		{
 		struct device_node *qe_spi;
 		for_each_node_by_name(qe_spi, "spi")
 			par_io_of_config(qe_spi);
-}
+		}
 #endif
+	}
 
-	if (machine_is(p1025_rdb)) {
+	if (machine_is(p1025_rdb) || machine_is(p1021_rdb_pc)) {
 #define MPC85xx_PMUXCR_OFFSET           0x60
 #define MPC85xx_PMUXCR_QE0              0x00008000
 #define MPC85xx_PMUXCR_QE2              0x00002000
@@ -243,6 +243,7 @@ static void __init mpc85xx_rdb_setup_arch(void)
 					" signal multiplex control register not"
 					" mapped!\n");
 			else {
+#if defined(CONFIG_UCC_GETH) || defined(CONFIG_SERIAL_QE)
 			/* P1025 has pins muxed for QE and other functions. To
 			 * enable QE UEC mode, we need to set bit QE0 for UCC1
 			 * in Eth mode, QE0 and QE3 for UCC5 in Eth mode, QE9
@@ -253,6 +254,7 @@ static void __init mpc85xx_rdb_setup_arch(void)
 						  MPC85xx_PMUXCR_QE3 |
 						  MPC85xx_PMUXCR_QE9 |
 						  MPC85xx_PMUXCR_QE12);
+#endif
 			}
 
 #ifdef CONFIG_FSL_UCC_TDM
@@ -304,7 +306,7 @@ static struct of_device_id __initdata mpc85xxrdb_ids[] = {
 	{},
 };
 
-static struct of_device_id __initdata p1025_ids[] = {
+static struct of_device_id __initdata p102x_qe_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },
 	{ .compatible = "simple-bus", },
@@ -319,10 +321,10 @@ static int __init mpc85xxrdb_publish_devices(void)
 	return of_platform_bus_probe(NULL, mpc85xxrdb_ids, NULL);
 }
 
-static int __init p1025_publish_devices(void)
+static int __init p102x_qe_publish_devices(void)
 {
 	/* Publish the QE devices */
-	of_platform_bus_probe(NULL, p1025_ids, NULL);
+	of_platform_bus_probe(NULL, p102x_qe_ids, NULL);
 
 	return 0;
 }
@@ -330,12 +332,12 @@ static int __init p1025_publish_devices(void)
 machine_device_initcall(p2020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_rdb_pc, mpc85xxrdb_publish_devices);
-machine_device_initcall(p1021_rdb_pc, mpc85xxrdb_publish_devices);
+machine_device_initcall(p1021_rdb_pc, p102x_qe_publish_devices);
 machine_device_initcall(p2020_rdb_pc, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_mbg, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1020_utm, mpc85xxrdb_publish_devices);
 machine_device_initcall(p1024_rdb, mpc85xxrdb_publish_devices);
-machine_device_initcall(p1025_rdb, p1025_publish_devices);
+machine_device_initcall(p1025_rdb, p102x_qe_publish_devices);
 machine_arch_initcall(p2020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_rdb, swiotlb_setup_bus_notifier);
 machine_arch_initcall(p1020_mbg, swiotlb_setup_bus_notifier);
