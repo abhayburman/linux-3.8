@@ -129,6 +129,10 @@ struct caam_drv_private {
 	/* list of registered crypto algorithms (mk generic context handle?) */
 	struct list_head alg_list;
 
+	/* For DMA-XOR support */
+	struct dma_device dma_dev;
+	struct caam_xor_sh_desc *xor_sh_desc;
+
 	/* pointer to the cache pool */
 	struct kmem_cache *netcrypto_cache;
 	/* pointer to edescriptor recycle queue */

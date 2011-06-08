@@ -38,6 +38,7 @@
 #include "regs.h"
 #include "intern.h"
 #include "jq.h"
+#include "caamxor.h"
 
 /*
  * Use of CONFIG_PPC throughout is used to switch in code
@@ -293,6 +294,10 @@ static int caam_probe(struct of_device *ofdev,
 #ifdef CONFIG_CRYPTO_DEV_FSL_CAAM_CRYPTO_API
 	/* register algorithms with scatterlist crypto API */
 	caam_jq_algapi_init(dev);
+#endif
+
+#ifdef CONFIG_CRYPTO_DEV_FSL_CAAM_DMAXOR_API
+	caam_jq_dma_init(dev);
 #endif
 
 #ifdef CONFIG_DEBUG_FS

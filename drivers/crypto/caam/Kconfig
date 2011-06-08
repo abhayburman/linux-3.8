@@ -69,3 +69,12 @@ config CRYPTO_DEV_FSL_CAAM_CRYPTO_API
 	  Selecting this will offload crypto for users of the
 	  scatterlist crypto API (such as the linux native IPSec
 	  stack NETKEY) to the SEC4 via a job queue.
+
+config CRYPTO_DEV_FSL_CAAM_DMAXOR_API
+	bool "Freescale CAAM XOR support"
+	select DMA_ENGINE
+	select ASYNC_XOR
+	help
+	  Selecting this will offload the xor-parity-calculation for
+	  users of the Asynchronous Transfers/Trasnforms API (such as
+	  md-raid5 driver) to the SEC4.

@@ -845,7 +845,7 @@ u_int32_t *cmd_insert_seq_load(u_int32_t *descwd, u_int32_t class_access,
 {
 	*descwd = CMD_SEQ_LOAD | (class_access & CLASS_MASK) |
 		  (variable_len_flag ? LDST_SGF : 0) |
-		  ((dest & LDST_SRCDST_MASK) << LDST_SRCDST_SHIFT) |
+		  ((dest & LDST_SRCDST_MASK)) |
 		  ((offset & LDST_OFFSET_MASK) << LDST_OFFSET_SHIFT) |
 		  ((len & LDST_LEN_MASK) << LDST_LEN_SHIFT);
 
