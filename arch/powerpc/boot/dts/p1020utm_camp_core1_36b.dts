@@ -104,7 +104,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "secondary";
+			fsl,multi-host-mode = "primary";
 			fsl,channel-remap = <0x3>;
 		};
 

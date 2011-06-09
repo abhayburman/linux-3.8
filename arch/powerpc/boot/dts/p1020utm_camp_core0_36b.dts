@@ -363,7 +363,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "primary";
+			fsl,multi-host-mode = "secondary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -403,7 +403,7 @@
 		};
 
 		global-utilities@e0000 {	//global utilities block
-			compatible = "fsl,p1020-guts";
+			compatible = "fsl,p1020-guts", "fsl,p2020-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};

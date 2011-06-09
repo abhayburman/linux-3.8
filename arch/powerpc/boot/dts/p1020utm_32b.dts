@@ -299,13 +299,10 @@
 		ptp_timer: ptimer@b0e00 {
 			compatible = "fsl,gianfar-ptp-timer";
 			reg = <0xb0e00 0xb0>;
-			interrupts = <12 0x8 13 0x8>;
+			interrupts = <68 2 69 2 70 2>;
 			interrupt-parent = <&mpic>;
 			tmr-prsc = <0x2>;
 			cksel = <1>;
-			tmr-fiper1 = <999999995>;
-			tmr-fiper2 = <999999990>;
-			max-adj    = <999999999>;
 		};
 
 		enet0: ethernet@b0000 {
@@ -323,6 +320,7 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec1_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -354,6 +352,7 @@
 			phy-connection-type = "sgmii";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec2_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -384,6 +383,7 @@
 			phy-connection-type = "rgmii-id";
 			ptimer-handle = <&ptp_timer>;
 			fsl,magic-packet;
+			clk-handle = <&etsec3_clk>;
 
 			queue-group@0 {
 				#address-cells = <1>;
@@ -505,7 +505,7 @@
 		};
 
 		global-utilities@e0000 {        //global utilities block
-			compatible = "fsl,p1020-guts";
+			compatible = "fsl,p1020-guts", "fsl,p2020-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
 		};
