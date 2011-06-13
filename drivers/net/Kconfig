@@ -81,6 +81,25 @@ config ASF_FEATURE_OPTION_FULL
 
 endchoice
 
+choice
+	prompt "Selects SEC device for ASF"
+	depends on AS_FASTPATH
+	default ASF_SEC3x
+
+config ASF_SEC3x
+	bool "SEC block is 3.x"
+	---help---
+	  This option compiles the ASF for the SEC
+	  3.x series of IP.
+
+config ASF_SEC4x
+	bool "SEC block is 4.x"
+	---help---
+	  This option compiles the ASF for the SEC
+	  4.x series of IP.
+
+endchoice
+
 config IFB
 	tristate "Intermediate Functional Block support"
 	depends on NET_CLS_ACT
