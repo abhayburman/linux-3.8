@@ -92,7 +92,12 @@
 			interrupts = <43 2>;
 			interrupt-parent = <&mpic>;
 			dfsrr;
-
+			rtc@68 {
+				compatible = "dallas,ds3232";
+				reg = <0x68>;
+				interrupts = <0 0x2>;
+				interrupt-parent = <&mpic>;
+			};
 			wm8776:codec@1a {
 				compatible = "wolfson,wm8776";
 				reg = <0x1a>;
@@ -247,6 +252,13 @@
 			reg = <0x18000 0x1000>;
 			cell-index = <1>;
 			interrupts = <74 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		display@10000 {
+			compatible = "fsl,diu", "fsl,p1022-diu";
+			reg = <0x10000 1000>;
+			interrupts = <64 2>;
 			interrupt-parent = <&mpic>;
 		};
 
