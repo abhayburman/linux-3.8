@@ -444,6 +444,15 @@
 			reg = <0x25000 0x1000 0xb1030 0x4>;
 		};
 
+		ptp_timer: ptimer@b0e00 {
+			compatible = "fsl,gianfar-ptp-timer";
+			reg = <0xb0e00 0xb0>;
+			interrupts = <68 2>;
+			interrupt-parent = <&mpic>;
+			tmr-prsc = <0x2>;
+			cksel = <1>;
+		};
+
 		enet0: ethernet@B0000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -460,6 +469,7 @@
 			fixed-link = <1 1 1000 0 0>;
 			phy-handle = <&phy0>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 			queue-group@0{
 				#address-cells = <1>;
 				#size-cells = <1>;
@@ -488,6 +498,7 @@
 			fixed-link = <1 1 1000 0 0>;
 			phy-handle = <&phy1>;
 			phy-connection-type = "rgmii-id";
+			ptimer-handle = <&ptp_timer>;
 			queue-group@0{
 				#address-cells = <1>;
 				#size-cells = <1>;
