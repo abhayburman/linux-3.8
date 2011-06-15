@@ -146,6 +146,7 @@
 #define DBELL_INF(x)		(*(u16 *)(x + DOORBELL_INFO_OFFSET))
 
 #define MAX_MSG_UNIT_NUM	2
+#define MAX_PORT_NUM		4
 
 struct rio_atmu_regs {
 	u32 rowtar;
@@ -247,7 +248,7 @@ struct rio_port_write_msg {
 };
 
 struct rio_ctrl {
-	struct list_head mports;
+	struct rio_mport *mport[MAX_PORT_NUM];
 	struct device *dev;
 	void __iomem *dbell_win; /* used for parallel phy */
 	struct rio_atmu_regs __iomem *dbell_atmu_regs; /*used for parallel phy*/
@@ -261,6 +262,7 @@ struct rio_ctrl {
 	struct work_struct pw_work;
 	struct kfifo pw_fifo;
 	spinlock_t pw_fifo_lock;
+	int port_num;
 };
 
 struct rio_msg_unit{
@@ -1041,6 +1043,7 @@ fsl_rio_dbell_handler(int irq, void *dev_instance)
 {
 	int dsr;
 	struct rio_ctrl *ctrl = (struct rio_ctrl *)dev_instance;
+	int i;
 
 	dsr = in_be32(&ctrl->dbell_regs->dsr);
 
@@ -1062,29 +1065,34 @@ fsl_rio_dbell_handler(int irq, void *dev_instance)
 		    (u32) ctrl->dbell_ring.virt +
 		    (in_be32(&ctrl->dbell_regs->dqdpar) & 0xfff);
 		struct rio_dbell *dbell;
-		struct rio_mport *port;
 		int found = 0;
 
 		pr_debug
 		    ("RIO: processing doorbell, sid %2.2x tid %2.2x info %4.4x\n",
 		     DBELL_SID(dmsg), DBELL_TID(dmsg), DBELL_INF(dmsg));
 
-		list_for_each_entry(port, &ctrl->mports, node) {
-			list_for_each_entry(dbell, &port->dbells, node) {
-				if ((dbell->res->start <= DBELL_INF(dmsg)) &&
-				    (dbell->res->end >= DBELL_INF(dmsg))) {
-					found = 1;
+		for (i = 0; i < ctrl->port_num; i++) {
+			if (ctrl->mport[i]) {
+				list_for_each_entry(dbell,
+					&ctrl->mport[i]->dbells, node) {
+					if ((dbell->res->start <=
+					DBELL_INF(dmsg)) &&
+					(dbell->res->end >= DBELL_INF(dmsg))) {
+						found = 1;
+						break;
+					}
+				}
+				if (found) {
+					dbell->dinb(ctrl->mport[i],
+						dbell->dev_id, DBELL_SID(dmsg),
+						DBELL_TID(dmsg),
+						DBELL_INF(dmsg));
 					break;
 				}
 			}
-			break;
 		}
 
-		if (found) {
-			dbell->dinb(port, dbell->dev_id, DBELL_SID(dmsg),
-				DBELL_TID(dmsg),
-				    DBELL_INF(dmsg));
-		} else {
+		if (!found) {
 			pr_debug
 			    ("RIO: spurious doorbell, sid %2.2x tid %2.2x info %4.4x\n",
 			     DBELL_SID(dmsg), DBELL_TID(dmsg), DBELL_INF(dmsg));
@@ -1464,7 +1472,6 @@ int fsl_rio_setup(struct of_device *dev)
 	u64 law_start, law_size, msg_start, msg_size;
 	int paw, aw, sw;
 	struct device_node *np;
-	int port_num;
 	int len;
 	int i = 0;
 	int num = 0;
@@ -1564,8 +1571,6 @@ int fsl_rio_setup(struct of_device *dev)
 	fsl_rio_doorbell_init(ctrl);
 	fsl_rio_port_write_init(ctrl);
 
-	INIT_LIST_HEAD(&ctrl->mports);
-
 	for_each_compatible_node(np, NULL, "fsl,rmu") {
 		msg_addr = of_get_property(np, "reg", &mlen);
 		msg_start = of_read_number(msg_addr, aw);
@@ -1601,8 +1606,9 @@ int fsl_rio_setup(struct of_device *dev)
 	if (!ports_num || len < sizeof(*ports_num))
 		dev_warn(&dev->dev, "no 'rio-num-ports' property\n");
 
-	port_num = *ports_num;
-	for (i = 0; i < port_num; i++) {
+	ctrl->port_num = *ports_num;
+
+	for (i = 0; i < ctrl->port_num; i++) {
 		priv = kzalloc(sizeof(struct rio_port), GFP_KERNEL);
 		if (!priv) {
 			printk(KERN_ERR "Can't alloc memory for 'priv'\n");
@@ -1622,9 +1628,10 @@ int fsl_rio_setup(struct of_device *dev)
 		INIT_LIST_HEAD(&port->dbells);
 
 		port->iores.start = law_start + i *
-					(law_size >> (ilog2(port_num)));
+					(law_size >> (ilog2(ctrl->port_num)));
 		port->iores.end = port->iores.start +
-					(law_size >> (ilog2(port_num))) - 1;
+					(law_size >> (ilog2(ctrl->port_num)))
+					- 1;
 		port->iores.flags = IORESOURCE_MEM;
 		port->iores.name = "rio_io_win";
 
@@ -1696,7 +1703,7 @@ int fsl_rio_setup(struct of_device *dev)
 				num += 1;
 				kfree(port);
 				kfree(priv);
-				if (num == port_num)
+				if (num == ctrl->port_num)
 					goto err_priv;
 				continue;
 			}
@@ -1732,7 +1739,7 @@ int fsl_rio_setup(struct of_device *dev)
 		priv->rio_msg_unit = rio_msg_unit[0];
 		printk(KERN_INFO "register port %d\n", i);
 		rio_register_mport(port);
-		list_add_tail(&port->node, &ctrl->mports);
+		ctrl->mport[i] = port;
 	}
 
 #ifdef CONFIG_E500
