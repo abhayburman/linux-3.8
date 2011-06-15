@@ -308,11 +308,12 @@ unsigned long alloc_bds(struct gfar_private *priv, dma_addr_t *addr)
 	unsigned long vaddr;
 	unsigned long region_size;
 
-#ifdef CONFIG_GIANFAR_L2SRAM
 	region_size = (sizeof(struct txbd8) + sizeof(struct sk_buff *)) *
-			priv->total_tx_ring_size +
-			(sizeof(struct rxbd8) + sizeof(struct sk_buff *)) *
-			priv->total_rx_ring_size;
+	               priv->total_tx_ring_size +
+		      (sizeof(struct rxbd8) + sizeof(struct sk_buff *)) *
+	               priv->total_rx_ring_size;
+
+#ifdef CONFIG_GIANFAR_L2SRAM
 	vaddr =  (unsigned long) mpc85xx_cache_sram_alloc(region_size,
 					(phys_addr_t *)addr, ALIGNMENT);
 	if (vaddr == NULL) {
@@ -324,8 +325,6 @@ unsigned long alloc_bds(struct gfar_private *priv, dma_addr_t *addr)
 		priv->bd_in_ram = 0;
 	}
 #else
-	region_size = sizeof(struct txbd8) * priv->total_tx_ring_size +
-			sizeof(struct rxbd8) * priv->total_rx_ring_size;
 	vaddr = (unsigned long) dma_alloc_coherent(&priv->ofdev->dev,
 				region_size, addr, GFP_KERNEL);
 #endif
@@ -2779,11 +2778,15 @@ static void free_grp_irqs(struct gfar_priv_grp *grp)
 
 void free_bds(struct gfar_private *priv)
 {
+	unsigned long region_size = 0;
+	region_size = (sizeof(struct txbd8) + sizeof(struct sk_buff *)) *
+			priv->total_tx_ring_size +
+			(sizeof(struct rxbd8) + sizeof(struct sk_buff *)) *
+			priv->total_rx_ring_size;
 #ifdef CONFIG_GIANFAR_L2SRAM
 	if (priv->bd_in_ram) {
 		dma_free_coherent(&priv->ofdev->dev,
-			sizeof(struct txbd8) * priv->total_tx_ring_size +
-			sizeof(struct rxbd8) * priv->total_rx_ring_size,
+			region_size,
 			priv->tx_queue[0]->tx_bd_base,
 			priv->tx_queue[0]->tx_bd_dma_base);
 	} else {
@@ -2791,8 +2794,7 @@ void free_bds(struct gfar_private *priv)
 	}
 #else
 	dma_free_coherent(&priv->ofdev->dev,
-			sizeof(struct txbd8) * priv->total_tx_ring_size +
-			sizeof(struct rxbd8) * priv->total_rx_ring_size,
+			region_size,
 			priv->tx_queue[0]->tx_bd_base,
 			priv->tx_queue[0]->tx_bd_dma_base);
 #endif
@@ -2813,7 +2815,9 @@ void stop_gfar(struct net_device *dev)
 	lock_rx_qs(priv);
 
 	gfar_halt(dev);
-
+#ifdef CONFIG_GFAR_SKBUFF_RECYCLING
+	priv->skbuff_truesize = 0;
+#endif
 	unlock_rx_qs(priv);
 	unlock_tx_qs(priv);
 	local_irq_restore(flags);
@@ -2852,7 +2856,7 @@ static void gfar_reset_skb_handler(struct gfar_skb_handler *sh)
 /*
  * function: gfar_free_recycle_queue
  * Reset SKB handler struction and free existance socket buffer
- * and data buffer in the recycling queue.
+ * and data buffer in the recycling queue
  */
 void gfar_free_recycle_queue(struct gfar_skb_handler *sh, int lock_flag)
 {
@@ -2966,7 +2970,13 @@ static void free_skb_resources(struct gfar_private *priv)
 		free_percpu(priv->rx_queue[i]->local_sh);
 	}
 #endif
-
+	if(( priv->device_flags & FSL_GIANFAR_DEV_HAS_ARP_PACKET)) {
+		rx_queue = priv->rx_queue[priv->num_rx_queues-1];
+		dma_free_coherent(&priv->ofdev->dev,
+			   priv->wk_buffer_size * rx_queue->rx_ring_size \
+			   + RXBUF_ALIGNMENT, (void *)priv->wk_buf_vaddr,
+			   priv->wk_buf_paddr);
+	}
 	/* Go through all the buffer descriptors and free their data buffers */
 	for (i = 0; i < priv->num_tx_queues; i++) {
 		tx_queue = priv->tx_queue[i];
