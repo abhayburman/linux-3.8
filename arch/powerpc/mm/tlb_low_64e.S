@@ -160,6 +160,7 @@
  * r16 = faulting address
  * r15 = region ID
  * r14 = crap (free to use)
+ * r13 = PACA
  * r12 = TLB exception frame in PACA
  * r11 = PTE permission mask
  * r10 = crap (free to use)
@@ -298,7 +299,8 @@ normal_tlb_miss_access_fault:
  *
  * r16 = virtual page table faulting address
  * r15 = region (top 4 bits of address)
- * r14 = crap (we load with PACA)
+ * r14 = crap (free to use)
+ * r13 = PACA
  * r12 = TLB exception frame in PACA
  * r11 = crap (free to use)
  * r10 = crap (free to use)
@@ -316,8 +318,6 @@ normal_tlb_miss_access_fault:
  * so we could probably optimize things a bit
  */
 virt_page_table_tlb_miss:
-	ld	r14,EX_TLB_PACA(r12)
-
 	/* Are we hitting a kernel page table ? */
 	andi.	r10,r15,0x8
 
@@ -325,7 +325,7 @@ virt_page_table_tlb_miss:
 	 * and we happen to have the swapper_pg_dir at offset 8 from the user
 	 * pgdir in the PACA :-).
 	 */
-	add	r11,r10,r14
+	add	r11,r10,r13
 
 	/* If kernel, we need to clear MAS1 TID */
 	beq	1f
@@ -417,12 +417,12 @@ virt_page_table_tlb_miss_done:
 	 * offset the return address by -4 in order to replay the tlbsrx
 	 * instruction there
 	 */
-	subf	r10,r14,r12
+	subf	r10,r13,r12
 	cmpldi	cr0,r10,PACA_EXTLB+EX_TLB_SIZE
 	bne-	1f
-	ld	r11,PACA_EXTLB+EX_TLB_SIZE+EX_TLB_SRR0(r14)
+	ld	r11,PACA_EXTLB+EX_TLB_SIZE+EX_TLB_SRR0(r13)
 	addi	r10,r11,-4
-	std	r10,PACA_EXTLB+EX_TLB_SIZE+EX_TLB_SRR0(r14)
+	std	r10,PACA_EXTLB+EX_TLB_SIZE+EX_TLB_SRR0(r13)
 1:
 END_MMU_FTR_SECTION_IFSET(MMU_FTR_USE_TLBRSRV)
 	/* Return to caller, normal case */
@@ -449,13 +449,13 @@ virt_page_table_tlb_miss_fault:
 	 * level as well. Since we are doing that, we don't need to clear or
 	 * restore the TLB reservation neither.
 	 */
-	subf	r10,r14,r12
+	subf	r10,r13,r12
 	cmpldi	cr0,r10,PACA_EXTLB+EX_TLB_SIZE
 	bne-	virt_page_table_tlb_miss_whacko_fault
 
 	/* We dig the original DEAR and ESR from slot 0 */
-	ld	r15,EX_TLB_DEAR+PACA_EXTLB(r14)
-	ld	r16,EX_TLB_ESR+PACA_EXTLB(r14)
+	ld	r15,EX_TLB_DEAR+PACA_EXTLB(r13)
+	ld	r16,EX_TLB_ESR+PACA_EXTLB(r13)
 
 	/* We check for the "special" ESR value for instruction faults */
 	cmpdi	cr0,r16,-1
@@ -489,8 +489,6 @@ virt_page_table_tlb_miss_whacko_fault:
 	START_EXCEPTION(data_tlb_miss_htw)
 	TLB_MISS_PROLOG
 
-	ld	r15,EX_TLB_PACA(r12)
-
 	/* Now we handle the fault proper. We only save DEAR in normal
 	 * fault case since that's the only interesting values here.
 	 * We could probably also optimize by not saving SRR0/1 in the
@@ -505,12 +503,8 @@ virt_page_table_tlb_miss_whacko_fault:
 
 	/* We do the user/kernel test for the PID here along with the RW test
 	 */
-	/* The cool thing now is that r11 contains 0 for user and 8 for kernel,
-	 * and we happen to have the swapper_pg_dir at offset 8 from the user
-	 * pgdir in the PACA :-).
-	 */
 	cmpldi	cr0,r11,0		/* Check for user region */
-	add	r15,r15,r11
+	ld	r15,PACAPGD(r13)	/* Load user pgdir */
 	beq	htw_tlb_miss
 
 	/* XXX replace the RMW cycles with immediate loads + writes */
@@ -518,6 +512,7 @@ virt_page_table_tlb_miss_whacko_fault:
 	cmpldi	cr0,r11,8		/* Check for vmalloc region */
 	rlwinm	r10,r10,0,16,1		/* Clear TID */
 	mtspr	SPRN_MAS1,r10
+	ld	r15,PACA_KERNELPGD(r13)	/* Load kernel pgdir */
 	beq+	htw_tlb_miss
 
 	/* We got a crappy address, just fault with whatever DEAR and ESR
@@ -530,8 +525,6 @@ virt_page_table_tlb_miss_whacko_fault:
 /* Instruction TLB miss */
 	START_EXCEPTION(instruction_tlb_miss_htw)
 	TLB_MISS_PROLOG
-
-	ld	r15,EX_TLB_PACA(r12)
 
 	/* If we take a recursive fault, the second level handler may need
 	 * to know whether we are handling a data or instruction fault in
@@ -555,7 +548,7 @@ virt_page_table_tlb_miss_whacko_fault:
 	/* We do the user/kernel test for the PID here along with the RW test
 	 */
 	cmpldi	cr0,r11,0			/* Check for user region */
-	add	r15,r15,r11
+	ld	r15,PACAPGD(r13)		/* Load user pgdir */
 	beq	htw_tlb_miss
 
 	/* XXX replace the RMW cycles with immediate loads + writes */
@@ -563,6 +556,7 @@ virt_page_table_tlb_miss_whacko_fault:
 	cmpldi	cr0,r11,8			/* Check for vmalloc region */
 	rlwinm	r10,r10,0,16,1			/* Clear TID */
 	mtspr	SPRN_MAS1,r10
+	ld	r15,PACA_KERNELPGD(r13)		/* Load kernel pgdir */
 	beq+	htw_tlb_miss
 
 	/* We got a crappy address, just fault */
@@ -576,8 +570,9 @@ virt_page_table_tlb_miss_whacko_fault:
  * misses. We are entered with:
  *
  * r16 = virtual page table faulting address
- * r15 = pointer to PGD pointer
+ * r15 = PGD pointer
  * r14 = ESR
+ * r13 = PACA
  * r12 = TLB exception frame in PACA
  * r11 = crap (free to use)
  * r10 = crap (free to use)
@@ -586,8 +581,6 @@ virt_page_table_tlb_miss_whacko_fault:
  * avoid too much complication, it will save/restore things for us
  */
 htw_tlb_miss:
-	ld	r15,0(r15)
-
 	/* Search if we already have a TLB entry for that virtual address, and
 	 * if we do, bail out.
 	 *
@@ -699,6 +692,7 @@ htw_tlb_miss_fault:
  * r16 = faulting address
  * r15 = crap (free to use)
  * r14 = ESR (data) or -1 (instruction)
+ * r13 = PACA
  * r12 = TLB exception frame in PACA
  * r11 = crap (free to use)
  * r10 = crap (free to use)
@@ -720,8 +714,7 @@ tlb_load_linear:
 	 * we only use 1G pages for now. That might have to be changed in a
 	 * final implementation, especially when dealing with hypervisors
 	 */
-	ld	r11,EX_TLB_PACA(r12)
-	ld	r11,PACATOC(r11)
+	ld	r11,PACATOC(r13)
 	ld	r11,linear_map_top@got(r11)
 	ld	r10,0(r11)
 	cmpld	cr0,r10,r16
