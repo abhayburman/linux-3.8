@@ -158,11 +158,6 @@ notrace void raw_local_irq_restore(unsigned long en)
 	if (get_hard_enabled())
 		return;
 
-#if defined(CONFIG_BOOKE) && defined(CONFIG_SMP)
-	/* Check for pending doorbell interrupts on SMP */
-	doorbell_exception(NULL);
-#endif
-
 	/*
 	 * Need to hard-enable interrupts here.  Since currently disabled,
 	 * no need to take further asm precautions against preemption; but

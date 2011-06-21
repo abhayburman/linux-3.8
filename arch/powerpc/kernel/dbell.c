@@ -68,8 +68,6 @@ void doorbell_exception(struct pt_regs *regs)
 	struct doorbell_cpu_info *info = &__get_cpu_var(doorbell_cpu_info);
 	int msg;
 
-	/* Warning: regs can be NULL when called from irq enable */
-
 	if (!info->messages || (num_online_cpus() < 2))
 		goto out;
 
