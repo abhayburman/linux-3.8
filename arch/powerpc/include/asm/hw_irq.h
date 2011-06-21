@@ -39,8 +39,43 @@ static inline unsigned long raw_local_irq_disable(void)
 	return flags;
 }
 
+static inline notrace unsigned long get_hard_enabled(void)
+{
+	unsigned long enabled;
+
+	__asm__ __volatile__("lbz %0,%1(13)"
+	: "=r" (enabled) : "i" (offsetof(struct paca_struct, hard_enabled)));
+
+	return enabled;
+}
+
+static inline notrace void set_soft_enabled(unsigned long enable)
+{
+	__asm__ __volatile__("stb %0,%1(13)"
+	: : "r" (enable), "i" (offsetof(struct paca_struct, soft_enabled))
+	: "memory");
+}
+
+#ifdef CONFIG_PPC_BOOK3E
+#define __hard_irq_enable()	__asm__ __volatile__("wrteei 1": : :"memory");
+#define __hard_irq_disable()	__asm__ __volatile__("wrteei 0": : :"memory");
+
+static inline notrace void raw_local_irq_restore(unsigned long en)
+{
+	set_soft_enabled(en);
+	if (!en || get_hard_enabled())
+		return;
+
+	local_paca->hard_enabled = en;
+	__hard_irq_enable();
+}
+#else
+#define __hard_irq_enable()	__mtmsrd(mfmsr() | MSR_EE, 1)
+#define __hard_irq_disable()	__mtmsrd(mfmsr() & ~MSR_EE, 1)
+
 extern void raw_local_irq_restore(unsigned long);
 extern void iseries_handle_interrupts(void);
+#endif
 
 #define raw_local_irq_enable()		raw_local_irq_restore(1)
 #define raw_local_save_flags(flags)	((flags) = local_get_flags())
@@ -48,14 +83,6 @@ extern void iseries_handle_interrupts(void);
 
 #define raw_irqs_disabled()		(local_get_flags() == 0)
 #define raw_irqs_disabled_flags(flags)	((flags) == 0)
-
-#ifdef CONFIG_PPC_BOOK3E
-#define __hard_irq_enable()	__asm__ __volatile__("wrteei 1": : :"memory");
-#define __hard_irq_disable()	__asm__ __volatile__("wrteei 0": : :"memory");
-#else
-#define __hard_irq_enable()	__mtmsrd(mfmsr() | MSR_EE, 1)
-#define __hard_irq_disable()	__mtmsrd(mfmsr() & ~MSR_EE, 1)
-#endif
 
 #define  hard_irq_disable()			\
 	do {					\
