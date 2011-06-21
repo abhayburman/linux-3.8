@@ -167,23 +167,16 @@ static struct platform_suspend_ops pmc_suspend_ops = {
 static int pmc_probe(struct of_device *ofdev, const struct of_device_id *id)
 {
 	struct device_node *np = ofdev->dev.of_node;
-	struct device_node *node;
 
-	node = of_find_compatible_node(NULL, NULL, "fsl,mpc8548-pmc");
+	pmc_regs = of_iomap(ofdev->dev.of_node, 0);
+	if (!pmc_regs)
+		return -ENOMEM;
 
-	if (node) {
-		pmc_regs = of_iomap(ofdev->dev.of_node, 0);
-		if (!pmc_regs)
-			return -ENOMEM;
+	if (of_device_is_compatible(np, "fsl,mpc8536-pmc"))
+		has_deep_sleep = 1;
 
-		if (of_device_is_compatible(np, "fsl,mpc8536-pmc"))
-			has_deep_sleep = 1;
-
-		if (of_device_is_compatible(np, "fsl,p1022-pmc"))
-			has_lossless = 1;
-
-		of_node_put(node);
-	}
+	if (of_device_is_compatible(np, "fsl,p1022-pmc"))
+		has_lossless = 1;
 
 	pmc_dev = &ofdev->dev;
 	suspend_set_ops(&pmc_suspend_ops);
