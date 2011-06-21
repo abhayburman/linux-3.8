@@ -1036,8 +1036,12 @@ static inline int dpa_enable_tx_csum(struct dpa_priv_s *priv,
 	parse_result = (t_FmPrsResult *)parse_results;
 
 	/* If we're dealing with VLAN, get the real Ethernet type */
-	if (ethertype == ETH_P_8021Q)
+	if (ethertype == ETH_P_8021Q) {
+		/* We can't always assume the MAC header is set correctly
+		 * by the stack, so reset to beginning of skb->data */
+		skb_reset_mac_header(skb);
 		ethertype = ntohs(vlan_eth_hdr(skb)->h_vlan_encapsulated_proto);
+	}
 
 	/* Fill in the relevant L3 parse result fields
 	 * and read the L4 protocol type */
