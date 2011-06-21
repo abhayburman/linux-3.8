@@ -232,6 +232,13 @@ extern struct mmu_psize_def mmu_psize_defs[MMU_PAGE_COUNT];
 extern int mmu_linear_psize;
 extern int mmu_vmemmap_psize;
 
+#ifdef CONFIG_PPC64
+extern int book3e_htw_enabled;
+#else
+#define book3e_htw_enabled 0
+#endif
+
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* _ASM_POWERPC_MMU_BOOK3E_H_ */

@@ -214,6 +214,8 @@ extern void update_mmu_cache(struct vm_area_struct *, unsigned long, pte_t *);
 extern int gup_hugepd(hugepd_t *hugepd, unsigned pdshift, unsigned long addr,
 		      unsigned long end, int write, struct page **pages, int *nr);
 
+void book3e_tlb_preload(struct mm_struct *mm, unsigned long ea, pte_t pte);
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* __KERNEL__ */

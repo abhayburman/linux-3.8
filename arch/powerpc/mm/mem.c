@@ -567,9 +567,16 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address,
 	hook_usdpaa_tlb1(vma, address, ptep);
 
 #endif /* CONFIG_PPC_STD_MMU */
-#if (defined(CONFIG_PPC_BOOK3E_64) || defined(CONFIG_PPC_FSL_BOOK3E)) \
-	&& defined(CONFIG_HUGETLB_PAGE)
-	if (is_vm_hugetlb_page(vma))
+
+#if defined(CONFIG_PPC_BOOK3E) || defined(CONFIG_FSL_BOOKE)
+	if (is_vm_hugetlb_page(vma)) {
+#ifdef CONFIG_HUGETLB_PAGE
 		book3e_hugetlb_preload(vma->vm_mm, address, *ptep);
+#endif
+	} else if (!book3e_htw_enabled) {
+#ifdef CONFIG_PTE_64BIT
+		book3e_tlb_preload(vma->vm_mm, address, *ptep);
+#endif		
+	}
 #endif
 }

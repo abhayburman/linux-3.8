@@ -14,6 +14,10 @@ obj-y				:= fault.o mem.o pgtable.o gup.o \
 obj-$(CONFIG_PPC_MMU_NOHASH)	+= mmu_context_nohash.o tlb_nohash.o \
 				   tlb_nohash_low.o
 obj-$(CONFIG_PPC_BOOK3E)	+= tlb_low_$(CONFIG_WORD_SIZE)e.o
+obj-$(CONFIG_PPC_BOOK3E)	+= tlb_book3e.o
+ifeq ($(CONFIG_PTE_64BIT),y)
+obj-$(CONFIG_FSL_BOOKE)		+= tlb_book3e.o
+endif
 obj-$(CONFIG_PPC64)		+= mmap_64.o
 hash64-$(CONFIG_PPC_NATIVE)	:= hash_native_64.o
 obj-$(CONFIG_PPC_STD_MMU_64)	+= hash_utils_64.o \
