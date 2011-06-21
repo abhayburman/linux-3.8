@@ -22,6 +22,7 @@
 #include <linux/pm.h>
 #include <linux/interrupt.h>
 #include <asm/fsl_pixis.h>
+#include <asm/immap_85xx.h>
 #include <sysdev/fsl_soc.h>
 
 struct pmc_regs {
@@ -180,9 +181,36 @@ static int pmc_probe(struct of_device *ofdev, const struct of_device_id *id)
 	if (of_device_is_compatible(np, "fsl,mpc8536-pmc"))
 		has_deep_sleep = 1;
 
-	if (of_device_is_compatible(np, "fsl,p1022-pmc"))
+	if (of_device_is_compatible(np, "fsl,p1022-pmc")) {
 		has_lossless = 1;
 
+		if ((mfspr(SPRN_SVR) & 0xff) == 0x11) {
+			struct device_node *node;
+			struct ccsr_guts __iomem *guts;
+
+			/* Map the global utilities registers. */
+			node = of_find_compatible_node(NULL, NULL,
+					"fsl,p1022-guts");
+			if (!node) {
+				printk(KERN_WARNING "Not set DSCR --"
+					" Could not find GUTS node\n");
+				goto end;
+			}
+
+			guts = of_iomap(node, 0);
+			of_node_put(node);
+			if (!guts) {
+				printk(KERN_WARNING "Not set DSCR --"
+					" Failed to map GUTS register\n");
+				goto end;
+			}
+
+			/* Enable Power Down for deep sleep mode */
+			setbits32(&guts->dscr, CCSR_GUTS_DSCR_ENB_PWR_DWN);
+		}
+	}
+
+end:
 	pmc_dev = &ofdev->dev;
 	suspend_set_ops(&pmc_suspend_ops);
 	return 0;
