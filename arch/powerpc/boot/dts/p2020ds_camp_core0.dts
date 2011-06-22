@@ -282,11 +282,23 @@
 		#size-cells = <2>;
 		compatible = "fsl,rapidio-delta";
 		reg = <0xffec0000 0x20000>;
-		ranges = <0 0 0xa0000000 0 0x10000000>;
+		ranges = <0 0 0xa0000000 0 0x40000000>;
 		interrupt-parent = <&mpic>;
-		/* err_irq bell_outb_irq bell_inb_irq
-			msg1_tx_irq msg1_rx_irq msg2_tx_irq msg2_rx_irq */
-		interrupts = <48 2 49 2 50 2 53 2 54 2 55 2 56 2>;
+		/* err_irq bell_outb_irq bell_inb_irq */
+		interrupts = <48 2 49 2 50 2>;
+		fsl,rio-num-ports = <2>;
+		message-unit@0 {
+			compatible = "fsl,rmu";
+			interrupt-parent = <&mpic>;
+			interrupts = <53 2 54 2>; /* msg1_tx_irq msg1_rx_irq */
+			reg = <0 0x13000 0 0x100>;
+		};
+		message-unit@1 {
+			compatible = "fsl,rmu";
+			interrupt-parent = <&mpic>;
+			interrupts = <55 2 56 2>; /* msg2_tx_irq msg2_rx_irq */
+			reg = <0 0x13100 0 0x100>;
+		};
 	};
 
 	pci1: pcie@ffe09000 {
