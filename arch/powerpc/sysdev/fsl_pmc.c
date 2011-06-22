@@ -65,6 +65,11 @@ int pmc_enable_wake(struct of_device *ofdev, suspend_state_t state, bool enable)
 	struct device_node *clk_np;
 	u32 *pmcdr_mask;
 
+	if (!pmc_regs) {
+		printk(KERN_WARNING "PMC is unavailable\n");
+		return -ENOMEM;
+	}
+
 	if (enable && !device_may_wakeup(&ofdev->dev))
 		return -EINVAL;
 
