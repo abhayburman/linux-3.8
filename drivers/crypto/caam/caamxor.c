@@ -269,6 +269,7 @@ static void caam_jq_issue_pending(struct dma_chan *chan)
 	struct caam_dma_jq *dma_jq = NULL;
 	struct caam_dma_async_tx_desc *desc, *_desc;
 	struct device *dev;
+	int ret;
 
 	dma_jq = container_of(chan, struct caam_dma_jq, chan);
 	dev = dma_jq->dev;
@@ -276,10 +277,14 @@ static void caam_jq_issue_pending(struct dma_chan *chan)
 	spin_lock_bh(&dma_jq->desc_lock);
 	list_for_each_entry_safe(desc, _desc, &dma_jq->submit_q, node) {
 		desc->dma_jq = dma_jq;
-		if (caam_jq_enqueue(dev, desc->job_desc,
-				    caam_dma_xor_done, desc) < 0) {
-			pr_err("%s: Failed to dispatch DMA-XOR request to"
-			       "CAAM block\n", __func__);
+		ret = caam_jq_enqueue(dev, desc->job_desc,
+				      caam_dma_xor_done, desc);
+		if (ret) {
+			if (ret == -EIO)
+				pr_err("%s: I/O error while submitting"
+				       "DMA-XOR request to CAAM block\n",
+				       __func__);
+
 			spin_unlock_bh(&dma_jq->desc_lock);
 
 			return;
