@@ -1306,6 +1306,7 @@ struct gfar_priv_grp {
 	struct fsl_msg_unit *msg_virtual_tx[NR_CPUS];
 	char int_name_vtx[NR_CPUS][GFAR_INT_NAME_MAX];
 #endif
+	u32 rstat_prev;
 };
 
 /* Struct stolen almost completely (and shamelessly) from the FCC enet source

@@ -4577,12 +4577,16 @@ static void gfar_schedule_cleanup_rx(struct gfar_priv_grp *gfargrp)
 {
 	unsigned long flags;
 	u32 imask = 0;
-	spin_lock_irqsave(&gfargrp->grplock, flags);
-	napi_schedule(&gfargrp->napi_rx);
-	imask = gfar_read(&gfargrp->regs->imask);
-	imask = imask & IMASK_RX_DISABLED;
-	gfar_write(&gfargrp->regs->imask, imask);
-	spin_unlock_irqrestore(&gfargrp->grplock, flags);
+	if (napi_schedule_prep(&gfargrp->napi_rx)) {
+		spin_lock_irqsave(&gfargrp->grplock, flags);
+		imask = gfar_read(&gfargrp->regs->imask);
+		imask = imask & IMASK_RX_DISABLED;
+		gfar_write(&gfargrp->regs->imask, imask);
+		spin_unlock_irqrestore(&gfargrp->grplock, flags);
+		__napi_schedule(&gfargrp->napi_rx);
+	} else {
+		gfar_write(&gfargrp->regs->ievent, IEVENT_RX_MASK);
+	}
 }
 
 static void gfar_schedule_cleanup_tx(struct gfar_priv_grp *gfargrp)
@@ -5616,47 +5620,53 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	struct gfar_priv_rx_q *rx_queue = NULL;
 	int rx_cleaned = 0, budget_per_queue = 0, rx_cleaned_per_queue = 0;
 	int num_act_qs = 0, mask = RSTAT_RXF0_MASK, i, napi_done = 1;
-	unsigned long flags;
-	u32 imask, rstat, rstat_local, rstat_rhalt = 0, rstat_rxf;
-
+	u32 imask, rstat, rstat_local, rstat_rxf, rstat_rhalt;
+	u32 ievent;
 
 	rstat = gfar_read(&regs->rstat);
 	rstat_rxf = (rstat & RSTAT_RXF_ALL_MASK);
+	rstat_rxf |= gfargrp->rstat_prev;
 	rstat_local = rstat_rxf;
 	while (rstat_local) {
 		num_act_qs++;
 		rstat_local &= (rstat_local - 1);
 	}
 	budget_per_queue = budget/num_act_qs;
-	gfar_write(&regs->rstat, rstat);
+	gfar_write(&regs->rstat, rstat_rxf);
 	gfar_write(&gfargrp->regs->ievent, IEVENT_RX_MASK);
-
-
+	gfargrp->rstat_prev = rstat_rxf;
 	for_each_set_bit(i, &gfargrp->rx_bit_map, priv->num_rx_queues) {
-		mask = mask >> i;
+		mask = RSTAT_RXF0_MASK >> i;
+		rstat_rhalt = RSTAT_CLEAR_RHALT >> i;
 		if (rstat_rxf & mask) {
 			rx_queue = priv->rx_queue[i];
 			rx_cleaned_per_queue = gfar_clean_rx_ring(rx_queue,
 							budget_per_queue);
-			napi_done &= (rx_cleaned_per_queue < budget_per_queue);
 			rx_cleaned += rx_cleaned_per_queue;
+			if (rx_cleaned_per_queue >= budget_per_queue) {
+				napi_done = 0;
+			} else {
+				gfargrp->rstat_prev &= ~(mask);
+				gfar_write(&regs->rstat, rstat_rhalt);
+			}
 		}
-		mask = RSTAT_RXF0_MASK;
 	}
 
 	if (napi_done) {
-		spin_lock_irq(&gfargrp->grplock);
 		napi_complete(napi);
+		gfar_configure_rx_coalescing(priv, gfargrp->rx_bit_map);
+		spin_lock_irq(&gfargrp->grplock);
 		imask = gfar_read(&regs->imask);
 		imask |= IMASK_DEFAULT_RX;
 		gfar_write(&regs->imask, imask);
-
-		rstat = gfar_read(&regs->rstat);
-		if (rstat) {
-			napi_schedule(napi);
+		ievent = gfar_read(&regs->ievent);
+		ievent &= IEVENT_RX_MASK;
+		if (ievent) {
+			imask = imask & IMASK_RX_DISABLED;
+			gfar_write(&gfargrp->regs->imask, imask);
 			gfar_write(&gfargrp->regs->ievent, IEVENT_RX_MASK);
+			napi_schedule(napi);
 		}
-		gfar_configure_rx_coalescing(priv, gfargrp->rx_bit_map);
 		spin_unlock_irq(&gfargrp->grplock);
 	}
 	return rx_cleaned;
@@ -5673,12 +5683,11 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 	int rx_cleaned = 0, budget_per_queue = 0, rx_cleaned_per_queue = 0;
 	int tx_cleaned = 0, i, left_over_budget = budget;
 	unsigned long serviced_queues = 0;
-	int num_queues = 0, napi_done = 1;
+	int num_queues = 0;
 
 	num_queues = gfargrp->num_rx_queues;
 	budget_per_queue = budget/num_queues;
 
-	gfar_write(&regs->rstat, rstat);
 	/* Clear IEVENT, so interrupts aren't called again
 	 * because of the packets that have already arrived */
 #ifdef CONFIG_GFAR_TX_NONAPI
@@ -5707,7 +5716,6 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 			rx_cleaned_per_queue = gfar_clean_rx_ring(rx_queue,
 							budget_per_queue);
 			rx_cleaned += rx_cleaned_per_queue;
-			napi_done &= (rx_cleaned_per_queue < budget_per_queue);
 			if(rx_cleaned_per_queue < budget_per_queue) {
 				left_over_budget = left_over_budget +
 					(budget_per_queue - rx_cleaned_per_queue);
@@ -5723,18 +5731,12 @@ static int gfar_poll(struct napi_struct *napi, int budget)
 		return budget;
 #endif
 #endif
-	if (napi_done) {
+	if (rx_cleaned < budget) {
 		napi_complete(napi);
+
+		/* Clear the halt bit in RSTAT */
+		gfar_write(&regs->rstat, gfargrp->rstat);
 		gfar_write(&regs->imask, IMASK_DEFAULT);
-		rstat = gfar_read(&regs->rstat);
-		if (rstat) {
-			napi_schedule(napi);
-#ifdef CONFIG_GFAR_TX_NONAPI
-			gfar_write(&gfargrp->regs->ievent, IEVENT_RX_MASK);
-#else
-			gfar_write(&regs->ievent, IEVENT_RTX_MASK);
-#endif
-		}
 
 		/* If we are coalescing interrupts, update the timer */
 		/* Otherwise, clear it */
