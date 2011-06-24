@@ -729,6 +729,13 @@ static int gfar_1588_proc_write(struct file *file, const char *buffer,
 				(struct gfar_1588_data_t *)data;
 	struct gfar __iomem *regs;
 
+	np = of_find_compatible_node(NULL, NULL, "fsl,gianfar-ptp-timer");
+	if (np == NULL)	{
+		printk(KERN_ERR "1588: Cannot find ptp_timer node. Check"
+				" ptp_timer node in dts \r\n");
+		return -EINVAL;
+	}
+
 	if (count > GFAR_1588_PROCFS_MAX_SIZE)
 		count = GFAR_1588_PROCFS_MAX_SIZE;
 
