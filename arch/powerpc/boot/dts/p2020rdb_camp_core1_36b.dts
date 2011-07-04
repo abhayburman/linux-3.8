@@ -132,7 +132,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
-			fsl,multi-host-mode = "secondary";
+			fsl,multi-host-mode = "primary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -147,7 +147,7 @@
 			17 18 43 42 59 47 /*ecm, mem, i2c, serial0, spi,gpio */
 			16 20 21 22 23 28 	/* L2, dma1, USB */
 			03 35 36 40 31 32 33 	/* mdio, enet1, enet2 */
-			72 45 25 		/* sdhci, crypto , pci */
+			72 58 25 		/* sdhci, crypto , pci */
 			>;
 		};
 

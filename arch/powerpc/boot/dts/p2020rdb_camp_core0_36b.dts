@@ -309,7 +309,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0xbfe>;
 			fsl,descriptor-types-mask = <0x3ab0ebf>;
-			fsl,multi-host-mode = "primary";
+			fsl,multi-host-mode = "secondary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -322,7 +322,7 @@
 			device_type = "open-pic";
 			protected-sources = <
 			42 76 77 78 79 /* serial1 , dma2 */
-			29 30 34 26  58/* enet0, pci1 */
+			29 30 34 26 45/* enet0, pci1 */
 			0xe0 0xe1 0xe2 0xe3 /* msi */
 			0xe4 0xe5 0xe6 0xe7
 			>;
