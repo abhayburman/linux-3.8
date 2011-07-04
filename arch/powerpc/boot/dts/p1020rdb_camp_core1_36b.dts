@@ -104,7 +104,7 @@
 			fsl,channel-fifo-len = <24>;
 			fsl,exec-units-mask = <0x97c>;
 			fsl,descriptor-types-mask = <0x3a30abf>;
-			fsl,multi-host-mode = "secondary";
+			fsl,multi-host-mode = "primary";
 			fsl,channel-remap = <0x3>;
 		};
 
@@ -125,7 +125,7 @@
 			51 52 67	/* enet1-queue-group1 */
 			31 32 33	/* enet2-queue-group0 */
 			25 26 27	/* enet2-queue-group1 */
-			28 72 45 	/* usb, sdhci, crypto */
+			28 72 58 	/* usb, sdhci, crypto */
 			0xb0 0xb1 0xb2	/* message */
 			0xb3 0xb4 0xb5
 			0xb6 0xb7
