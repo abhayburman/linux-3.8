@@ -436,6 +436,9 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			fsl,wake-on-filer;
+			clk-handle = <&etsec1_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			fixed-link = <1 1 1000 0 0>;
@@ -465,6 +468,9 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			fsl,wake-on-filer;
+			clk-handle = <&etsec2_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy0>;
@@ -495,6 +501,9 @@
 			compatible = "fsl,etsec2";
 			fsl,num_rx_queues = <0x8>;
 			fsl,num_tx_queues = <0x8>;
+			fsl,magic-packet;
+			fsl,wake-on-filer;
+			clk-handle = <&etsec3_clk>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			interrupt-parent = <&mpic>;
 			phy-handle = <&phy1>;
@@ -606,8 +615,7 @@
 		};
 
 		power@e0070{
-			compatible = "fsl,mpc8548-pmc", "fsl,mpc8536-pmc",
-				     "fsl,p2020-pmc";
+			compatible = "fsl,mpc8548-pmc";
 			reg = <0xe0070 0x20>;
 
 			etsec1_clk: soc-clk@24{
