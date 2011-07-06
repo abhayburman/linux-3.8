@@ -1484,11 +1484,11 @@ static int get_cpu_number(unsigned char *eth_pkt, int len)
 	case IPPROTO_ESP:
 	case IPPROTO_SCTP:
 	case IPPROTO_UDPLITE:
-		if (len < (ETH_HLEN + (ihl * 4) + 4))
+		if (len >= (ETH_HLEN + (ihl * 4) + 4))
 			ports = *((u32 *) (eth_pkt + ETH_HLEN + (ihl * 4)));
 		break;
 	case IPPROTO_AH:
-		if (len < (ETH_HLEN + (ihl * 4) + 4))
+		if (len >= (ETH_HLEN + (ihl * 4) + 4))
 			ports = *((u32 *) (eth_pkt + ETH_HLEN + (ihl * 4) + 4));
 		break;
 
