@@ -419,6 +419,7 @@ static void fsl_elbc_cmdfunc(struct mtd_info *mtd, unsigned int command,
 				WARN_ON(column != 0);
 				/* First 256 bytes --> READ0 */
 				fcr |= NAND_CMD_READ0 << FCR_CMD0_SHIFT;
+				elbc_fcm_ctrl->oob = 0;
 			}
 		}
 
