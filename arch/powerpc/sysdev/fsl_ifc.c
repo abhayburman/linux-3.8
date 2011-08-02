@@ -92,21 +92,62 @@ static int __devinit fsl_ifc_ctrl_init(struct fsl_ifc_ctrl *ctrl)
 	return 0;
 }
 
-static int __devexit fsl_ifc_ctrl_remove(struct of_device *ofdev)
+static int fsl_ifc_ctrl_remove(struct of_device *ofdev)
 {
 	struct fsl_ifc_ctrl *ctrl = dev_get_drvdata(&ofdev->dev);
 
-	if (ctrl->irq)
-		free_irq(ctrl->irq, ctrl);
+	free_irq(ctrl->nand_irq, ctrl);
+	free_irq(ctrl->irq, ctrl);
 
-	if (ctrl->regs)
-		iounmap(ctrl->regs);
+	irq_dispose_mapping(ctrl->nand_irq);
+	irq_dispose_mapping(ctrl->irq);
+
+	iounmap(ctrl->regs);
 
 	dev_set_drvdata(&ofdev->dev, NULL);
 	kfree(ctrl);
 
 	return 0;
 }
+
+/*
+ * NAND events are split between an operational interrupt which only
+ * receives OPC, and an error interrupt that receives everything else,
+ * including non-NAND errors.  Whichever interrupt gets to it first
+ * records the status and wakes the wait queue.
+ */
+static DEFINE_SPINLOCK(nand_irq_lock);
+
+static u32 check_nand_stat(struct fsl_ifc_ctrl *ctrl)
+{
+	struct fsl_ifc_regs __iomem *ifc = ctrl->regs;
+	unsigned long flags;
+	u32 stat;
+
+	spin_lock_irqsave(&nand_irq_lock, flags);
+
+	stat = in_be32(&ifc->ifc_nand.nand_evter_stat);
+	if (stat) {
+		out_be32(&ifc->ifc_nand.nand_evter_stat, stat);
+		ctrl->nand_stat = stat;
+		wake_up(&ctrl->nand_wait);
+	}
+
+	spin_unlock_irqrestore(&nand_irq_lock, flags);
+
+	return stat;
+}
+
+static irqreturn_t fsl_ifc_nand_irq(int irqno, void *data)
+{
+	struct fsl_ifc_ctrl *ctrl = data;
+
+	if (check_nand_stat(ctrl))
+		return IRQ_HANDLED;
+
+	return IRQ_NONE;
+}
+
 /*
  * NOTE: This interrupt is used to report ifc events of various kinds,
  * such as transaction errors on the chipselects.
@@ -116,7 +157,7 @@ static irqreturn_t fsl_ifc_ctrl_irq(int irqno, void *data)
 	struct fsl_ifc_ctrl *ctrl = data;
 	struct fsl_ifc_regs __iomem *ifc = ctrl->regs;
 	u32 err_axiid, err_srcid, status, cs_err, err_addr;
-	u32 nand_stat;
+	irqreturn_t ret = IRQ_NONE;
 
 	/* read for chip select error */
 	cs_err = in_be32(&ifc->cm_evter_stat);
@@ -125,39 +166,11 @@ static irqreturn_t fsl_ifc_ctrl_irq(int irqno, void *data)
 				"any memory bank 0x%08X\n", cs_err);
 		/* clear the chip select error */
 		out_be32(&ifc->cm_evter_stat, IFC_CM_EVTER_STAT_CSER);
-	}
 
-	/* read error attribute registers print the error information */
-	status = in_be32(&ifc->cm_erattr0);
-	err_addr = in_be32(&ifc->cm_erattr1);
+		/* read error attribute registers print the error information */
+		status = in_be32(&ifc->cm_erattr0);
+		err_addr = in_be32(&ifc->cm_erattr1);
 
-	nand_stat = in_be32(&ifc->ifc_nand.nand_evter_stat);
-
-	/* Clear common error attribute registers */
-	out_be32(&ifc->cm_erattr0, 0x0);
-	out_be32(&ifc->cm_erattr1, 0x0);
-
-	if (nand_stat) {
-		/* store the NAND error status */
-		ctrl->status = nand_stat;
-		/* clear nand errors */
-		out_be32(&ifc->ifc_nand.nand_evter_stat, nand_stat);
-
-		if (nand_stat & IFC_NAND_EVTER_STAT_FTOER) {
-			dev_err(ctrl->dev, "NAND Flash Timeout Error: "
-				"NAND_EVTER_STAT 0x%08X\n", nand_stat);
-		}
-		if (nand_stat & IFC_NAND_EVTER_STAT_WPER) {
-			dev_err(ctrl->dev, "NAND Flash Write Protect Error: "
-				"NAND_EVTER_STAT 0x%08X\n", nand_stat);
-		}
-		if (nand_stat & IFC_NAND_EVTER_STAT_ECCER) {
-			dev_err(ctrl->dev, "NAND Uncorrectable ECC Error: "
-				"NAND_EVTER_STAT 0x%08X\n", nand_stat);
-		}
-	}
-
-	if (status) {
 		if (status & IFC_CM_ERATTR0_ERTYP_READ)
 			dev_err(ctrl->dev, "Read transaction error"
 				"CM_ERATTR0 0x%08X\n", status);
@@ -178,10 +191,13 @@ static irqreturn_t fsl_ifc_ctrl_irq(int irqno, void *data)
 		dev_err(ctrl->dev, "Transaction Address corresponding to error"
 					"ERADDR 0x%08X\n", err_addr);
 
-		return IRQ_HANDLED;
+		ret = IRQ_HANDLED;
 	}
 
-	return IRQ_NONE;
+	if (check_nand_stat(ctrl))
+		ret = IRQ_HANDLED;
+
+	return ret;
 }
 
 /*
@@ -241,18 +257,28 @@ static int __devinit fsl_ifc_ctrl_probe(struct of_device *ofdev,
 	if (ret < 0)
 		goto err;
 
-	ret = request_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_irq, 0,
-				"fsl-ifc", fsl_ifc_ctrl_dev);
+	init_waitqueue_head(&fsl_ifc_ctrl_dev->nand_wait);
+
+	ret = request_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_irq, IRQF_SHARED,
+			  "fsl-ifc", fsl_ifc_ctrl_dev);
 	if (ret != 0) {
 		dev_err(&ofdev->dev, "failed to install irq (%d)\n",
 			fsl_ifc_ctrl_dev->irq);
-		ret = fsl_ifc_ctrl_dev->irq;
+		goto err;
+	}
+
+	ret = request_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_nand_irq, 0,
+			  "fsl-ifc-nand", fsl_ifc_ctrl_dev);
+	if (ret != 0) {
+		dev_err(&ofdev->dev, "failed to install irq (%d)\n",
+			fsl_ifc_ctrl_dev->nand_irq);
 		goto err;
 	}
 
 	return 0;
 
 err:
+	fsl_ifc_ctrl_remove(ofdev);
 	return ret;
 }
 
@@ -270,7 +296,7 @@ static struct of_platform_driver fsl_ifc_ctrl_driver = {
 		.of_match_table = fsl_ifc_match,
 	},
 	.probe       = fsl_ifc_ctrl_probe,
-	.remove      = __devexit_p(fsl_ifc_ctrl_remove),
+	.remove      = fsl_ifc_ctrl_remove,
 };
 
 static __init int fsl_ifc_init(void)
