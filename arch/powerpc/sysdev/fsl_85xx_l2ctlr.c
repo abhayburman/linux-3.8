@@ -5,6 +5,7 @@
  *
  * Author: Vivek Mahajan <vivek.mahajan@freescale.com>
  * Modifier: Harninder Rai <harninder.rai@freescale.com>
+ * Modifier: Jianhua Xie <jianhua.xie@freescale.com>
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -101,6 +102,19 @@ static int __devinit mpc85xx_l2ctlr_of_probe(struct of_device *dev,
 		return -EINVAL;
 	}
 
+	/* Partial SRAM and partial cache mode, in which one-eighth,
+	 * one quarter, or one-half the total on-chip memory can be
+	 * allocated to 1 or 2 SRAM regions.*/
+
+	if (sram_params.sram_size < (l2cache_size >> 3)) {
+		dev_err(&dev->dev,
+			"The cache-sram size is less than the one eighth "
+			"of l2cache_size,\n"
+			"The system is using Full cache mode instead of\n"
+			"Partial SRAM and partial cache mode.\n");
+		return -EINVAL;
+	}
+
 	sram_params.sram_offset  = get_cache_sram_offset();
 	if (sram_params.sram_offset <= 0) {
 		dev_err(&dev->dev,
@@ -156,6 +170,10 @@ static int __devinit mpc85xx_l2ctlr_of_probe(struct of_device *dev,
 
 	case LOCK_WAYS_FULL:
 	default:
+		/* when case LOCK_WAYS_ZERO, use Full cache mode
+		 * rather than Full SRAM mode in order to get a
+		 * good performance */
+
 		setbits32(&l2ctlr->ctl,
 			L2CR_L2E | L2CR_L2FI | L2CR_SRAM_FULL);
 		break;
