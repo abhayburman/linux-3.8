@@ -352,4 +352,10 @@ config FSL_PIXIS
 	help
 	  Say Y here to support board control FPGA.
 
+config MPC8536DS_PIXIS
+	tristate "MPC8536DS board control FPGA"
+	depends on FSL_SOC && !FSL_PIXIS && MPC8536_DS
+	help
+	  Say Y here to support board control FPGA on MPC8536DS.
+
 endmenu
