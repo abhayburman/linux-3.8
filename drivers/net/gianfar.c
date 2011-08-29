@@ -5814,6 +5814,24 @@ static irqreturn_t gfar_interrupt(int irq, void *grp_id)
 	return IRQ_HANDLED;
 }
 
+static void drop_frames_8548(struct net_device *dev)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+	struct rxbd8 *bdp, *base;
+	struct gfar_priv_rx_q *rx_queue;
+
+	/* MPC8548 only uses the first queue. */
+	rx_queue = priv->rx_queue[0];
+	bdp = rx_queue->cur_rx;
+	base = rx_queue->rx_bd_base;
+
+	while (!(bdp->status & RXBD_EMPTY)) {
+		gfar_init_rxbdp(rx_queue, bdp, bdp->bufPtr);
+		bdp = next_bd(bdp, base, rx_queue->rx_ring_size);
+	}
+	rx_queue->cur_rx = bdp;
+}
+
 /* Called every time the controller might need to be made
  * aware of new link state.  The PHY code conveys this
  * information through variables in the phydev structure, and this
@@ -5885,12 +5903,28 @@ static void adjust_link(struct net_device *dev)
 		if (!priv->oldlink) {
 			new_state = 1;
 			priv->oldlink = 1;
+			/*
+			 * Avoid incomplete frames to cause CRC error
+			 * on next frame.
+			 * Fix erratum eTSEC 73 on MPC8548.
+			 */
+			if ((fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+				&& fsl_svr_older_than(3, 0)) {
+				drop_frames_8548(dev);
+				gfar_start(dev);
+			}
 		}
 	} else if (priv->oldlink) {
 		new_state = 1;
 		priv->oldlink = 0;
 		priv->oldspeed = 0;
 		priv->oldduplex = -1;
+		/*
+		 * Fix erratum eTSEC 73 on MPC8548.
+		 */
+		if ((fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+			&& fsl_svr_older_than(3, 0))
+			gfar_halt(dev);
 	}
 
 	if (new_state && netif_msg_link(priv))
