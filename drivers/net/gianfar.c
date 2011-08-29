@@ -85,6 +85,7 @@
 #include <linux/inetdevice.h>
 #include <sysdev/fsl_soc.h>
 
+#include <asm/mpc85xx.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
@@ -1054,6 +1055,10 @@ static int gfar_of_init(struct of_device *ofdev, struct net_device **pdev)
 			FSL_GIANFAR_DEV_HAS_VLAN;
 #endif
 	}
+
+	if (fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+		priv->device_flags &= ~(FSL_GIANFAR_DEV_HAS_CSUM |
+					FSL_GIANFAR_DEV_HAS_VLAN);
 
 	ctype = of_get_property(np, "phy-connection-type", NULL);
 
