@@ -1649,6 +1649,9 @@ static int ipsec_esp(struct talitos_edesc *edesc, struct aead_request *areq,
 	int sg_link_tbl_len;
 	struct talitos_private *priv = dev_get_drvdata(dev);
 
+	if (!areq->assoclen || !cryptlen)
+		return -EINVAL;
+
 	/* hmac key */
 	map_single_talitos_ptr(dev, &desc->ptr[0], ctx->authkeylen, &ctx->key,
 			       0, DMA_TO_DEVICE);
@@ -2262,6 +2265,9 @@ static int common_nonsnoop_hash(struct talitos_edesc *edesc,
 	struct device *dev = ctx->dev;
 	struct talitos_desc *desc = &edesc->desc;
 	int sg_count, ret;
+
+	if (!length)
+		return -EINVAL;
 
 	/* first DWORD empty */
 	desc->ptr[0] = zero_entry;
