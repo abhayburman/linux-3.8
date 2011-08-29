@@ -31,6 +31,7 @@
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <asm/machdep.h>
+#include <asm/mpc85xx.h>
 #include <sysdev/fsl_soc.h>
 #include <sysdev/fsl_pci.h>
 
@@ -329,6 +330,7 @@ int __init fsl_add_bridge(struct device_node *dev, int is_primary)
 	struct pci_controller *hose;
 	struct resource rsrc;
 	const int *bus_range;
+	u16 temp;
 
 	pr_debug("Adding PCI host bridge %s\n", dev->full_name);
 
@@ -362,6 +364,18 @@ int __init fsl_add_bridge(struct device_node *dev, int is_primary)
 			PPC_INDIRECT_TYPE_SURPRESS_PRIMARY_BUS;
 		if (fsl_pcie_check_link(hose))
 			hose->indirect_type |= PPC_INDIRECT_TYPE_NO_PCIE_LINK;
+	} else {
+		/*
+		 * Set PBFR(PCI Bus Function Register)[10] = 1 to
+		 * disable the combining of crossing cacheline
+		 * boundary requests into one burst transaction.
+		 * Fix erratum PCI 5 on MPC8548
+		 */
+		if (fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E)) {
+			early_read_config_word(hose, 0, 0, 0x44, &temp);
+			temp |= 0x0400;
+			early_write_config_word(hose, 0, 0, 0x44, temp);
+		}
 	}
 
 	printk(KERN_INFO "Found FSL PCI host bridge at 0x%016llx. "
