@@ -3013,6 +3013,13 @@ void gfar_start(struct net_device *dev)
 	/* Initialize DMACTRL to have WWR and WOP */
 	tempval = gfar_read(&regs->dmactrl);
 	tempval |= DMACTRL_INIT_SETTINGS;
+	/*
+	 * Set DMACTRL[WWR] = 0, and avoid IEVENT to be lost.
+	 * Fix erratum eTSEC 38 on MPC8548.
+	 */
+	if ((fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+		&& fsl_svr_older_than(3, 0))
+		tempval &= ~DMACTRL_WWR;
 	gfar_write(&regs->dmactrl, tempval);
 
 	/* Make sure we aren't stopped */
