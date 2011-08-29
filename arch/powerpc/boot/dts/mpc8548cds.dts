@@ -1,7 +1,7 @@
 /*
  * MPC8548 CDS Device Tree Source
  *
- * Copyright 2006, 2008 Freescale Semiconductor Inc.
+ * Copyright 2006, 2008, 2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -332,6 +332,18 @@
 			compatible = "fsl,mpc8548-guts";
 			reg = <0xe0000 0x1000>;
 			fsl,has-rstcr;
+		};
+
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
+		power@e0070 {
+			compatible = "fsl,mpc8548-pmc";
+			reg = <0xe0070 0x20>;
 		};
 
 		crypto@30000 {
