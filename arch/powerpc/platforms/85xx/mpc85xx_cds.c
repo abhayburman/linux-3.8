@@ -3,7 +3,7 @@
  *
  * Maintained by Kumar Gala (see MAINTAINERS for contact information)
  *
- * Copyright 2005 Freescale Semiconductor Inc.
+ * Copyright 2005, 2011 Freescale Semiconductor Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -156,6 +156,31 @@ static void __devinit skip_fake_bridge(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_EARLY(0x1957, 0x3fff, skip_fake_bridge);
 DECLARE_PCI_FIXUP_EARLY(0x3fff, 0x1957, skip_fake_bridge);
 DECLARE_PCI_FIXUP_EARLY(0xff3f, 0x5719, skip_fake_bridge);
+
+/*
+ * Fix Tsi310 PCI bridge resource.
+ * Force the bridge to open a window from 0x0000-0x1fff in PCI I/O space.
+ * This allows legacy I/O(i8259, etc) on the VIA southbridge to be accessed.
+ */
+void mpc85xx_cds_fixup_bus(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+	struct resource *res;
+
+	dev = bus->self;
+	if ((dev != NULL) &&
+	   (dev->vendor == 0x1014) && (dev->device == 0x01a7)) {
+		printk(KERN_INFO "mpc85xx_cds: Fix PCI bridge resource\n");
+		res = bus->resource[0];
+		if (res) {
+			res->start = 0;
+			res->end   = 0x1fff;
+			res->flags = IORESOURCE_IO;
+			printk(KERN_INFO "mpc85xx_cds: %pR\n", res);
+		}
+	}
+	fsl_pcibios_fixup_bus(bus);
+}
 
 #ifdef CONFIG_PPC_I8259
 static void mpc85xx_8259_cascade_handler(unsigned int irq,
@@ -354,7 +379,7 @@ define_machine(mpc85xx_cds) {
 	.get_irq	= mpic_get_irq,
 #ifdef CONFIG_PCI
 	.restart	= mpc85xx_cds_restart,
-	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
+	.pcibios_fixup_bus	= mpc85xx_cds_fixup_bus,
 #else
 	.restart	= fsl_rstcr_restart,
 #endif
