@@ -1877,6 +1877,15 @@ static int gfar_probe(struct of_device *ofdev,
 	udelay(2);
 
 	tempval = (MACCFG1_TX_FLOW | MACCFG1_RX_FLOW);
+	/*
+	 * The process of generating a PAUSE control frame may cause
+	 * the controller to stop transmitting. Disable transmit
+	 * flow control.
+	 * Fix erratum eTSEC 79 on MPC8548.
+	 */
+	if ((fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+		&& fsl_svr_older_than(3, 0))
+		tempval &= ~MACCFG1_TX_FLOW;
 	gfar_write(&regs->maccfg1, tempval);
 
 	/* Initialize MACCFG2. */
