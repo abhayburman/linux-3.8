@@ -129,6 +129,20 @@ static void __init setup_pci_atmu(struct pci_controller *hose,
 	    return;
 	}
 
+	/*
+	 * PCI/PCI-X erroneous error detection
+	 * Fix erratum PCI 6 on MPC8548
+	 */
+	if ((fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+		&& fsl_svr_older_than(2, 1)) {
+		if (of_device_is_compatible(hose->dn, "fsl,mpc8540-pci")) {
+			/* disable OWMSV and ORMSV error capture */
+			setbits32(&pci->pcier.pecdr, 0x00000018);
+			/* disable OWMSV and ORMSV error reporting */
+			clrbits32(&pci->pcier.peer, 0x00000018);
+		}
+	}
+
 	/* Disable all windows (except powar0 since it's ignored) */
 	for(i = 1; i < 5; i++)
 		out_be32(&pci->pow[i].powar, 0);
