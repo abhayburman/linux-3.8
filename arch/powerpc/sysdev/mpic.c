@@ -5,7 +5,7 @@
  *  common implementation being IBM's MPIC. This driver also can deal
  *  with various broken implementations of this HW.
  *
- *  Copyright 2006, 2008-2010 Freescale Semiconductor, Inc.
+ *  Copyright 2006, 2008-2011 Freescale Semiconductor, Inc.
  *  Copyright (C) 2004 Benjamin Herrenschmidt, IBM Corp.
  *
  *  This file is subject to the terms and conditions of the GNU General Public
@@ -38,6 +38,7 @@
 #include <asm/mpic.h>
 #include <asm/smp.h>
 #include <asm/prom.h>
+#include <asm/mpc85xx.h>
 
 #include "mpic.h"
 
@@ -1235,6 +1236,17 @@ struct mpic * __init mpic_alloc(struct device_node *node,
 		while( mpic_read(mpic->gregs, MPIC_INFO(GREG_GLOBAL_CONF_0))
 		       & MPIC_GREG_GCONF_RESET)
 			mb();
+	}
+
+	/*
+	 * PIC soft reset not clearing MSIRn registers correctly.
+	 * Fix erratum PIC 4 on MPC8548.
+	 */
+	if (fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E)) {
+		mpic_map(mpic, node, paddr,
+			&mpic->msgregs, MPIC_INFO(MSI_BASE), 0x100);
+		for (i = 0; i < MPIC_INFO(MSI_MSIRN_CNT); i++)
+			mpic_read(mpic->msgregs, i * MPIC_INFO(MSI_STRIDE));
 	}
 
 	/* CoreInt */
