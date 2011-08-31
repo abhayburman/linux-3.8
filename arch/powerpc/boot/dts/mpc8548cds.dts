@@ -52,6 +52,11 @@
 		reg = <0x0 0x8000000>;	// 128M at 0x0
 	};
 
+	cadmus@f8004000 {
+		device_type = "cadmus";
+		reg = <0xf8004000 0x1000>;
+	};
+
 	soc8548@e0000000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
