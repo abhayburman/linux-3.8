@@ -367,6 +367,34 @@
 		};
 	};
 
+	rapidio@e00c0000 {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "fsl,rapidio-delta";
+		reg = <0xe00c0000 0x20000>;
+		ranges = <0x0 0x0 0xc0000000 0x0 0x20000000>;
+		interrupt-parent = <&mpic>;
+		interrupts = <48 2	/* port_write_irq */
+			      49 2	/* bell_outb_irq  */
+			      50 2	/* bell_inb_irq   */>;
+		fsl,rio-num-ports = <1>;
+		message-unit@0 {
+			compatible = "fsl,rmu";
+			interrupt-parent = <&mpic>;
+			interrupts = <53 2	/* msg1_tx_irq */
+				      54 2>;	/* msg1_rx_irq */
+			reg = <0 0x13000 0 0x100>;
+		};
+		message-unit@1 {
+			compatible = "fsl,rmu";
+			interrupt-parent = <&mpic>;
+			interrupts = <55 2	/* msg2_tx_irq */
+				      56 2>;	/* msg2_rx_irq */
+			reg = <0 0x13100 0 0x100>;
+		};
+
+	};
+
 	pci0: pci@e0008000 {
 		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
 		interrupt-map = <
