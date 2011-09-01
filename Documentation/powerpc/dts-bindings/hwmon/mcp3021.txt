@@ -1,0 +1,18 @@
+MCP3021 (I2C)
+
+The Microchip Technology Inc. MCP3021 is a successive
+approximation A/D converter (ADC) with 10-bit resolution.
+This device provides one single-ended input with very low
+power consumption.
+
+Required properties:
+
+   - compatible : must be "mchp,mcp3021"
+   - reg : I2C bus address of the device
+
+  Example mcp3021 node:
+
+    adc@4d {
+	    compatible = "mchp,mcp3021";
+	    reg = <0x4d>;
+    }
