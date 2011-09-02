@@ -39,6 +39,8 @@
 #include <asm/io.h>
 #include <asm/machdep.h>
 #include <asm/uaccess.h>
+#include <asm/mpc85xx.h>
+#include <sysdev/fsl_soc.h>
 
 #undef DEBUG_PW	/* Port-Write debugging */
 
@@ -1450,6 +1452,26 @@ static inline void fsl_rio_info(struct device *dev, u32 ccsr)
 }
 
 /**
+ * fixup_erratum_srio135 - Fix Serial RapidIO atomic operation erratum
+ */
+void fixup_erratum_srio135(const struct device *dev)
+{
+	void __iomem *ccsr;
+
+	/*
+	 * Set bits 13 and 29 of CCSR offset 0x01010 (EEBPCR register of
+	 * the ECM) during initialization and leave them set indefinitely.
+	 */
+	ccsr = ioremap(get_immrbase(), 0x2000);
+	if (NULL == ccsr) {
+		dev_err(dev, "Unable to work around SRIO lwarx/stwcx erratum.\n");
+		return;
+	}
+	setbits32(ccsr + 0x1010, 0x00040004);
+	iounmap(ccsr);
+}
+
+/**
  * fsl_rio_setup - Setup Freescale PowerPC RapidIO interface
  * @dev: of_device pointer
  *
@@ -1497,6 +1519,10 @@ int fsl_rio_setup(struct of_device *dev)
 				dev->dev.of_node->full_name);
 		return -EFAULT;
 	}
+
+	/* Fix erratum NMG_SRIO135 */
+	if (fsl_svr_is(SVR_8548) || fsl_svr_is(SVR_8548_E))
+		fixup_erratum_srio135(&dev->dev);
 
 	/* Get node address wide */
 	cell = of_get_property(dev->dev.of_node, "#address-cells", NULL);
