@@ -6155,6 +6155,28 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 			unlock_tx_qs(priv);
 			local_irq_restore(flags);
 		}
+		/* internal data parity error */
+		if (events & IEVENT_DPE) {
+			unsigned long flags;
+			u32 temp;
+
+			local_irq_save(flags);
+			lock_tx_qs(priv);
+
+			/* soft reset the controller */
+			temp = gfar_read(&regs->maccfg1);
+			gfar_write(&regs->maccfg1, temp & ~(MACCFG1_TX_FLOW));
+			udelay(10);
+			gfar_write(&regs->maccfg1, temp & ~(MACCFG1_TX_FLOW | MACCFG1_TX_EN));
+			udelay(1);
+			gfar_write(&regs->maccfg1, temp);
+
+			/* Reactivate the Tx Queues */
+			gfar_write(&regs->tstat, gfargrp->tstat);
+
+			unlock_tx_qs(priv);
+			local_irq_restore(flags);
+		}
 		if (netif_msg_tx_err(priv))
 			printk(KERN_DEBUG "%s: Transmit Error\n", dev->name);
 	}
