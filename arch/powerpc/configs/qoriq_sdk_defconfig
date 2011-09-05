@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35
-# Tue Jun 28 20:07:11 2011
+# Mon Sep  5 10:25:02 2011
 #
 # CONFIG_PPC64 is not set
 
@@ -240,7 +240,7 @@ CONFIG_FSL_SOC_BOOKE=y
 # CONFIG_FLEXCAN is not set
 # CONFIG_MPC85xx_CDS is not set
 # CONFIG_MPC85xx_MDS is not set
-# CONFIG_MPC8536_DS is not set
+CONFIG_MPC8536_DS=y
 CONFIG_MPC85xx_DS=y
 CONFIG_MPC85xx_RDB=y
 CONFIG_P1010_RDB=y
