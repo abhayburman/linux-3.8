@@ -456,6 +456,13 @@
 			big-endian;
 		};
 
+		timer@41100 {
+			compatible = "fsl,mpic-global-timer";
+			reg = <0x41100 0x204>;
+			interrupts = <0xf7 0x2>;
+			interrupt-parent = <&mpic>;
+		};
+
 		power@e0070 {
 			compatible = "fsl,mpc8536-pmc", "fsl,mpc8548-pmc";
 			reg = <0xe0070 0x20>;
