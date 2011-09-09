@@ -26,6 +26,11 @@
 #include <asm/io.h>
 #include <linux/of_platform.h>
 
+/* Host Controller version */
+enum {
+	SATA_FSL_V1	= 1,
+	SATA_FSL_V2,
+};
 /* Controller information */
 enum {
 	SATA_FSL_QUEUE_DEPTH	= 16,
@@ -158,11 +163,8 @@ enum {
 	    IE_ON_SINGL_DEVICE_ERR | IE_ON_CMD_COMPLETE,
 
 	EXT_INDIRECT_SEG_PRD_FLAG = (1 << 31),
-#if defined(CONFIG_P1022_DS) || defined(CONFIG_P1010_RDB)
-	DATA_SNOOP_ENABLE = (1 << 28),
-#else
 	DATA_SNOOP_ENABLE = (1 << 22),
-#endif
+	DATA_SNOOP_ENABLE_V2 = (1 << 28),
 };
 
 /*
@@ -265,6 +267,7 @@ struct sata_fsl_host_priv {
 	void __iomem *ssr_base;
 	void __iomem *csr_base;
 	int irq;
+	int version;
 };
 
 static inline unsigned int sata_fsl_tag(unsigned int tag,
@@ -317,11 +320,13 @@ static void sata_fsl_setup_cmd_hdr_entry(struct sata_fsl_port_priv *pp,
 }
 
 static unsigned int sata_fsl_fill_sg(struct ata_queued_cmd *qc, void *cmd_desc,
-				     u32 *ttl, dma_addr_t cmd_desc_paddr)
+				     u32 *ttl, dma_addr_t cmd_desc_paddr,
+				     struct sata_fsl_host_priv *h_priv)
 {
 	struct scatterlist *sg;
 	unsigned int num_prde = 0;
 	u32 ttl_dwords = 0;
+	u32 snoop_enalbe = 0;
 
 	/*
 	 * NOTE : direct & indirect prdt's are contiguously allocated
@@ -335,6 +340,11 @@ static unsigned int sata_fsl_fill_sg(struct ata_queued_cmd *qc, void *cmd_desc,
 	unsigned int si;
 
 	VPRINTK("SATA FSL : cd = 0x%p, prd = 0x%p\n", cmd_desc, prd);
+
+	if (h_priv->version == SATA_FSL_V2)
+		snoop_enalbe = DATA_SNOOP_ENABLE_V2;
+	else
+		snoop_enalbe = DATA_SNOOP_ENABLE;
 
 	indirect_ext_segment_paddr = cmd_desc_paddr +
 	    SATA_FSL_CMD_DESC_OFFSET_TO_PRDT + SATA_FSL_MAX_PRD_DIRECT * 16;
@@ -368,7 +378,7 @@ static unsigned int sata_fsl_fill_sg(struct ata_queued_cmd *qc, void *cmd_desc,
 		ttl_dwords += sg_len;
 		prd->dba = cpu_to_le32(sg_addr);
 		prd->ddc_and_ext =
-		    cpu_to_le32(DATA_SNOOP_ENABLE | (sg_len & ~0x03));
+		    cpu_to_le32(snoop_enalbe | (sg_len & ~0x03));
 
 		VPRINTK("sg_fill, ttl=%d, dba=0x%x, ddc=0x%x\n",
 			ttl_dwords, prd->dba, prd->ddc_and_ext);
@@ -383,7 +393,7 @@ static unsigned int sata_fsl_fill_sg(struct ata_queued_cmd *qc, void *cmd_desc,
 		/* set indirect extension flag along with indirect ext. size */
 		prd_ptr_to_indirect_ext->ddc_and_ext =
 		    cpu_to_le32((EXT_INDIRECT_SEG_PRD_FLAG |
-				 DATA_SNOOP_ENABLE |
+				 snoop_enalbe |
 				 (indirect_ext_segment_sz & ~0x03)));
 	}
 
@@ -425,8 +435,8 @@ static void sata_fsl_qc_prep(struct ata_queued_cmd *qc)
 	}
 
 	if (qc->flags & ATA_QCFLAG_DMAMAP)
-		num_prde = sata_fsl_fill_sg(qc, (void *)cd,
-					    &ttl_dwords, cd_paddr);
+		num_prde = sata_fsl_fill_sg(qc, (void *)cd, &ttl_dwords,
+					    cd_paddr, host_priv);
 
 	if (qc->tf.protocol == ATA_PROT_NCQ)
 		desc_info |= FPDMA_QUEUED_CMD;
@@ -1360,6 +1370,11 @@ static int sata_fsl_probe(struct of_device *ofdev,
 	}
 	host_priv->irq = irq;
 
+	if (of_device_is_compatible(ofdev->dev.of_node, "fsl,pq-sata-v2"))
+		host_priv->version = SATA_FSL_V2;
+	else
+		host_priv->version = SATA_FSL_V1;
+
 	/* allocate host structure */
 	host = ata_host_alloc_pinfo(&ofdev->dev, ppi, SATA_FSL_MAX_PORTS);
 
@@ -1445,6 +1460,9 @@ static int sata_fsl_resume(struct of_device *op)
 static struct of_device_id fsl_sata_match[] = {
 	{
 		.compatible = "fsl,pq-sata",
+	},
+	{
+		.compatible = "fsl,pq-sata-v2",
 	},
 	{},
 };
