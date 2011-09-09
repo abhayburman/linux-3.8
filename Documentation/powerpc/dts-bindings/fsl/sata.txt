@@ -7,7 +7,9 @@ Required properties:
 - compatible        : compatible list, contains 2 entries, first is
 		 "fsl,CHIP-sata", where CHIP is the processor
 		 (mpc8315, mpc8379, etc.) and the second is
-		 "fsl,pq-sata"
+		 "fsl,pq-sata" or "fsl,pq-sata-v2".
+		 FSL sata controller V2 should be "fsl,pq-sata-v2",
+		 e.g. P1010, P1022, etc.
 - interrupts        : <interrupt mapping for SATA IRQ>
 - cell-index        : controller index.
                           1 for controller @ 0x18000
