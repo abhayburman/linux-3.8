@@ -215,6 +215,10 @@
 					reg = <0x00600000 0x00100000>;
 					read-only;
 				};
+				partition@700000 {
+					label = "file system-spi";
+					reg = <0x00700000 0x00900000>;
+				};
 			};
 			flash@1 {
 				compatible = "fsl,espi-flash","spansion,s25sl12801";
