@@ -404,7 +404,8 @@
 			reg = <0x2e000 0x1000>;
 			interrupts = <72 0x2>;
 			interrupt-parent = <&mpic>;
-			clock-frequency = <250000000>;
+			fsl,sdhci-adjust-timeout;
+			clock-frequency = <0>;
 		};
 
 		serial0: serial@4500 {
