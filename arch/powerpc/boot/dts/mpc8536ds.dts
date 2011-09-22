@@ -61,6 +61,56 @@
 			  0x5 0x0 0x0 0xffa80000 0x00040000
 			  0x6 0x0 0x0 0xffac0000 0x00040000>;
 
+		nor@0,0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "cfi-flash";
+			reg = <0x0 0x0 0x8000000>;
+			bank-width = <2>;
+			device-width = <1>;
+
+			partition@0 {
+				reg = <0x0 0x03000000>;
+				label = "ramdisk-nor";
+				read-only;
+			};
+
+			partition@3000000 {
+				reg = <0x03000000 0x00e00000>;
+				label = "diagnostic-nor";
+				read-only;
+			};
+
+			partition@3e00000 {
+				reg = <0x03e00000 0x00200000>;
+				label = "dink-nor";
+				read-only;
+			};
+
+			partition@4000000 {
+				reg = <0x04000000 0x00400000>;
+				label = "kernel-nor";
+				read-only;
+			};
+
+			partition@4400000 {
+				reg = <0x04400000 0x03b00000>;
+				label = "jffs2-nor";
+			};
+
+			partition@7f00000 {
+				reg = <0x07f00000 0x00080000>;
+				label = "dtb-nor";
+				read-only;
+			};
+
+			partition@7f80000 {
+				reg = <0x07f80000 0x00080000>;
+				label = "u-boot-nor";
+				read-only;
+			};
+		};
+
 		nand@2,0 {
 			#address-cells = <1>;
 			#size-cells = <1>;
