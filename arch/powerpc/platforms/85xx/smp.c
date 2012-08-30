@@ -43,7 +43,36 @@ static void __iomem *guts_regs;
 static u64 timebase;
 static int tb_req;
 static int tb_valid;
+static u32 cur_booting_core;
 
+#ifdef CONFIG_PPC_E500MC
+/* get a physical mask of online cores and booting core */
+static inline u32 get_phy_cpu_mask(void)
+{
+	u32 mask;
+	int cpu;
+
+	mask = 1 << cur_booting_core;
+	for_each_online_cpu(cpu)
+		mask |= 1 << get_hard_smp_processor_id(cpu);
+
+	return mask;
+}
+
+static void __cpuinit mpc85xx_timebase_freeze(int freeze)
+{
+	struct ccsr_rcpm __iomem *rcpm = guts_regs;
+	u32 mask = get_phy_cpu_mask();
+
+	if (freeze)
+		clrbits32(&rcpm->ctbenr, mask);
+	else
+		setbits32(&rcpm->ctbenr, mask);
+
+	/* read back to push the previos write */
+	in_be32(&rcpm->ctbenr);
+}
+#else
 static void __cpuinit mpc85xx_timebase_freeze(int freeze)
 {
 	struct ccsr_guts __iomem *guts = guts_regs;
@@ -58,6 +87,7 @@ static void __cpuinit mpc85xx_timebase_freeze(int freeze)
 	/* read back to push the previous write */
 	in_be32(&guts->devdisr);
 }
+#endif
 
 static void __cpuinit mpc85xx_give_timebase(void)
 {
@@ -222,6 +252,7 @@ out:
 		flush_dcache_range((ulong)spin_table,
 			(ulong)spin_table + sizeof(struct epapr_spin_table));
 #endif
+	cur_booting_core = hw_cpu;
 
 	local_irq_restore(flags);
 
@@ -356,6 +387,7 @@ static const struct of_device_id mpc85xx_smp_guts_ids[] = {
 	{ .compatible = "fsl,p1022-guts", },
 	{ .compatible = "fsl,p1023-guts", },
 	{ .compatible = "fsl,p2020-guts", },
+	{ .compatible = "fsl,qoriq-rcpm-1.0", },
 	{},
 };
 
