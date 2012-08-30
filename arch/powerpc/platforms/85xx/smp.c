@@ -25,6 +25,7 @@
 #include <asm/mpic.h>
 #include <asm/cacheflush.h>
 #include <asm/dbell.h>
+#include <asm/fsl_guts.h>
 
 #include <sysdev/fsl_soc.h>
 #include <sysdev/mpic.h>
@@ -37,6 +38,66 @@ struct epapr_spin_table {
 	u32	reserved;
 	u32	pir;
 };
+
+static void __iomem *guts_regs;
+static u64 timebase;
+static int tb_req;
+static int tb_valid;
+
+static void __cpuinit mpc85xx_timebase_freeze(int freeze)
+{
+	struct ccsr_guts __iomem *guts = guts_regs;
+	u32 mask;
+
+	mask = CCSR_GUTS_DEVDISR_TB0 | CCSR_GUTS_DEVDISR_TB1;
+	if (freeze)
+		setbits32(&guts->devdisr, mask);
+	else
+		clrbits32(&guts->devdisr, mask);
+
+	/* read back to push the previous write */
+	in_be32(&guts->devdisr);
+}
+
+static void __cpuinit mpc85xx_give_timebase(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	while (!tb_req)
+		barrier();
+	tb_req = 0;
+
+	mpc85xx_timebase_freeze(1);
+	timebase = get_tb();
+	mb();
+	tb_valid = 1;
+
+	while (tb_valid)
+		barrier();
+
+	mpc85xx_timebase_freeze(0);
+
+	local_irq_restore(flags);
+}
+
+static void __cpuinit mpc85xx_take_timebase(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	tb_req = 1;
+	while (!tb_valid)
+		barrier();
+
+	set_tb(timebase >> 32, timebase & 0xffffffff);
+	isync();
+	tb_valid = 0;
+
+	local_irq_restore(flags);
+}
 
 #ifdef CONFIG_HOTPLUG_CPU
 static void __cpuinit smp_85xx_mach_cpu_die(void)
@@ -176,7 +237,7 @@ struct smp_ops_t smp_85xx_ops = {
 	.cpu_disable	= generic_cpu_disable,
 	.cpu_die	= generic_cpu_die,
 #endif
-#if defined(CONFIG_KEXEC) || defined(CONFIG_HOTPLUG_CPU)
+#ifdef CONFIG_KEXEC
 	.give_timebase	= smp_generic_give_timebase,
 	.take_timebase	= smp_generic_take_timebase,
 #endif
@@ -288,6 +349,16 @@ static void __cpuinit smp_85xx_setup_cpu(int cpu_nr)
 		doorbell_setup_this_cpu();
 }
 
+static const struct of_device_id mpc85xx_smp_guts_ids[] = {
+	{ .compatible = "fsl,mpc8572-guts", },
+	{ .compatible = "fsl,p1020-guts", },
+	{ .compatible = "fsl,p1021-guts", },
+	{ .compatible = "fsl,p1022-guts", },
+	{ .compatible = "fsl,p1023-guts", },
+	{ .compatible = "fsl,p2020-guts", },
+	{},
+};
+
 void __init mpc85xx_smp_init(void)
 {
 	struct device_node *np;
@@ -309,9 +380,21 @@ void __init mpc85xx_smp_init(void)
 		smp_85xx_ops.cause_ipi = doorbell_cause_ipi;
 	}
 
+	np = of_find_matching_node(NULL, mpc85xx_smp_guts_ids);
+	if (np) {
+		guts_regs = of_iomap(np, 0);
+		of_node_put(np);
+		if (!guts_regs) {
+			pr_err("%s: Could not map guts node address\n",
+								__func__);
+			return;
+		}
+		smp_85xx_ops.give_timebase = mpc85xx_give_timebase;
+		smp_85xx_ops.take_timebase = mpc85xx_take_timebase;
 #ifdef CONFIG_HOTPLUG_CPU
-	ppc_md.cpu_die = smp_85xx_mach_cpu_die;
+		ppc_md.cpu_die		= smp_85xx_mach_cpu_die;
 #endif
+	}
 
 	/* When running under a hypervisor, we can not modify tb */
 	np = of_find_node_by_path("/hypervisor");
