@@ -118,6 +118,7 @@ struct sk_buff_head {
 
 	__u32		qlen;
 	spinlock_t	lock;
+	raw_spinlock_t	raw_lock;
 };
 
 struct sk_buff;
@@ -876,6 +877,12 @@ static inline void skb_queue_head_init(struct sk_buff_head *list)
 	__skb_queue_head_init(list);
 }
 
+static inline void skb_queue_head_init_raw(struct sk_buff_head *list)
+{
+	raw_spin_lock_init(&list->raw_lock);
+	__skb_queue_head_init(list);
+}
+
 static inline void skb_queue_head_init_class(struct sk_buff_head *list,
 		struct lock_class_key *class)
 {
@@ -1371,6 +1378,16 @@ static inline void skb_set_mac_header(struct sk_buff *skb, const int offset)
 }
 #endif /* NET_SKBUFF_DATA_USES_OFFSET */
 
+static inline void skb_mac_header_rebuild(struct sk_buff *skb)
+{
+	if (skb_mac_header_was_set(skb)) {
+		const unsigned char *old_mac = skb_mac_header(skb);
+
+		skb_set_mac_header(skb, -skb->mac_len);
+		memmove(skb_mac_header(skb), old_mac, skb->mac_len);
+	}
+}
+
 static inline int skb_checksum_start_offset(const struct sk_buff *skb)
 {
 	return skb->csum_start - skb_headroom(skb);
@@ -1624,8 +1641,6 @@ static inline int __skb_cow(struct sk_buff *skb, unsigned int headroom,
 {
 	int delta = 0;
 
-	if (headroom < NET_SKB_PAD)
-		headroom = NET_SKB_PAD;
 	if (headroom > skb_headroom(skb))
 		delta = headroom - skb_headroom(skb);
 
@@ -1997,8 +2012,13 @@ static inline bool skb_defer_rx_timestamp(struct sk_buff *skb)
 /**
  * skb_complete_tx_timestamp() - deliver cloned skb with tx timestamps
  *
+ * PHY drivers may accept clones of transmitted packets for
+ * timestamping via their phy_driver.txtstamp method. These drivers
+ * must call this function to return the skb back to the stack, with
+ * or without a timestamp.
+ *
  * @skb: clone of the the original outgoing packet
- * @hwtstamps: hardware time stamps
+ * @hwtstamps: hardware time stamps, may be NULL if not available
  *
  */
 void skb_complete_tx_timestamp(struct sk_buff *skb,

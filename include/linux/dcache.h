@@ -116,7 +116,7 @@ full_name_hash(const unsigned char *name, unsigned int len)
 struct dentry {
 	/* RCU lookup touched fields */
 	unsigned int d_flags;		/* protected by d_lock */
-	seqcount_t d_seq;		/* per dentry seqlock */
+	seqlock_t d_lock;		/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	struct dentry *d_parent;	/* parent directory */
 	struct qstr d_name;
@@ -126,7 +126,6 @@ struct dentry {
 
 	/* Ref lookup also touches following */
 	unsigned int d_count;		/* protected by d_lock */
-	spinlock_t d_lock;		/* per dentry lock */
 	const struct dentry_operations *d_op;
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
@@ -207,6 +206,7 @@ struct dentry_operations {
 
 #define DCACHE_CANT_MOUNT	0x0100
 #define DCACHE_GENOCIDE		0x0200
+#define DCACHE_SHRINK_LIST	0x0400
 
 #define DCACHE_OP_HASH		0x1000
 #define DCACHE_OP_COMPARE	0x2000
@@ -218,6 +218,8 @@ struct dentry_operations {
 #define DCACHE_MANAGE_TRANSIT	0x40000	/* manage transit from this dirent */
 #define DCACHE_MANAGED_DENTRY \
 	(DCACHE_MOUNTED|DCACHE_NEED_AUTOMOUNT|DCACHE_MANAGE_TRANSIT)
+
+#define DCACHE_DENTRY_KILLED	0x100000
 
 extern seqlock_t rename_lock;
 
@@ -323,8 +325,8 @@ static inline int __d_rcu_to_refcount(struct dentry *dentry, unsigned seq)
 {
 	int ret = 0;
 
-	assert_spin_locked(&dentry->d_lock);
-	if (!read_seqcount_retry(&dentry->d_seq, seq)) {
+	assert_seq_spin_locked(&dentry->d_lock);
+	if (!read_seqretry(&dentry->d_lock, seq)) {
 		ret = 1;
 		dentry->d_count++;
 	}
@@ -340,7 +342,8 @@ extern int d_validate(struct dentry *, struct dentry *);
  */
 extern char *dynamic_dname(struct dentry *, char *, int, const char *, ...);
 
-extern char *__d_path(const struct path *path, struct path *root, char *, int);
+extern char *__d_path(const struct path *, const struct path *, char *, int);
+extern char *d_absolute_path(const struct path *, char *, int);
 extern char *d_path(const struct path *, char *, int);
 extern char *d_path_with_unreachable(const struct path *, char *, int);
 extern char *dentry_path_raw(struct dentry *, char *, int);
@@ -366,9 +369,9 @@ static inline struct dentry *dget_dlock(struct dentry *dentry)
 static inline struct dentry *dget(struct dentry *dentry)
 {
 	if (dentry) {
-		spin_lock(&dentry->d_lock);
+		seq_spin_lock(&dentry->d_lock);
 		dget_dlock(dentry);
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 	}
 	return dentry;
 }
@@ -399,9 +402,9 @@ static inline int cant_mount(struct dentry *dentry)
 
 static inline void dont_mount(struct dentry *dentry)
 {
-	spin_lock(&dentry->d_lock);
+	seq_spin_lock(&dentry->d_lock);
 	dentry->d_flags |= DCACHE_CANT_MOUNT;
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 }
 
 extern void dput(struct dentry *);

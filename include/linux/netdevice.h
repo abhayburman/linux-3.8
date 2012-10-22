@@ -1330,6 +1330,8 @@ struct net_device {
 	/* for setting kernel sock attribute on TCP connection setup */
 #define GSO_MAX_SIZE		65536
 	unsigned int		gso_max_size;
+#define GSO_MAX_SEGS		65535
+	u16			gso_max_segs;
 
 #ifdef CONFIG_DCB
 	/* Data Center Bridging netlink ops */
@@ -1453,15 +1455,6 @@ static inline bool netdev_uses_dsa_tags(struct net_device *dev)
 
 	return 0;
 }
-
-#ifndef CONFIG_NET_NS
-static inline void skb_set_dev(struct sk_buff *skb, struct net_device *dev)
-{
-	skb->dev = dev;
-}
-#else /* CONFIG_NET_NS */
-void skb_set_dev(struct sk_buff *skb, struct net_device *dev);
-#endif
 
 static inline bool netdev_uses_trailer_tags(struct net_device *dev)
 {
@@ -1765,6 +1758,7 @@ struct softnet_data {
 	unsigned		dropped;
 	struct sk_buff_head	input_pkt_queue;
 	struct napi_struct	backlog;
+	struct sk_buff_head	tofree_queue;
 };
 
 static inline void input_queue_head_incr(struct softnet_data *sd)

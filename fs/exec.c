@@ -844,6 +844,7 @@ static int exec_mmap(struct mm_struct *mm)
 		}
 	}
 	task_lock(tsk);
+	local_irq_disable_rt();
 	active_mm = tsk->active_mm;
 	tsk->mm = mm;
 	tsk->active_mm = mm;
@@ -852,6 +853,7 @@ static int exec_mmap(struct mm_struct *mm)
 		atomic_dec(&old_mm->oom_disable_count);
 		atomic_inc(&tsk->mm->oom_disable_count);
 	}
+	local_irq_enable_rt();
 	task_unlock(tsk);
 	arch_pick_mmap_layout(mm);
 	if (old_mm) {
@@ -1228,7 +1230,7 @@ int check_unsafe_exec(struct linux_binprm *bprm)
 	bprm->unsafe = tracehook_unsafe_exec(p);
 
 	n_fs = 1;
-	spin_lock(&p->fs->lock);
+	seq_spin_lock(&p->fs->lock);
 	rcu_read_lock();
 	for (t = next_thread(p); t != p; t = next_thread(t)) {
 		if (t->fs == p->fs)
@@ -1245,7 +1247,7 @@ int check_unsafe_exec(struct linux_binprm *bprm)
 			res = 1;
 		}
 	}
-	spin_unlock(&p->fs->lock);
+	seq_spin_unlock(&p->fs->lock);
 
 	return res;
 }
@@ -1410,6 +1412,8 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			    printable(bprm->buf[1]) &&
 			    printable(bprm->buf[2]) &&
 			    printable(bprm->buf[3]))
+				break; /* -ENOEXEC */
+			if (try)
 				break; /* -ENOEXEC */
 			request_module("binfmt-%04x", *(unsigned short *)(&bprm->buf[2]));
 #endif

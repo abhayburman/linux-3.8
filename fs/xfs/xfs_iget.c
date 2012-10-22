@@ -272,7 +272,7 @@ xfs_iget_cache_hit(
 		__xfs_inode_clear_reclaim_tag(mp, pag, ip);
 		inode->i_state = I_NEW;
 
-		ASSERT(!rwsem_is_locked(&ip->i_iolock.mr_lock));
+		ASSERT(!anon_rwsem_is_locked(&ip->i_iolock.mr_lock));
 		mrlock_init(&ip->i_iolock, MRLOCK_BARRIER, "xfsio", ip->i_ino);
 		lockdep_set_class_and_name(&ip->i_iolock.mr_lock,
 				&xfs_iolock_active, "xfs_iolock_active");
@@ -356,9 +356,20 @@ xfs_iget_cache_miss(
 			BUG();
 	}
 
-	spin_lock(&pag->pag_ici_lock);
+	/*
+	 * These values must be set before inserting the inode into the radix
+	 * tree as the moment it is inserted a concurrent lookup (allowed by the
+	 * RCU locking mechanism) can find it and that lookup must see that this
+	 * is an inode currently under construction (i.e. that XFS_INEW is set).
+	 * The ip->i_flags_lock that protects the XFS_INEW flag forms the
+	 * memory barrier that ensures this detection works correctly at lookup
+	 * time.
+	 */
+	ip->i_udquot = ip->i_gdquot = NULL;
+	xfs_iflags_set(ip, XFS_INEW);
 
 	/* insert the new inode */
+	spin_lock(&pag->pag_ici_lock);
 	error = radix_tree_insert(&pag->pag_ici_root, agino, ip);
 	if (unlikely(error)) {
 		WARN_ON(error != -EEXIST);
@@ -366,11 +377,6 @@ xfs_iget_cache_miss(
 		error = EAGAIN;
 		goto out_preload_end;
 	}
-
-	/* These values _must_ be set before releasing the radix tree lock! */
-	ip->i_udquot = ip->i_gdquot = NULL;
-	xfs_iflags_set(ip, XFS_INEW);
-
 	spin_unlock(&pag->pag_ici_lock);
 	radix_tree_preload_end();
 
@@ -706,13 +712,13 @@ xfs_isilocked(
 	if (lock_flags & (XFS_ILOCK_EXCL|XFS_ILOCK_SHARED)) {
 		if (!(lock_flags & XFS_ILOCK_SHARED))
 			return !!ip->i_lock.mr_writer;
-		return rwsem_is_locked(&ip->i_lock.mr_lock);
+		return anon_rwsem_is_locked(&ip->i_lock.mr_lock);
 	}
 
 	if (lock_flags & (XFS_IOLOCK_EXCL|XFS_IOLOCK_SHARED)) {
 		if (!(lock_flags & XFS_IOLOCK_SHARED))
 			return !!ip->i_iolock.mr_writer;
-		return rwsem_is_locked(&ip->i_iolock.mr_lock);
+		return anon_rwsem_is_locked(&ip->i_iolock.mr_lock);
 	}
 
 	ASSERT(0);

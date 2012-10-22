@@ -88,10 +88,10 @@ cifs_bp_rename_retry:
 	full_path[namelen] = 0;	/* trailing null */
 	rcu_read_lock();
 	for (temp = direntry; !IS_ROOT(temp);) {
-		spin_lock(&temp->d_lock);
+		seq_spin_lock(&temp->d_lock);
 		namelen -= 1 + temp->d_name.len;
 		if (namelen < 0) {
-			spin_unlock(&temp->d_lock);
+			seq_spin_unlock(&temp->d_lock);
 			break;
 		} else {
 			full_path[namelen] = dirsep;
@@ -99,7 +99,7 @@ cifs_bp_rename_retry:
 				temp->d_name.len);
 			cFYI(0, "name: %s", full_path + namelen);
 		}
-		spin_unlock(&temp->d_lock);
+		seq_spin_unlock(&temp->d_lock);
 		temp = temp->d_parent;
 		if (temp == NULL) {
 			cERROR(1, "corrupt dentry");
@@ -583,10 +583,26 @@ cifs_lookup(struct inode *parent_dir_inode, struct dentry *direntry,
 			 * If either that or op not supported returned, follow
 			 * the normal lookup.
 			 */
-			if ((rc == 0) || (rc == -ENOENT))
+			switch (rc) {
+			case 0:
+				/*
+				 * The server may allow us to open things like
+				 * FIFOs, but the client isn't set up to deal
+				 * with that. If it's not a regular file, just
+				 * close it and proceed as if it were a normal
+				 * lookup.
+				 */
+				if (newInode && !S_ISREG(newInode->i_mode)) {
+					CIFSSMBClose(xid, pTcon, fileHandle);
+					break;
+				}
+			case -ENOENT:
 				posix_open = true;
-			else if ((rc == -EINVAL) || (rc != -EOPNOTSUPP))
+			case -EOPNOTSUPP:
+				break;
+			default:
 				pTcon->broken_posix_open = true;
+			}
 		}
 		if (!posix_open)
 			rc = cifs_get_inode_info_unix(&newInode, full_path,

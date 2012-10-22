@@ -279,8 +279,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	struct mm_struct *mm = &init_mm;
 	unsigned int cpu = smp_processor_id();
 
-	printk("CPU%u: Booted secondary processor\n", cpu);
-
 	/*
 	 * All kernel threads share the same mm context; grab a
 	 * reference and switch to it.
@@ -291,6 +289,8 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	cpu_switch_mm(mm->pgd, mm);
 	enter_lazy_tlb(mm, current);
 	local_flush_tlb_all();
+
+	printk("CPU%u: Booted secondary processor\n", cpu);
 
 	cpu_init();
 	preempt_disable();
@@ -305,6 +305,18 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	 * Enable local interrupts.
 	 */
 	notify_cpu_starting(cpu);
+
+	/*
+	 * OK, now it's safe to let the boot CPU continue.  Wait for
+	 * the CPU migration code to notice that the CPU is online
+	 * before we continue. We need to do that before we enable
+	 * interrupts otherwise a wakeup of a kernel thread affine to
+	 * this CPU might break the affinity and let hell break lose.
+	 */
+	set_cpu_online(cpu, true);
+	while (!cpu_active(cpu))
+		cpu_relax();
+
 	local_irq_enable();
 	local_fiq_enable();
 
@@ -316,15 +328,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	calibrate_delay();
 
 	smp_store_cpu_info(cpu);
-
-	/*
-	 * OK, now it's safe to let the boot CPU continue.  Wait for
-	 * the CPU migration code to notice that the CPU is online
-	 * before we continue.
-	 */
-	set_cpu_online(cpu, true);
-	while (!cpu_active(cpu))
-		cpu_relax();
 
 	/*
 	 * OK, it's off to the idle thread for us
@@ -445,9 +448,7 @@ static DEFINE_PER_CPU(struct clock_event_device, percpu_clockevent);
 static void ipi_timer(void)
 {
 	struct clock_event_device *evt = &__get_cpu_var(percpu_clockevent);
-	irq_enter();
 	evt->event_handler(evt);
-	irq_exit();
 }
 
 #ifdef CONFIG_LOCAL_TIMERS
@@ -458,7 +459,9 @@ asmlinkage void __exception_irq_entry do_local_timer(struct pt_regs *regs)
 
 	if (local_timer_ack()) {
 		__inc_irq_stat(cpu, local_timer_irqs);
+		irq_enter();
 		ipi_timer();
+		irq_exit();
 	}
 
 	set_irq_regs(old_regs);
@@ -531,7 +534,7 @@ static void percpu_timer_stop(void)
 }
 #endif
 
-static DEFINE_SPINLOCK(stop_lock);
+static DEFINE_RAW_SPINLOCK(stop_lock);
 
 /*
  * ipi_cpu_stop - handle IPI from smp_send_stop()
@@ -540,10 +543,10 @@ static void ipi_cpu_stop(unsigned int cpu)
 {
 	if (system_state == SYSTEM_BOOTING ||
 	    system_state == SYSTEM_RUNNING) {
-		spin_lock(&stop_lock);
+		raw_spin_lock(&stop_lock);
 		printk(KERN_CRIT "CPU%u: stopping\n", cpu);
 		dump_stack();
-		spin_unlock(&stop_lock);
+		raw_spin_unlock(&stop_lock);
 	}
 
 	set_cpu_online(cpu, false);
@@ -568,7 +571,9 @@ asmlinkage void __exception_irq_entry do_IPI(int ipinr, struct pt_regs *regs)
 
 	switch (ipinr) {
 	case IPI_TIMER:
+		irq_enter();
 		ipi_timer();
+		irq_exit();
 		break;
 
 	case IPI_RESCHEDULE:
@@ -576,15 +581,21 @@ asmlinkage void __exception_irq_entry do_IPI(int ipinr, struct pt_regs *regs)
 		break;
 
 	case IPI_CALL_FUNC:
+		irq_enter();
 		generic_smp_call_function_interrupt();
+		irq_exit();
 		break;
 
 	case IPI_CALL_FUNC_SINGLE:
+		irq_enter();
 		generic_smp_call_function_single_interrupt();
+		irq_exit();
 		break;
 
 	case IPI_CPU_STOP:
+		irq_enter();
 		ipi_cpu_stop(cpu);
+		irq_exit();
 		break;
 
 	default:

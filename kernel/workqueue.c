@@ -137,6 +137,7 @@ struct worker {
 	unsigned int		flags;		/* X: flags */
 	int			id;		/* I: worker id */
 	struct work_struct	rebind_work;	/* L: rebind worker to cpu */
+	int			sleeping;	/* None */
 };
 
 /*
@@ -252,11 +253,13 @@ struct workqueue_struct *system_long_wq __read_mostly;
 struct workqueue_struct *system_nrt_wq __read_mostly;
 struct workqueue_struct *system_unbound_wq __read_mostly;
 struct workqueue_struct *system_freezable_wq __read_mostly;
+struct workqueue_struct *system_nrt_freezable_wq __read_mostly;
 EXPORT_SYMBOL_GPL(system_wq);
 EXPORT_SYMBOL_GPL(system_long_wq);
 EXPORT_SYMBOL_GPL(system_nrt_wq);
 EXPORT_SYMBOL_GPL(system_unbound_wq);
 EXPORT_SYMBOL_GPL(system_freezable_wq);
+EXPORT_SYMBOL_GPL(system_nrt_freezable_wq);
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/workqueue.h>
@@ -657,66 +660,58 @@ static void wake_up_worker(struct global_cwq *gcwq)
 }
 
 /**
- * wq_worker_waking_up - a worker is waking up
- * @task: task waking up
- * @cpu: CPU @task is waking up to
+ * wq_worker_running - a worker is running again
+ * @task: task returning from sleep
  *
- * This function is called during try_to_wake_up() when a worker is
- * being awoken.
- *
- * CONTEXT:
- * spin_lock_irq(rq->lock)
+ * This function is called when a worker returns from schedule()
  */
-void wq_worker_waking_up(struct task_struct *task, unsigned int cpu)
+void wq_worker_running(struct task_struct *task)
 {
 	struct worker *worker = kthread_data(task);
 
+	if (!worker->sleeping)
+		return;
 	if (!(worker->flags & WORKER_NOT_RUNNING))
-		atomic_inc(get_gcwq_nr_running(cpu));
+		atomic_inc(get_gcwq_nr_running(smp_processor_id()));
+	worker->sleeping = 0;
 }
 
 /**
  * wq_worker_sleeping - a worker is going to sleep
  * @task: task going to sleep
- * @cpu: CPU in question, must be the current CPU number
  *
- * This function is called during schedule() when a busy worker is
- * going to sleep.  Worker on the same cpu can be woken up by
- * returning pointer to its task.
- *
- * CONTEXT:
- * spin_lock_irq(rq->lock)
- *
- * RETURNS:
- * Worker task on @cpu to wake up, %NULL if none.
+ * This function is called from schedule() when a busy worker is
+ * going to sleep.
  */
-struct task_struct *wq_worker_sleeping(struct task_struct *task,
-				       unsigned int cpu)
+void wq_worker_sleeping(struct task_struct *task)
 {
-	struct worker *worker = kthread_data(task), *to_wakeup = NULL;
-	struct global_cwq *gcwq = get_gcwq(cpu);
-	atomic_t *nr_running = get_gcwq_nr_running(cpu);
+	struct worker *worker = kthread_data(task);
+	struct global_cwq *gcwq;
+	int cpu;
 
 	if (worker->flags & WORKER_NOT_RUNNING)
-		return NULL;
+		return;
 
-	/* this can only happen on the local cpu */
-	BUG_ON(cpu != raw_smp_processor_id());
+	if (WARN_ON_ONCE(worker->sleeping))
+		return;
 
+	worker->sleeping = 1;
+
+	cpu = smp_processor_id();
+	gcwq = get_gcwq(cpu);
+	spin_lock_irq(&gcwq->lock);
 	/*
 	 * The counterpart of the following dec_and_test, implied mb,
 	 * worklist not empty test sequence is in insert_work().
 	 * Please read comment there.
-	 *
-	 * NOT_RUNNING is clear.  This means that trustee is not in
-	 * charge and we're running on the local cpu w/ rq lock held
-	 * and preemption disabled, which in turn means that none else
-	 * could be manipulating idle_list, so dereferencing idle_list
-	 * without gcwq lock is safe.
 	 */
-	if (atomic_dec_and_test(nr_running) && !list_empty(&gcwq->worklist))
-		to_wakeup = first_worker(gcwq);
-	return to_wakeup ? to_wakeup->task : NULL;
+	if (atomic_dec_and_test(get_gcwq_nr_running(cpu)) &&
+	    !list_empty(&gcwq->worklist)) {
+		worker = first_worker(gcwq);
+		if (worker)
+			wake_up_process(worker->task);
+	}
+	spin_unlock_irq(&gcwq->lock);
 }
 
 /**
@@ -1067,8 +1062,8 @@ int queue_work(struct workqueue_struct *wq, struct work_struct *work)
 {
 	int ret;
 
-	ret = queue_work_on(get_cpu(), wq, work);
-	put_cpu();
+	ret = queue_work_on(get_cpu_light(), wq, work);
+	put_cpu_light();
 
 	return ret;
 }
@@ -1861,7 +1856,9 @@ __acquires(&gcwq->lock)
 
 	spin_unlock_irq(&gcwq->lock);
 
+	smp_wmb();	/* paired with test_and_set_bit(PENDING) */
 	work_clear_pending(work);
+
 	lock_map_acquire_read(&cwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
@@ -3405,14 +3402,17 @@ static int __cpuinit trustee_thread(void *__gcwq)
 
 	for_each_busy_worker(worker, i, pos, gcwq) {
 		struct work_struct *rebind_work = &worker->rebind_work;
+		unsigned long worker_flags = worker->flags;
 
 		/*
 		 * Rebind_work may race with future cpu hotplug
 		 * operations.  Use a separate flag to mark that
-		 * rebinding is scheduled.
+		 * rebinding is scheduled.  The morphing should
+		 * be atomic.
 		 */
-		worker->flags |= WORKER_REBIND;
-		worker->flags &= ~WORKER_ROGUE;
+		worker_flags |= WORKER_REBIND;
+		worker_flags &= ~WORKER_ROGUE;
+		ACCESS_ONCE(worker->flags) = worker_flags;
 
 		/* queue rebind_work, wq doesn't matter, use the default one */
 		if (test_and_set_bit(WORK_STRUCT_PENDING_BIT,
@@ -3489,6 +3489,25 @@ static int __devinit workqueue_cpu_callback(struct notifier_block *nfb,
 				kthread_stop(new_trustee);
 			return NOTIFY_BAD;
 		}
+		break;
+	case CPU_POST_DEAD:
+	case CPU_UP_CANCELED:
+	case CPU_DOWN_FAILED:
+	case CPU_ONLINE:
+		break;
+	case CPU_DYING:
+		/*
+		 * We access this lockless. We are on the dying CPU
+		 * and called from stomp machine.
+		 *
+		 * Before this, the trustee and all workers except for
+		 * the ones which are still executing works from
+		 * before the last CPU down must be on the cpu.  After
+		 * this, they'll all be diasporas.
+		 */
+		gcwq->flags |= GCWQ_DISASSOCIATED;
+	default:
+		goto out;
 	}
 
 	/* some are called w/ irq disabled, don't disturb irq status */
@@ -3506,16 +3525,6 @@ static int __devinit workqueue_cpu_callback(struct notifier_block *nfb,
 	case CPU_UP_PREPARE:
 		BUG_ON(gcwq->first_idle);
 		gcwq->first_idle = new_worker;
-		break;
-
-	case CPU_DYING:
-		/*
-		 * Before this, the trustee and all workers except for
-		 * the ones which are still executing works from
-		 * before the last CPU down must be on the cpu.  After
-		 * this, they'll all be diasporas.
-		 */
-		gcwq->flags |= GCWQ_DISASSOCIATED;
 		break;
 
 	case CPU_POST_DEAD:
@@ -3551,24 +3560,59 @@ static int __devinit workqueue_cpu_callback(struct notifier_block *nfb,
 
 	spin_unlock_irqrestore(&gcwq->lock, flags);
 
+out:
 	return notifier_from_errno(0);
+}
+
+/*
+ * Workqueues should be brought up before normal priority CPU notifiers.
+ * This will be registered high priority CPU notifier.
+ */
+static int __devinit workqueue_cpu_up_callback(struct notifier_block *nfb,
+					       unsigned long action,
+					       void *hcpu)
+{
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_UP_PREPARE:
+	case CPU_UP_CANCELED:
+	case CPU_DOWN_FAILED:
+	case CPU_ONLINE:
+		return workqueue_cpu_callback(nfb, action, hcpu);
+	}
+	return NOTIFY_OK;
+}
+
+/*
+ * Workqueues should be brought down after normal priority CPU notifiers.
+ * This will be registered as low priority CPU notifier.
+ */
+static int __devinit workqueue_cpu_down_callback(struct notifier_block *nfb,
+						 unsigned long action,
+						 void *hcpu)
+{
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_DOWN_PREPARE:
+	case CPU_DYING:
+	case CPU_POST_DEAD:
+		return workqueue_cpu_callback(nfb, action, hcpu);
+	}
+	return NOTIFY_OK;
 }
 
 #ifdef CONFIG_SMP
 
 struct work_for_cpu {
-	struct completion completion;
+	struct work_struct work;
 	long (*fn)(void *);
 	void *arg;
 	long ret;
 };
 
-static int do_work_for_cpu(void *_wfc)
+static void work_for_cpu_fn(struct work_struct *work)
 {
-	struct work_for_cpu *wfc = _wfc;
+	struct work_for_cpu *wfc = container_of(work, struct work_for_cpu, work);
+
 	wfc->ret = wfc->fn(wfc->arg);
-	complete(&wfc->completion);
-	return 0;
 }
 
 /**
@@ -3583,19 +3627,11 @@ static int do_work_for_cpu(void *_wfc)
  */
 long work_on_cpu(unsigned int cpu, long (*fn)(void *), void *arg)
 {
-	struct task_struct *sub_thread;
-	struct work_for_cpu wfc = {
-		.completion = COMPLETION_INITIALIZER_ONSTACK(wfc.completion),
-		.fn = fn,
-		.arg = arg,
-	};
+	struct work_for_cpu wfc = { .fn = fn, .arg = arg };
 
-	sub_thread = kthread_create(do_work_for_cpu, &wfc, "work_for_cpu");
-	if (IS_ERR(sub_thread))
-		return PTR_ERR(sub_thread);
-	kthread_bind(sub_thread, cpu);
-	wake_up_process(sub_thread);
-	wait_for_completion(&wfc.completion);
+	INIT_WORK_ONSTACK(&wfc.work, work_for_cpu_fn);
+	schedule_work_on(cpu, &wfc.work);
+	flush_work(&wfc.work);
 	return wfc.ret;
 }
 EXPORT_SYMBOL_GPL(work_on_cpu);
@@ -3747,7 +3783,8 @@ static int __init init_workqueues(void)
 	unsigned int cpu;
 	int i;
 
-	cpu_notifier(workqueue_cpu_callback, CPU_PRI_WORKQUEUE);
+	cpu_notifier(workqueue_cpu_up_callback, CPU_PRI_WORKQUEUE_UP);
+	cpu_notifier(workqueue_cpu_down_callback, CPU_PRI_WORKQUEUE_DOWN);
 
 	/* initialize gcwqs */
 	for_each_gcwq_cpu(cpu) {
@@ -3796,8 +3833,11 @@ static int __init init_workqueues(void)
 					    WQ_UNBOUND_MAX_ACTIVE);
 	system_freezable_wq = alloc_workqueue("events_freezable",
 					      WQ_FREEZABLE, 0);
+	system_nrt_freezable_wq = alloc_workqueue("events_nrt_freezable",
+			WQ_NON_REENTRANT | WQ_FREEZABLE, 0);
 	BUG_ON(!system_wq || !system_long_wq || !system_nrt_wq ||
-	       !system_unbound_wq || !system_freezable_wq);
+	       !system_unbound_wq || !system_freezable_wq ||
+		!system_nrt_freezable_wq);
 	return 0;
 }
 early_initcall(init_workqueues);

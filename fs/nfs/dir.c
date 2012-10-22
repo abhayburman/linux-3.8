@@ -1458,12 +1458,12 @@ static struct dentry *nfs_atomic_lookup(struct inode *dir, struct dentry *dentry
 				res = NULL;
 				goto out;
 			/* This turned out not to be a regular file */
+			case -EISDIR:
 			case -ENOTDIR:
 				goto no_open;
 			case -ELOOP:
 				if (!(nd->intent.open.flags & O_NOFOLLOW))
 					goto no_open;
-			/* case -EISDIR: */
 			/* case -EINVAL: */
 			default:
 				res = ERR_CAST(inode);
@@ -1813,9 +1813,9 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 	dfprintk(VFS, "NFS: unlink(%s/%ld, %s)\n", dir->i_sb->s_id,
 		dir->i_ino, dentry->d_name.name);
 
-	spin_lock(&dentry->d_lock);
+	seq_spin_lock(&dentry->d_lock);
 	if (dentry->d_count > 1) {
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 		/* Start asynchronous writeout of the inode */
 		write_inode_now(dentry->d_inode, 0);
 		error = nfs_sillyrename(dir, dentry);
@@ -1825,7 +1825,7 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 		__d_drop(dentry);
 		need_rehash = 1;
 	}
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 	error = nfs_safe_remove(dentry);
 	if (!error || error == -ENOENT) {
 		nfs_set_verifier(dentry, nfs_save_change_attribute(dir));

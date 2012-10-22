@@ -139,13 +139,13 @@ isofs_export_encode_fh(struct dentry *dentry,
 	if (connectable && !S_ISDIR(inode->i_mode)) {
 		struct inode *parent;
 		struct iso_inode_info *eparent;
-		spin_lock(&dentry->d_lock);
+		seq_spin_lock(&dentry->d_lock);
 		parent = dentry->d_parent->d_inode;
 		eparent = ISOFS_I(parent);
 		fh32[3] = eparent->i_iget5_block;
 		fh16[3] = (__u16)eparent->i_iget5_offset;  /* fh16 [sic] */
 		fh32[4] = parent->i_generation;
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 		len = 5;
 		type = 2;
 	}
@@ -179,7 +179,7 @@ static struct dentry *isofs_fh_to_parent(struct super_block *sb,
 {
 	struct isofs_fid *ifid = (struct isofs_fid *)fid;
 
-	if (fh_type != 2)
+	if (fh_len < 2 || fh_type != 2)
 		return NULL;
 
 	return isofs_export_iget(sb,

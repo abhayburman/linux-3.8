@@ -398,11 +398,12 @@ invalidate_complete_page2(struct address_space *mapping, struct page *page)
 	if (page_has_private(page) && !try_to_release_page(page, GFP_KERNEL))
 		return 0;
 
+	clear_page_mlock(page);
+
 	spin_lock_irq(&mapping->tree_lock);
 	if (PageDirty(page))
 		goto failed;
 
-	clear_page_mlock(page);
 	BUG_ON(page_has_private(page));
 	__delete_from_page_cache(page);
 	spin_unlock_irq(&mapping->tree_lock);
@@ -622,12 +623,12 @@ int vmtruncate_range(struct inode *inode, loff_t offset, loff_t end)
 		return -ENOSYS;
 
 	mutex_lock(&inode->i_mutex);
-	down_write(&inode->i_alloc_sem);
+	anon_down_write(&inode->i_alloc_sem);
 	unmap_mapping_range(mapping, offset, (end - offset), 1);
 	inode->i_op->truncate_range(inode, offset, end);
 	/* unmap again to remove racily COWed private pages */
 	unmap_mapping_range(mapping, offset, (end - offset), 1);
-	up_write(&inode->i_alloc_sem);
+	anon_up_write(&inode->i_alloc_sem);
 	mutex_unlock(&inode->i_mutex);
 
 	return 0;

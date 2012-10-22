@@ -334,6 +334,7 @@ void kernel_restart_prepare(char *cmd)
 void kernel_restart(char *cmd)
 {
 	kernel_restart_prepare(cmd);
+	disable_nonboot_cpus();
 	if (!cmd)
 		printk(KERN_EMERG "Restarting system.\n");
 	else
@@ -1135,7 +1136,7 @@ DECLARE_RWSEM(uts_sem);
 static int override_release(char __user *release, int len)
 {
 	int ret = 0;
-	char buf[len];
+	char buf[65];
 
 	if (current->personality & UNAME26) {
 		char *rest = UTS_RELEASE;

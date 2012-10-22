@@ -111,6 +111,11 @@ struct hrtimer {
 	enum hrtimer_restart		(*function)(struct hrtimer *);
 	struct hrtimer_clock_base	*base;
 	unsigned long			state;
+	struct list_head		cb_entry;
+	int				irqsafe;
+#ifdef CONFIG_MISSED_TIMER_OFFSETS_HIST
+	ktime_t 			praecox;
+#endif
 #ifdef CONFIG_TIMER_STATS
 	int				start_pid;
 	void				*start_site;
@@ -147,6 +152,7 @@ struct hrtimer_clock_base {
 	int			index;
 	clockid_t		clockid;
 	struct timerqueue_head	active;
+	struct list_head	expired;
 	ktime_t			resolution;
 	ktime_t			(*get_time)(void);
 	ktime_t			softirq_time;
@@ -165,6 +171,7 @@ enum  hrtimer_base_type {
  * @lock:		lock protecting the base and associated clock bases
  *			and timers
  * @active_bases:	Bitfield to mark bases with active timers
+ * @clock_was_set:	Indicates that clock was set from irq context.
  * @expires_next:	absolute time of the next event which was scheduled
  *			via clock_set_next_event()
  * @hres_active:	State of high resolution mode
@@ -177,7 +184,8 @@ enum  hrtimer_base_type {
  */
 struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;
-	unsigned long			active_bases;
+	unsigned int			active_bases;
+	unsigned int			clock_was_set;
 #ifdef CONFIG_HIGH_RES_TIMERS
 	ktime_t				expires_next;
 	int				hres_active;
@@ -186,6 +194,9 @@ struct hrtimer_cpu_base {
 	unsigned long			nr_retries;
 	unsigned long			nr_hangs;
 	ktime_t				max_hang_time;
+#endif
+#ifdef CONFIG_PREEMPT_RT_BASE
+	wait_queue_head_t		wait;
 #endif
 	struct hrtimer_clock_base	clock_base[HRTIMER_MAX_CLOCK_BASES];
 };
@@ -286,6 +297,8 @@ extern void hrtimer_peek_ahead_timers(void);
 # define MONOTONIC_RES_NSEC	HIGH_RES_NSEC
 # define KTIME_MONOTONIC_RES	KTIME_HIGH_RES
 
+extern void clock_was_set_delayed(void);
+
 #else
 
 # define MONOTONIC_RES_NSEC	LOW_RES_NSEC
@@ -306,6 +319,9 @@ static inline int hrtimer_is_hres_active(struct hrtimer *timer)
 {
 	return 0;
 }
+
+static inline void clock_was_set_delayed(void) { }
+
 #endif
 
 extern void clock_was_set(void);
@@ -320,6 +336,7 @@ extern ktime_t ktime_get(void);
 extern ktime_t ktime_get_real(void);
 extern ktime_t ktime_get_boottime(void);
 extern ktime_t ktime_get_monotonic_offset(void);
+extern ktime_t ktime_get_update_offsets(ktime_t *offs_real, ktime_t *offs_boot);
 
 DECLARE_PER_CPU(struct tick_device, tick_cpu_device);
 
@@ -373,6 +390,13 @@ static inline int hrtimer_restart(struct hrtimer *timer)
 {
 	return hrtimer_start_expires(timer, HRTIMER_MODE_ABS);
 }
+
+/* Softirq preemption could deadlock timer removal */
+#ifdef CONFIG_PREEMPT_RT_BASE
+  extern void hrtimer_wait_for_timer(const struct hrtimer *timer);
+#else
+# define hrtimer_wait_for_timer(timer)	do { cpu_relax(); } while (0)
+#endif
 
 /* Query timers: */
 extern ktime_t hrtimer_get_remaining(const struct hrtimer *timer);

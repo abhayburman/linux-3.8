@@ -91,6 +91,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->nlookup = 0;
 	fi->attr_version = 0;
 	fi->writectr = 0;
+	fi->orig_ino = 0;
 	INIT_LIST_HEAD(&fi->write_files);
 	INIT_LIST_HEAD(&fi->queued_writes);
 	INIT_LIST_HEAD(&fi->writepages);
@@ -140,6 +141,18 @@ static int fuse_remount_fs(struct super_block *sb, int *flags, char *data)
 	return 0;
 }
 
+/*
+ * ino_t is 32-bits on 32-bit arch. We have to squash the 64-bit value down
+ * so that it will fit.
+ */
+static ino_t fuse_squash_ino(u64 ino64)
+{
+	ino_t ino = (ino_t) ino64;
+	if (sizeof(ino_t) < sizeof(u64))
+		ino ^= ino64 >> (sizeof(u64) - sizeof(ino_t)) * 8;
+	return ino;
+}
+
 void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 				   u64 attr_valid)
 {
@@ -149,7 +162,7 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 	fi->attr_version = ++fc->attr_version;
 	fi->i_time = attr_valid;
 
-	inode->i_ino     = attr->ino;
+	inode->i_ino     = fuse_squash_ino(attr->ino);
 	inode->i_mode    = (inode->i_mode & S_IFMT) | (attr->mode & 07777);
 	inode->i_nlink   = attr->nlink;
 	inode->i_uid     = attr->uid;
@@ -175,6 +188,8 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 	fi->orig_i_mode = inode->i_mode;
 	if (!(fc->flags & FUSE_DEFAULT_PERMISSIONS))
 		inode->i_mode &= ~S_ISVTX;
+
+	fi->orig_ino = attr->ino;
 }
 
 void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
@@ -652,11 +667,11 @@ static int fuse_encode_fh(struct dentry *dentry, u32 *fh, int *max_len,
 	if (encode_parent) {
 		struct inode *parent;
 
-		spin_lock(&dentry->d_lock);
+		seq_spin_lock(&dentry->d_lock);
 		parent = dentry->d_parent->d_inode;
 		nodeid = get_fuse_inode(parent)->nodeid;
 		generation = parent->i_generation;
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 
 		fh[3] = (u32)(nodeid >> 32);
 		fh[4] = (u32)(nodeid & 0xffffffff);

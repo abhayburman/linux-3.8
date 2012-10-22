@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/syscore_ops.h>
+#include <linux/ftrace.h>
 #include <trace/events/power.h>
 
 #include "power.h"
@@ -163,6 +164,8 @@ static int suspend_enter(suspend_state_t state)
 	arch_suspend_disable_irqs();
 	BUG_ON(!irqs_disabled());
 
+	system_state = SYSTEM_SUSPEND;
+
 	error = syscore_suspend();
 	if (!error) {
 		if (!(suspend_test(TEST_CORE) || pm_wakeup_pending())) {
@@ -171,6 +174,8 @@ static int suspend_enter(suspend_state_t state)
 		}
 		syscore_resume();
 	}
+
+	system_state = SYSTEM_RUNNING;
 
 	arch_suspend_enable_irqs();
 	BUG_ON(irqs_disabled());
@@ -210,6 +215,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 			goto Close;
 	}
 	suspend_console();
+	ftrace_stop();
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
@@ -226,6 +232,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 	suspend_test_start();
 	dpm_resume_end(PMSG_RESUME);
 	suspend_test_finish("resume devices");
+	ftrace_start();
 	resume_console();
  Close:
 	if (suspend_ops->end)
@@ -307,7 +314,7 @@ int enter_state(suspend_state_t state)
  */
 int pm_suspend(suspend_state_t state)
 {
-	if (state > PM_SUSPEND_ON && state <= PM_SUSPEND_MAX)
+	if (state > PM_SUSPEND_ON && state < PM_SUSPEND_MAX)
 		return enter_state(state);
 	return -EINVAL;
 }

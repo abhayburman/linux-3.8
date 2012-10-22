@@ -136,7 +136,7 @@ static int do_getname(const char __user *filename, char *page)
 	return retval;
 }
 
-static char *getname_flags(const char __user * filename, int flags)
+static char *getname_flags(const char __user *filename, int flags, int *empty)
 {
 	char *tmp, *result;
 
@@ -147,6 +147,8 @@ static char *getname_flags(const char __user * filename, int flags)
 
 		result = tmp;
 		if (retval < 0) {
+			if (retval == -ENOENT && empty)
+				*empty = 1;
 			if (retval != -ENOENT || !(flags & LOOKUP_EMPTY)) {
 				__putname(tmp);
 				result = ERR_PTR(retval);
@@ -159,7 +161,7 @@ static char *getname_flags(const char __user * filename, int flags)
 
 char *getname(const char __user * filename)
 {
-	return getname_flags(filename, 0);
+	return getname_flags(filename, 0, 0);
 }
 
 #ifdef CONFIG_AUDITSYSCALL
@@ -422,12 +424,12 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
 		want_root = 1;
-		spin_lock(&fs->lock);
+		seq_spin_lock(&fs->lock);
 		if (nd->root.mnt != fs->root.mnt ||
 				nd->root.dentry != fs->root.dentry)
 			goto err_root;
 	}
-	spin_lock(&parent->d_lock);
+	seq_spin_lock(&parent->d_lock);
 	if (!dentry) {
 		if (!__d_rcu_to_refcount(parent, nd->seq))
 			goto err_parent;
@@ -435,7 +437,7 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 	} else {
 		if (dentry->d_parent != parent)
 			goto err_parent;
-		spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
+		seq_spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
 		if (!__d_rcu_to_refcount(dentry, nd->seq))
 			goto err_child;
 		/*
@@ -447,12 +449,12 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 		BUG_ON(!IS_ROOT(dentry) && dentry->d_parent != parent);
 		BUG_ON(!parent->d_count);
 		parent->d_count++;
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 	}
-	spin_unlock(&parent->d_lock);
+	seq_spin_unlock(&parent->d_lock);
 	if (want_root) {
 		path_get(&nd->root);
-		spin_unlock(&fs->lock);
+		seq_spin_unlock(&fs->lock);
 	}
 	mntget(nd->path.mnt);
 
@@ -462,12 +464,12 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 	return 0;
 
 err_child:
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 err_parent:
-	spin_unlock(&parent->d_lock);
+	seq_spin_unlock(&parent->d_lock);
 err_root:
 	if (want_root)
-		spin_unlock(&fs->lock);
+		seq_spin_unlock(&fs->lock);
 	return -ECHILD;
 }
 
@@ -533,15 +535,15 @@ static int complete_walk(struct nameidata *nd)
 		nd->flags &= ~LOOKUP_RCU;
 		if (!(nd->flags & LOOKUP_ROOT))
 			nd->root.mnt = NULL;
-		spin_lock(&dentry->d_lock);
+		seq_spin_lock(&dentry->d_lock);
 		if (unlikely(!__d_rcu_to_refcount(dentry, nd->seq))) {
-			spin_unlock(&dentry->d_lock);
+			seq_spin_unlock(&dentry->d_lock);
 			rcu_read_unlock();
 			br_read_unlock(vfsmount_lock);
 			return -ECHILD;
 		}
 		BUG_ON(nd->inode != dentry->d_inode);
-		spin_unlock(&dentry->d_lock);
+		seq_spin_unlock(&dentry->d_lock);
 		mntget(nd->path.mnt);
 		rcu_read_unlock();
 		br_read_unlock(vfsmount_lock);
@@ -617,10 +619,10 @@ static __always_inline void set_root_rcu(struct nameidata *nd)
 		unsigned seq;
 
 		do {
-			seq = read_seqcount_begin(&fs->seq);
+			seq = read_seqbegin(&fs->lock);
 			nd->root = fs->root;
-			nd->seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
-		} while (read_seqcount_retry(&fs->seq, seq));
+			nd->seq = __read_seqbegin(&nd->root.dentry->d_lock);
+		} while (read_seqretry(&fs->lock, seq));
 	}
 }
 
@@ -779,17 +781,20 @@ static int follow_automount(struct path *path, unsigned flags,
 	if ((flags & LOOKUP_NO_AUTOMOUNT) && !(flags & LOOKUP_CONTINUE))
 		return -EISDIR; /* we actually want to stop here */
 
-	/* We want to mount if someone is trying to open/create a file of any
-	 * type under the mountpoint, wants to traverse through the mountpoint
-	 * or wants to open the mounted directory.
+	/* We don't want to mount if someone's just doing a stat -
+	 * unless they're stat'ing a directory and appended a '/' to
+	 * the name.
 	 *
-	 * We don't want to mount if someone's just doing a stat and they've
-	 * set AT_SYMLINK_NOFOLLOW - unless they're stat'ing a directory and
-	 * appended a '/' to the name.
+	 * We do, however, want to mount if someone wants to open or
+	 * create a file of any type under the mountpoint, wants to
+	 * traverse through the mountpoint or wants to open the
+	 * mounted directory.  Also, autofs may mark negative dentries
+	 * as being automount points.  These will need the attentions
+	 * of the daemon to instantiate them before they can be used.
 	 */
-	if (!(flags & LOOKUP_FOLLOW) &&
-	    !(flags & (LOOKUP_CONTINUE | LOOKUP_DIRECTORY |
-		       LOOKUP_OPEN | LOOKUP_CREATE)))
+	if (!(flags & (LOOKUP_CONTINUE | LOOKUP_DIRECTORY |
+		     LOOKUP_OPEN | LOOKUP_CREATE | LOOKUP_AUTOMOUNT)) &&
+	    path->dentry->d_inode)
 		return -EISDIR;
 
 	current->total_link_count++;
@@ -905,7 +910,7 @@ static int follow_managed(struct path *path, unsigned flags)
 		mntput(path->mnt);
 	if (ret == -EISDIR)
 		ret = 0;
-	return ret;
+	return ret < 0 ? ret : need_mntput;
 }
 
 int follow_down_one(struct path *path)
@@ -953,7 +958,8 @@ static bool __follow_mount_rcu(struct nameidata *nd, struct path *path,
 			break;
 		path->mnt = mounted;
 		path->dentry = mounted->mnt_root;
-		nd->seq = read_seqcount_begin(&path->dentry->d_seq);
+		nd->flags |= LOOKUP_JUMPED;
+		nd->seq = read_seqbegin(&path->dentry->d_lock);
 		/*
 		 * Update the inode too. We don't need to re-check the
 		 * dentry sequence number here after this d_inode read,
@@ -973,7 +979,7 @@ static void follow_mount_rcu(struct nameidata *nd)
 			break;
 		nd->path.mnt = mounted;
 		nd->path.dentry = mounted->mnt_root;
-		nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
+		nd->seq = read_seqbegin(&nd->path.dentry->d_lock);
 	}
 }
 
@@ -991,8 +997,8 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 			struct dentry *parent = old->d_parent;
 			unsigned seq;
 
-			seq = read_seqcount_begin(&parent->d_seq);
-			if (read_seqcount_retry(&old->d_seq, nd->seq))
+			seq = read_seqbegin(&parent->d_lock);
+			if (read_seqretry(&old->d_lock, nd->seq))
 				goto failed;
 			nd->path.dentry = parent;
 			nd->seq = seq;
@@ -1000,7 +1006,7 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 		}
 		if (!follow_up_rcu(&nd->path))
 			break;
-		nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
+		nd->seq = read_seqbegin(&nd->path.dentry->d_lock);
 	}
 	follow_mount_rcu(nd);
 	nd->inode = nd->path.dentry->d_inode;
@@ -1160,7 +1166,7 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 			goto unlazy;
 
 		/* Memory barrier in read_seqcount_begin of child is enough */
-		if (__read_seqcount_retry(&parent->d_seq, nd->seq))
+		if (__read_seqretry(&parent->d_lock, nd->seq))
 			return -ECHILD;
 		nd->seq = seq;
 
@@ -1227,6 +1233,8 @@ retry:
 		path_put_conditional(path, nd);
 		return err;
 	}
+	if (err)
+		nd->flags |= LOOKUP_JUMPED;
 	*inode = path->dentry->d_inode;
 	return 0;
 }
@@ -1465,7 +1473,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 		if (flags & LOOKUP_RCU) {
 			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
-			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
+			nd->seq = __read_seqbegin(&nd->path.dentry->d_lock);
 		} else {
 			path_get(&nd->path);
 		}
@@ -1493,10 +1501,10 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 			rcu_read_lock();
 
 			do {
-				seq = read_seqcount_begin(&fs->seq);
+				seq = read_seqbegin(&fs->lock);
 				nd->path = fs->pwd;
-				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
-			} while (read_seqcount_retry(&fs->seq, seq));
+				nd->seq = __read_seqbegin(&nd->path.dentry->d_lock);
+			} while (read_seqretry(&fs->lock, seq));
 		} else {
 			get_fs_pwd(current->fs, &nd->path);
 		}
@@ -1524,7 +1532,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 		if (flags & LOOKUP_RCU) {
 			if (fput_needed)
 				*fp = file;
-			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
+			nd->seq = __read_seqbegin(&nd->path.dentry->d_lock);
 			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
 		} else {
@@ -1747,11 +1755,11 @@ struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 	return __lookup_hash(&this, base, NULL);
 }
 
-int user_path_at(int dfd, const char __user *name, unsigned flags,
-		 struct path *path)
+int user_path_at_empty(int dfd, const char __user *name, unsigned flags,
+		 struct path *path, int *empty)
 {
 	struct nameidata nd;
-	char *tmp = getname_flags(name, flags);
+	char *tmp = getname_flags(name, flags, empty);
 	int err = PTR_ERR(tmp);
 	if (!IS_ERR(tmp)) {
 
@@ -1763,6 +1771,12 @@ int user_path_at(int dfd, const char __user *name, unsigned flags,
 			*path = nd.path;
 	}
 	return err;
+}
+
+int user_path_at(int dfd, const char __user *name, unsigned flags,
+		 struct path *path)
+{
+	return user_path_at_empty(dfd, name, flags, path, 0);
 }
 
 static int user_path_parent(int dfd, const char __user *path,
@@ -2095,7 +2109,7 @@ static struct file *do_last(struct nameidata *nd, struct path *path,
 		/* sayonara */
 		error = complete_walk(nd);
 		if (error)
-			return ERR_PTR(-ECHILD);
+			return ERR_PTR(error);
 
 		error = -ENOTDIR;
 		if (nd->flags & LOOKUP_DIRECTORY) {
@@ -2107,6 +2121,10 @@ static struct file *do_last(struct nameidata *nd, struct path *path,
 	}
 
 	/* create side of things */
+	/*
+	 * This will *only* deal with leaving RCU mode - LOOKUP_JUMPED has been
+	 * cleared when we got to the last component we are about to look up
+	 */
 	error = complete_walk(nd);
 	if (error)
 		return ERR_PTR(error);
@@ -2175,6 +2193,9 @@ static struct file *do_last(struct nameidata *nd, struct path *path,
 	if (error < 0)
 		goto exit_dput;
 
+	if (error)
+		nd->flags |= LOOKUP_JUMPED;
+
 	error = -ENOENT;
 	if (!path->dentry->d_inode)
 		goto exit_dput;
@@ -2184,6 +2205,10 @@ static struct file *do_last(struct nameidata *nd, struct path *path,
 
 	path_to_nameidata(path, nd);
 	nd->inode = path->dentry->d_inode;
+	/* Why this, you ask?  _Now_ we might have grown LOOKUP_JUMPED... */
+	error = complete_walk(nd);
+	if (error)
+		return ERR_PTR(error);
 	error = -EISDIR;
 	if (S_ISDIR(nd->inode->i_mode))
 		goto exit;
@@ -2566,10 +2591,10 @@ SYSCALL_DEFINE2(mkdir, const char __user *, pathname, int, mode)
 void dentry_unhash(struct dentry *dentry)
 {
 	shrink_dcache_parent(dentry);
-	spin_lock(&dentry->d_lock);
+	seq_spin_lock(&dentry->d_lock);
 	if (dentry->d_count == 1)
 		__d_drop(dentry);
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 }
 
 int vfs_rmdir(struct inode *dir, struct dentry *dentry)

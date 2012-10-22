@@ -236,8 +236,16 @@ void add_taint(unsigned flag)
 	 * Also we want to keep up lockdep for staging development and
 	 * post-warning case.
 	 */
-	if (flag != TAINT_CRAP && flag != TAINT_WARN && __debug_locks_off())
-		printk(KERN_WARNING "Disabling lock debugging due to kernel taint\n");
+	switch (flag) {
+	case TAINT_CRAP:
+	case TAINT_WARN:
+	case TAINT_FIRMWARE_WORKAROUND:
+		break;
+
+	default:
+		if (__debug_locks_off())
+			printk(KERN_WARNING "Disabling lock debugging due to kernel taint\n");
+	}
 
 	set_bit(flag, &tainted_mask);
 }
@@ -330,9 +338,11 @@ static u64 oops_id;
 
 static int init_oops_id(void)
 {
+#ifndef CONFIG_PREEMPT_RT_FULL
 	if (!oops_id)
 		get_random_bytes(&oops_id, sizeof(oops_id));
 	else
+#endif
 		oops_id++;
 
 	return 0;

@@ -31,6 +31,7 @@
 #include <linux/idr.h>
 #include <linux/fs_struct.h>
 #include <linux/fsnotify.h>
+#include <linux/delay.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 #include "pnode.h"
@@ -341,8 +342,14 @@ int mnt_want_write(struct vfsmount *mnt)
 	 * incremented count after it has set MNT_WRITE_HOLD.
 	 */
 	smp_mb();
-	while (mnt->mnt_flags & MNT_WRITE_HOLD)
-		cpu_relax();
+	/*
+	 * No need to keep preemption disabled accross the spin loop.
+	 */
+	while (mnt->mnt_flags & MNT_WRITE_HOLD) {
+		preempt_enable();
+		cpu_chill();
+		preempt_disable();
+	}
 	/*
 	 * After the slowpath clears MNT_WRITE_HOLD, mnt_is_readonly will
 	 * be set to match its requirements. So we must not load that until
@@ -352,9 +359,7 @@ int mnt_want_write(struct vfsmount *mnt)
 	if (__mnt_is_readonly(mnt)) {
 		mnt_dec_writers(mnt);
 		ret = -EROFS;
-		goto out;
 	}
-out:
 	preempt_enable();
 	return ret;
 }
@@ -560,9 +565,9 @@ static void dentry_reset_mounted(struct vfsmount *mnt, struct dentry *dentry)
 				return;
 		}
 	}
-	spin_lock(&dentry->d_lock);
+	seq_spin_lock(&dentry->d_lock);
 	dentry->d_flags &= ~DCACHE_MOUNTED;
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 }
 
 /*
@@ -587,9 +592,9 @@ void mnt_set_mountpoint(struct vfsmount *mnt, struct dentry *dentry,
 {
 	child_mnt->mnt_parent = mntget(mnt);
 	child_mnt->mnt_mountpoint = dget(dentry);
-	spin_lock(&dentry->d_lock);
+	seq_spin_lock(&dentry->d_lock);
 	dentry->d_flags |= DCACHE_MOUNTED;
-	spin_unlock(&dentry->d_lock);
+	seq_spin_unlock(&dentry->d_lock);
 }
 
 /*
@@ -1048,15 +1053,12 @@ static int show_mountinfo(struct seq_file *m, void *v)
 	if (err)
 		goto out;
 	seq_putc(m, ' ');
-	seq_path_root(m, &mnt_path, &root, " \t\n\\");
-	if (root.mnt != p->root.mnt || root.dentry != p->root.dentry) {
-		/*
-		 * Mountpoint is outside root, discard that one.  Ugly,
-		 * but less so than trying to do that in iterator in a
-		 * race-free way (due to renames).
-		 */
-		return SEQ_SKIP;
-	}
+
+	/* mountpoints outside of chroot jail will give SEQ_SKIP on this */
+	err = seq_path_root(m, &mnt_path, &root, " \t\n\\");
+	if (err)
+		goto out;
+
 	seq_puts(m, mnt->mnt_flags & MNT_READONLY ? " ro" : " rw");
 	show_mnt_opts(m, mnt);
 
@@ -1109,6 +1111,7 @@ static int show_vfsstat(struct seq_file *m, void *v)
 
 	/* device */
 	if (mnt->mnt_sb->s_op->show_devname) {
+		seq_puts(m, "device ");
 		err = mnt->mnt_sb->s_op->show_devname(m, mnt);
 	} else {
 		if (mnt->mnt_devname) {
@@ -1246,8 +1249,9 @@ void umount_tree(struct vfsmount *mnt, int propagate, struct list_head *kill)
 		list_del_init(&p->mnt_expire);
 		list_del_init(&p->mnt_list);
 		__touch_mnt_namespace(p->mnt_ns);
+		if (p->mnt_ns)
+			__mnt_make_shortterm(p);
 		p->mnt_ns = NULL;
-		__mnt_make_shortterm(p);
 		list_del_init(&p->mnt_child);
 		if (p->mnt_parent != p) {
 			p->mnt_parent->mnt_ghosts++;
@@ -1757,7 +1761,7 @@ static int do_loopback(struct path *path, char *old_name,
 		return err;
 	if (!old_name || !*old_name)
 		return -EINVAL;
-	err = kern_path(old_name, LOOKUP_FOLLOW, &old_path);
+	err = kern_path(old_name, LOOKUP_FOLLOW|LOOKUP_AUTOMOUNT, &old_path);
 	if (err)
 		return err;
 
@@ -2724,3 +2728,8 @@ struct vfsmount *kern_mount_data(struct file_system_type *type, void *data)
 	return vfs_kern_mount(type, MS_KERNMOUNT, type->name, data);
 }
 EXPORT_SYMBOL_GPL(kern_mount_data);
+
+bool our_mnt(struct vfsmount *mnt)
+{
+	return check_mnt(mnt);
+}

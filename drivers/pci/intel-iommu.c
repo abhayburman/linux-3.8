@@ -307,6 +307,11 @@ static inline bool dma_pte_present(struct dma_pte *pte)
 	return (pte->val & 3) != 0;
 }
 
+static inline bool dma_pte_superpage(struct dma_pte *pte)
+{
+	return (pte->val & (1 << 7));
+}
+
 static inline int first_pte_in_page(struct dma_pte *pte)
 {
 	return !((unsigned long)pte & ~VTD_PAGE_MASK);
@@ -578,17 +583,18 @@ static void domain_update_iommu_snooping(struct dmar_domain *domain)
 
 static void domain_update_iommu_superpage(struct dmar_domain *domain)
 {
-	int i, mask = 0xf;
+	struct dmar_drhd_unit *drhd;
+	struct intel_iommu *iommu = NULL;
+	int mask = 0xf;
 
 	if (!intel_iommu_superpage) {
 		domain->iommu_superpage = 0;
 		return;
 	}
 
-	domain->iommu_superpage = 4; /* 1TiB */
-
-	for_each_set_bit(i, &domain->iommu_bmp, g_num_of_iommus) {
-		mask |= cap_super_page_val(g_iommus[i]->cap);
+	/* set iommu_superpage to the smallest common denominator */
+	for_each_active_iommu(iommu, drhd) {
+		mask &= cap_super_page_val(iommu->cap);
 		if (!mask) {
 			break;
 		}
@@ -731,29 +737,23 @@ out:
 }
 
 static struct dma_pte *pfn_to_dma_pte(struct dmar_domain *domain,
-				      unsigned long pfn, int large_level)
+				      unsigned long pfn, int target_level)
 {
 	int addr_width = agaw_to_width(domain->agaw) - VTD_PAGE_SHIFT;
 	struct dma_pte *parent, *pte = NULL;
 	int level = agaw_to_level(domain->agaw);
-	int offset, target_level;
+	int offset;
 
 	BUG_ON(!domain->pgd);
 	BUG_ON(addr_width < BITS_PER_LONG && pfn >> addr_width);
 	parent = domain->pgd;
-
-	/* Search pte */
-	if (!large_level)
-		target_level = 1;
-	else
-		target_level = large_level;
 
 	while (level > 0) {
 		void *tmp_page;
 
 		offset = pfn_level_offset(pfn, level);
 		pte = &parent[offset];
-		if (!large_level && (pte->val & DMA_PTE_LARGE_PAGE))
+		if (!target_level && (dma_pte_superpage(pte) || !dma_pte_present(pte)))
 			break;
 		if (level == target_level)
 			break;
@@ -817,13 +817,14 @@ static struct dma_pte *dma_pfn_level_pte(struct dmar_domain *domain,
 }
 
 /* clear last level pte, a tlb flush should be followed */
-static void dma_pte_clear_range(struct dmar_domain *domain,
+static int dma_pte_clear_range(struct dmar_domain *domain,
 				unsigned long start_pfn,
 				unsigned long last_pfn)
 {
 	int addr_width = agaw_to_width(domain->agaw) - VTD_PAGE_SHIFT;
 	unsigned int large_page = 1;
 	struct dma_pte *first_pte, *pte;
+	int order;
 
 	BUG_ON(addr_width < BITS_PER_LONG && start_pfn >> addr_width);
 	BUG_ON(addr_width < BITS_PER_LONG && last_pfn >> addr_width);
@@ -847,6 +848,9 @@ static void dma_pte_clear_range(struct dmar_domain *domain,
 				   (void *)pte - (void *)first_pte);
 
 	} while (start_pfn && start_pfn <= last_pfn);
+
+	order = (large_page - 1) * 9;
+	return order;
 }
 
 /* free page table pages. last level pte should already be cleared */
@@ -933,7 +937,7 @@ static void iommu_set_root_entry(struct intel_iommu *iommu)
 
 	addr = iommu->root_entry;
 
-	spin_lock_irqsave(&iommu->register_lock, flag);
+	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	dmar_writeq(iommu->reg + DMAR_RTADDR_REG, virt_to_phys(addr));
 
 	writel(iommu->gcmd | DMA_GCMD_SRTP, iommu->reg + DMAR_GCMD_REG);
@@ -942,7 +946,7 @@ static void iommu_set_root_entry(struct intel_iommu *iommu)
 	IOMMU_WAIT_OP(iommu, DMAR_GSTS_REG,
 		      readl, (sts & DMA_GSTS_RTPS), sts);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flag);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 }
 
 static void iommu_flush_write_buffer(struct intel_iommu *iommu)
@@ -953,14 +957,14 @@ static void iommu_flush_write_buffer(struct intel_iommu *iommu)
 	if (!rwbf_quirk && !cap_rwbf(iommu->cap))
 		return;
 
-	spin_lock_irqsave(&iommu->register_lock, flag);
+	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	writel(iommu->gcmd | DMA_GCMD_WBF, iommu->reg + DMAR_GCMD_REG);
 
 	/* Make sure hardware complete it */
 	IOMMU_WAIT_OP(iommu, DMAR_GSTS_REG,
 		      readl, (!(val & DMA_GSTS_WBFS)), val);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flag);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 }
 
 /* return value determine if we need a write buffer flush */
@@ -987,14 +991,14 @@ static void __iommu_flush_context(struct intel_iommu *iommu,
 	}
 	val |= DMA_CCMD_ICC;
 
-	spin_lock_irqsave(&iommu->register_lock, flag);
+	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	dmar_writeq(iommu->reg + DMAR_CCMD_REG, val);
 
 	/* Make sure hardware complete it */
 	IOMMU_WAIT_OP(iommu, DMAR_CCMD_REG,
 		dmar_readq, (!(val & DMA_CCMD_ICC)), val);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flag);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 }
 
 /* return value determine if we need a write buffer flush */
@@ -1033,7 +1037,7 @@ static void __iommu_flush_iotlb(struct intel_iommu *iommu, u16 did,
 	if (cap_write_drain(iommu->cap))
 		val |= DMA_TLB_WRITE_DRAIN;
 
-	spin_lock_irqsave(&iommu->register_lock, flag);
+	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	/* Note: Only uses first TLB reg currently */
 	if (val_iva)
 		dmar_writeq(iommu->reg + tlb_offset, val_iva);
@@ -1043,7 +1047,7 @@ static void __iommu_flush_iotlb(struct intel_iommu *iommu, u16 did,
 	IOMMU_WAIT_OP(iommu, tlb_offset + 8,
 		dmar_readq, (!(val & DMA_TLB_IVT)), val);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flag);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 
 	/* check IOTLB invalidation granularity */
 	if (DMA_TLB_IAIG(val) == 0)
@@ -1159,7 +1163,7 @@ static void iommu_disable_protect_mem_regions(struct intel_iommu *iommu)
 	u32 pmen;
 	unsigned long flags;
 
-	spin_lock_irqsave(&iommu->register_lock, flags);
+	raw_spin_lock_irqsave(&iommu->register_lock, flags);
 	pmen = readl(iommu->reg + DMAR_PMEN_REG);
 	pmen &= ~DMA_PMEN_EPM;
 	writel(pmen, iommu->reg + DMAR_PMEN_REG);
@@ -1168,7 +1172,7 @@ static void iommu_disable_protect_mem_regions(struct intel_iommu *iommu)
 	IOMMU_WAIT_OP(iommu, DMAR_PMEN_REG,
 		readl, !(pmen & DMA_PMEN_PRS), pmen);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flags);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flags);
 }
 
 static int iommu_enable_translation(struct intel_iommu *iommu)
@@ -1176,7 +1180,7 @@ static int iommu_enable_translation(struct intel_iommu *iommu)
 	u32 sts;
 	unsigned long flags;
 
-	spin_lock_irqsave(&iommu->register_lock, flags);
+	raw_spin_lock_irqsave(&iommu->register_lock, flags);
 	iommu->gcmd |= DMA_GCMD_TE;
 	writel(iommu->gcmd, iommu->reg + DMAR_GCMD_REG);
 
@@ -1184,7 +1188,7 @@ static int iommu_enable_translation(struct intel_iommu *iommu)
 	IOMMU_WAIT_OP(iommu, DMAR_GSTS_REG,
 		      readl, (sts & DMA_GSTS_TES), sts);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flags);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flags);
 	return 0;
 }
 
@@ -1193,7 +1197,7 @@ static int iommu_disable_translation(struct intel_iommu *iommu)
 	u32 sts;
 	unsigned long flag;
 
-	spin_lock_irqsave(&iommu->register_lock, flag);
+	raw_spin_lock_irqsave(&iommu->register_lock, flag);
 	iommu->gcmd &= ~DMA_GCMD_TE;
 	writel(iommu->gcmd, iommu->reg + DMAR_GCMD_REG);
 
@@ -1201,7 +1205,7 @@ static int iommu_disable_translation(struct intel_iommu *iommu)
 	IOMMU_WAIT_OP(iommu, DMAR_GSTS_REG,
 		      readl, (!(sts & DMA_GSTS_TES)), sts);
 
-	spin_unlock_irqrestore(&iommu->register_lock, flag);
+	raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 	return 0;
 }
 
@@ -3321,7 +3325,7 @@ static int iommu_suspend(void)
 	for_each_active_iommu(iommu, drhd) {
 		iommu_disable_translation(iommu);
 
-		spin_lock_irqsave(&iommu->register_lock, flag);
+		raw_spin_lock_irqsave(&iommu->register_lock, flag);
 
 		iommu->iommu_state[SR_DMAR_FECTL_REG] =
 			readl(iommu->reg + DMAR_FECTL_REG);
@@ -3332,7 +3336,7 @@ static int iommu_suspend(void)
 		iommu->iommu_state[SR_DMAR_FEUADDR_REG] =
 			readl(iommu->reg + DMAR_FEUADDR_REG);
 
-		spin_unlock_irqrestore(&iommu->register_lock, flag);
+		raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 	}
 	return 0;
 
@@ -3359,7 +3363,7 @@ static void iommu_resume(void)
 
 	for_each_active_iommu(iommu, drhd) {
 
-		spin_lock_irqsave(&iommu->register_lock, flag);
+		raw_spin_lock_irqsave(&iommu->register_lock, flag);
 
 		writel(iommu->iommu_state[SR_DMAR_FECTL_REG],
 			iommu->reg + DMAR_FECTL_REG);
@@ -3370,7 +3374,7 @@ static void iommu_resume(void)
 		writel(iommu->iommu_state[SR_DMAR_FEUADDR_REG],
 			iommu->reg + DMAR_FEUADDR_REG);
 
-		spin_unlock_irqrestore(&iommu->register_lock, flag);
+		raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 	}
 
 	for_each_active_iommu(iommu, drhd)
@@ -3569,6 +3573,8 @@ static void domain_remove_one_dev_info(struct dmar_domain *domain,
 			found = 1;
 	}
 
+	spin_unlock_irqrestore(&device_domain_lock, flags);
+
 	if (found == 0) {
 		unsigned long tmp_flags;
 		spin_lock_irqsave(&domain->iommu_lock, tmp_flags);
@@ -3585,8 +3591,6 @@ static void domain_remove_one_dev_info(struct dmar_domain *domain,
 			spin_unlock_irqrestore(&iommu->lock, tmp_flags);
 		}
 	}
-
-	spin_unlock_irqrestore(&device_domain_lock, flags);
 }
 
 static void vm_domain_remove_all_dev_info(struct dmar_domain *domain)
@@ -3740,6 +3744,7 @@ static int intel_iommu_domain_init(struct iommu_domain *domain)
 		vm_domain_exit(dmar_domain);
 		return -ENOMEM;
 	}
+	domain_update_iommu_cap(dmar_domain);
 	domain->priv = dmar_domain;
 
 	return 0;
@@ -3865,14 +3870,15 @@ static int intel_iommu_unmap(struct iommu_domain *domain,
 {
 	struct dmar_domain *dmar_domain = domain->priv;
 	size_t size = PAGE_SIZE << gfp_order;
+	int order;
 
-	dma_pte_clear_range(dmar_domain, iova >> VTD_PAGE_SHIFT,
+	order = dma_pte_clear_range(dmar_domain, iova >> VTD_PAGE_SHIFT,
 			    (iova + size - 1) >> VTD_PAGE_SHIFT);
 
 	if (dmar_domain->max_addr == iova + size)
 		dmar_domain->max_addr = iova;
 
-	return gfp_order;
+	return order;
 }
 
 static phys_addr_t intel_iommu_iova_to_phys(struct iommu_domain *domain,
