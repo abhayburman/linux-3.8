@@ -96,5 +96,8 @@ extern int sleep_pm_state;
 
 extern int fsl_rcpm_init(void);
 
+extern void fsl_dp_fsm_setup(void *dcsr_base);
+extern void fsl_dp_fsm_clean(void *dcsr_base);
+
 #endif
 #endif

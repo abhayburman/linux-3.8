@@ -328,6 +328,7 @@ config T104x_QDS
 	select HAS_FSL_QBMAN
 	select MDIO_BUS_MUX if FSL_DPAA_ETH
 	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
+	select FSL_SLEEP_FSM if SUSPEND
 	help
 	  This option enables support for the T04x QDS board
 	  The T104x application development system T104x QDS is a complete
