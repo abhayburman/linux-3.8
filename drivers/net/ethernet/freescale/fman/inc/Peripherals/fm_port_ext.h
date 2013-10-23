@@ -45,7 +45,6 @@
 #include "fm_ext.h"
 #include "net_ext.h"
 
-
 /**************************************************************************//**
 
  @Group         FM_grp Frame Manager API
@@ -435,7 +434,43 @@ typedef struct t_FmPortPerformanceCnt {
     uint32_t    fifoCompVal;            /**< Fifo compare value (in bytes) */
 } t_FmPortPerformanceCnt;
 
+/**************************************************************************//**
+ @Description   A structure for defining the sizes of the Deep Sleep
+                the Auto Response tables
+*//***************************************************************************/
+typedef struct t_FmPortDsarTablesSizes
+{
+    uint16_t   maxNumOfArpEntries;
+    uint16_t   maxNumOfEchoIpv4Entries;
+    uint16_t   maxNumOfNdpEntries;
+    uint16_t   maxNumOfEchoIpv6Entries;
+    uint16_t   maxNumOfSnmpEntries;
+    uint16_t   maxNumOfSnmpChar; /* total amount of character needed for the snmp table */
+    
+    uint16_t   maxNumOfIpProtFiltering;
+    uint16_t   maxNumOfTcpPortFiltering;
+    uint16_t   maxNumOfUdpPortFiltering;
+} t_FmPortDsarTablesSizes;
 
+
+/**************************************************************************//**
+ @Function      FM_PORT_ConfigDsarSupport
+
+ @Description   This function will allocate the amount of MURAM needed for
+                this max number of entries for Deep Sleep Auto Response.
+                it will calculate all needed MURAM for autoresponse including
+                necesary common stuff.
+
+
+ @Param[in]     h_FmPort    A handle to a FM Port module.
+ @Param[in]     params      A pointer to a structure containing the maximum
+                            sizes of the auto response tables
+
+ @Return        E_OK on success; Error code otherwise.
+
+ @Cautions      Allowed only following FM_PORT_Config() and before FM_PORT_Init().
+*//***************************************************************************/
+t_Error FM_PORT_ConfigDsarSupport(t_Handle h_FmPortRx, t_FmPortDsarTablesSizes *params);
 
 /**************************************************************************//**
  @Function      FM_PORT_ConfigNumOfOpenDmas
@@ -1276,6 +1311,224 @@ typedef struct t_FmPortCongestionGrps {
 #endif /* (DPAA_VERSION >= 11) */
 } t_FmPortCongestionGrps;
 
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response ARP Entry
+*//***************************************************************************/
+typedef struct t_FmPortDsarArpEntry
+{
+    uint32_t  ipAddress;
+    uint8_t   mac[6];
+    bool      isVlan;
+    uint16_t  vid;
+} t_FmPortDsarArpEntry;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response ARP info
+*//***************************************************************************/
+typedef struct t_FmPortDsarArpInfo
+{
+    uint8_t           tableSize;
+    t_FmPortDsarArpEntry *p_AutoResTable;
+    bool              enableConflictDetection; /* when TRUE Conflict Detection will be checked and wake the host if needed */
+} t_FmPortDsarArpInfo;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response NDP Entry
+*//***************************************************************************/
+typedef struct t_FmPortDsarNdpEntry
+{
+    uint32_t  ipAddress[4];
+    uint8_t   mac[6];
+    bool      isVlan;
+    uint16_t  vid;
+} t_FmPortDsarNdpEntry;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response NDP info
+*//***************************************************************************/
+typedef struct t_FmPortDsarNdpInfo
+{
+    uint32_t              multicastGroup;
+
+    uint8_t               tableSizeAssigned;
+    t_FmPortDsarNdpEntry  *p_AutoResTableAssigned; /* This list refer to solicitation IP addresses.
+                                                                 Note that all IP adresses must be from the same multicast group.
+                                                                 This will be checked and if not operation will fail. */
+    uint8_t               tableSizeTmp;
+    t_FmPortDsarNdpEntry  *p_AutoResTableTmp;      /* This list refer to temp IP addresses.
+                                                             Note that all temp IP adresses must be from the same multicast group.
+                                                             This will be checked and if not operation will fail. */
+    
+    bool                  enableConflictDetection; /* when TRUE Conflict Detection will be checked and wake the host if needed */
+    
+} t_FmPortDsarNdpInfo;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response ICMPV4 info
+*//***************************************************************************/
+typedef struct t_FmPortDsarEchoIpv4Info
+{
+    uint8_t            tableSize;
+    t_FmPortDsarArpEntry  *p_AutoResTable;
+} t_FmPortDsarEchoIpv4Info;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response ICMPV6 info
+*//***************************************************************************/
+typedef struct t_FmPortDsarEchoIpv6Info
+{
+    uint8_t            tableSize;
+    t_FmPortDsarNdpEntry  *p_AutoResTable;
+} t_FmPortDsarEchoIpv6Info;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response SNMP Entry
+*//***************************************************************************/
+typedef struct t_FmPortDsarSnmpEntry
+{
+    uint16_t     oidSize;
+    uint8_t      *p_OidVal; /* only the oid string */
+    uint16_t     resSize;
+    uint8_t      *p_ResVal; /* resVal will be the entire reply, i.e. "Type|Length|Value" */
+} t_FmPortDsarSnmpEntry;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response SNMP info
+*//***************************************************************************/
+typedef struct t_FmPortDsarSnmpInfo
+{
+    char                *p_CommunityReadWriteString;
+    char                *p_CommunityReadOnlyString;
+    bool                getallFlag;
+    uint8_t             tableSize;
+    t_FmPortDsarSnmpEntry  *p_AutoResTable;
+} t_FmPortDsarSnmpInfo;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response filtering Entry
+*//***************************************************************************/
+typedef struct t_FmPortDsarFilteringEntry
+{
+    uint16_t    srcPort;
+    uint16_t    dstPort;
+    uint16_t    srcPortMask;
+    uint16_t    dstPortMask;
+} t_FmPortDsarFilteringEntry;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response filtering info
+*//***************************************************************************/
+typedef struct t_FmPortDsarFilteringInfo
+{
+    /* IP protocol filtering parameters */
+    uint8_t     ipProtTableSize;
+    uint8_t     *p_IpProtTablePtr;
+    bool        ipProtDropOnHit;  /* when TRUE, hit in the table will cause the packet to be droped,
+                                         miss will pass the packet to UDP/TCP filters if needed and if not
+                                         to the classification tree. If the classification tree will pass
+                                         the packet to a queue it will cause a wake interupt.
+                                         When FALSE it the other way around. */
+    /* UDP port filtering parameters */
+    uint8_t     udpPortsTableSize;
+    t_FmPortDsarFilteringEntry *p_UdpPortsTablePtr;
+    bool        udpPortDropOnHit; /* when TRUE, hit in the table will cause the packet to be droped,
+                                         miss will pass the packet to classification tree.
+                                         If the classification tree will pass the packet to a queue it
+                                         will cause a wake interupt.
+                                         When FALSE it the other way around. */
+    /* TCP port filtering parameters */
+    uint16_t    tcpFlagsMask;
+    uint8_t     tcpPortsTableSize;
+    t_FmPortDsarFilteringEntry *p_TcpPortsTablePtr;
+    bool        tcpPortDropOnHit; /* when TRUE, hit in the table will cause the packet to be droped,
+                                         miss will pass the packet to classification tree.
+                                         If the classification tree will pass the packet to a queue it
+                                         will cause a wake interupt.
+                                         When FALSE it the other way around. */
+} t_FmPortDsarFilteringInfo;
+
+/**************************************************************************//**
+ @Description   Structure for Deep Sleep Auto Response parameters
+*//***************************************************************************/
+typedef struct t_FmPortDsarParams
+{
+    t_Handle                  h_FmPortTx;
+    t_FmPortDsarArpInfo       *p_AutoResArpInfo;
+    t_FmPortDsarEchoIpv4Info  *p_AutoResEchoIpv4Info;
+    t_FmPortDsarNdpInfo       *p_AutoResNdpInfo;
+    t_FmPortDsarEchoIpv6Info  *p_AutoResEchoIpv6Info;
+    t_FmPortDsarSnmpInfo      *p_AutoResSnmpInfo;
+    t_FmPortDsarFilteringInfo *p_AutoResFilteringInfo;
+} t_FmPortDsarParams;
+
+/**************************************************************************//**
+ @Function      FM_PORT_EnterDsar
+
+ @Description   Enter Deep Sleep Auto Response mode.
+                This function write the apropriate values to in the relevant
+                tables in the MURAM. It then set the Tx port in independent
+                mode as needed and redirect the receive flow to go through the
+                Dsar Fman-ctrl code
+
+                Calling this routine invalidates the descriptor.
+
+ @Param[in]     h_FmPortRx - FM PORT module descriptor
+ @Param[in]     params - Auto Response parameters
+
+ @Return        E_OK on success; Error code otherwise.
+
+ @Cautions      Allowed only following FM_PORT_Init().
+*//***************************************************************************/
+t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params);
+
+/**************************************************************************//**
+ @Function      FM_PORT_ExitDsar
+
+ @Description   Exit Deep Sleep Auto Response mode.
+                This function reverse the AR mode and put the ports back into
+                their original wake mode
+
+ @Param[in]     h_FmPortRx - FM PORT Rx module descriptor
+ @Param[in]     h_FmPortTx - FM PORT Tx module descriptor
+
+ @Return        E_OK on success; Error code otherwise.
+
+ @Cautions      Allowed only following FM_PORT_EnterDsar().
+*//***************************************************************************/
+void FM_PORT_ExitDsar(t_Handle h_FmPortRx, t_Handle h_FmPortTx);
+
+/**************************************************************************//**
+ @Function      FM_PORT_IsInDsar
+
+ @Description   This function returns TRUE if the port was set as Auto Response
+                and FALSE if not. Once Exit AR mode it will return FALSE as well
+                until re-enabled once more.
+
+ @Param[in]     h_FmPort - FM PORT module descriptor
+
+ @Return        E_OK on success; Error code otherwise.
+*//***************************************************************************/
+bool FM_PORT_IsInDsar(t_Handle h_FmPort);
+
+typedef struct t_FmPortDsarStats
+{
+    uint32_t arpArCnt;
+    uint32_t echoIcmpv4ArCnt;
+    uint32_t ndpArCnt;
+    uint32_t echoIcmpv6ArCnt;
+} t_FmPortDsarStats;
+
+/**************************************************************************//**
+ @Function      FM_PORT_GetDsarStats
+
+ @Description   Return statistics for Deep Sleep Auto Response
+
+ @Param[in]     h_FmPortRx - FM PORT module descriptor
+ @Param[out]	stats - structure containing the statistics counters
+
+ @Return        E_OK on success; Error code otherwise.
+*//***************************************************************************/
+t_Error FM_PORT_GetDsarStats(t_Handle h_FmPortRx, t_FmPortDsarStats *stats);
 
 #if (defined(DEBUG_ERRORS) && (DEBUG_ERRORS > 0))
 /**************************************************************************//**

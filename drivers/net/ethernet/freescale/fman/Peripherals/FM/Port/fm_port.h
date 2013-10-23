@@ -46,7 +46,7 @@
 #include "fm_common.h"
 #include "fm_sp_common.h"
 #include "fsl_fman_sp.h"
-
+#include "fm_port_ext.h"
 
 #define __ERR_MODULE__  MODULE_FM_PORT
 
@@ -872,6 +872,15 @@ typedef struct t_FmPortRxPoolsParams
     uint16_t    largestBufSize;
 } t_FmPortRxPoolsParams;
 
+typedef struct t_FmPortDsarVars {
+    t_Handle                    *autoResOffsets;
+    t_FmPortDsarTablesSizes     *autoResMaxSizes;
+    uint32_t                    fmbm_tcfg;
+    uint32_t                    fmbm_tcmne;
+    uint32_t                    fmbm_rfne;
+    uint32_t                    fmbm_rfpne;
+} t_FmPortDsarVars;
+
 typedef struct {
     t_Handle                    h_Fm;
     t_Handle                    h_FmPcd;
@@ -937,7 +946,7 @@ typedef struct {
     e_FmPortGprFuncType         gprFunc;
     t_FmPcdCtrlParamsPage       *p_ParamsPage;
 #endif /* (DPAA_VERSION >= 11) */
-
+    t_FmPortDsarVars            deepSleepVars;
     t_FmPortDriverParam         *p_FmPortDriverParam;
 } t_FmPort;
 
@@ -987,6 +996,8 @@ static __inline__ uint16_t GetNextBdId(t_FmPort *p_FmPort, uint16_t id)
     else
         return 0;
 }
+
+void FM_PORT_Dsar_DumpRegs(void);
 
 
 #endif /* __FM_PORT_H */

@@ -44,11 +44,12 @@
 #include "fm_muram_ext.h"
 
 #include "fm_port.h"
-
+#include "fm_port_dsar.h"
 
 /****************************************/
 /*       static functions               */
 /****************************************/
+static t_Error FmPortConfigAutoResForDeepSleepSupport1(t_FmPort *p_FmPort);
 
 static t_Error CheckInitParameters(t_FmPort *p_FmPort)
 {
@@ -2655,6 +2656,9 @@ t_Handle FM_PORT_Config(t_FmPortParams *p_FmPortParams)
     return p_FmPort;
 }
 
+t_FmPort *rx_port = 0;
+t_FmPort *tx_port = 0;
+
 /**************************************************************************//**
  @Function      FM_PORT_Init
 
@@ -2837,7 +2841,10 @@ t_Error FM_PORT_Init(t_Handle h_FmPort)
 #endif /* FM_ERROR_VSP_NO_MATCH_SW006 */
     }
 #endif /* (DPAA_VERSION >= 11) */
- 
+
+    if (p_FmPort->deepSleepVars.autoResMaxSizes)
+        FmPortConfigAutoResForDeepSleepSupport1(p_FmPort);
+	
     return E_OK;
 }
 
@@ -5859,3 +5866,424 @@ t_Error FM_PORT_RemoveCongestionGrps(t_Handle h_FmPort, t_FmPortCongestionGrps *
 #if (DPAA_VERSION >= 11)
 #endif /* (DPAA_VERSION >= 11) */
 
+t_Error FM_PORT_ConfigDsarSupport(t_Handle h_FmPortRx, t_FmPortDsarTablesSizes *params)
+{
+    t_FmPort *p_FmPort= (t_FmPort *)h_FmPortRx;
+    p_FmPort->deepSleepVars.autoResMaxSizes = XX_Malloc(sizeof(struct t_FmPortDsarTablesSizes));
+    memcpy(p_FmPort->deepSleepVars.autoResMaxSizes, params, sizeof(struct t_FmPortDsarTablesSizes));
+    return E_OK;
+}
+
+static t_Error FmPortConfigAutoResForDeepSleepSupport1(t_FmPort *p_FmPort)
+{
+    uint32_t *param_page;
+    t_FmPortDsarTablesSizes *params = p_FmPort->deepSleepVars.autoResMaxSizes;
+    t_ArCommonDesc *ArCommonDescPtr;
+    uint32_t size = sizeof(t_ArCommonDesc);
+    // ARP
+    // should put here if (params->max_num_of_arp_entries)?
+    size = ROUND_UP(size,4);
+    size += sizeof(t_DsarArpDescriptor);
+    size += sizeof(t_DsarArpBindingEntry) * params->maxNumOfArpEntries;
+    size += sizeof(t_DsarArpStatistics);
+    //ICMPV4
+    size = ROUND_UP(size,4);
+    size += sizeof(t_DsarIcmpV4Descriptor);
+    size += sizeof(t_DsarIcmpV4BindingEntry) * params->maxNumOfEchoIpv4Entries;
+    size += sizeof(t_DsarIcmpV4Statistics);
+    //ICMPV6
+    size = ROUND_UP(size,4);
+    size += sizeof(t_DsarIcmpV6Descriptor);
+    size += sizeof(t_DsarIcmpV6BindingEntry) * params->maxNumOfEchoIpv6Entries;
+    size += sizeof(t_DsarIcmpV6Statistics);
+    //ND
+    size = ROUND_UP(size,4);
+    size += sizeof(t_DsarNdDescriptor);
+    size += sizeof(t_DsarIcmpV6BindingEntry) * params->maxNumOfNdpEntries;
+    size += sizeof(t_DsarIcmpV6Statistics);
+    //filters
+    size = ROUND_UP(size,4);
+    size += params->maxNumOfIpProtFiltering;
+    size = ROUND_UP(size,4);
+    size += params->maxNumOfUdpPortFiltering * sizeof(t_PortTblEntry);
+    size = ROUND_UP(size,4);
+    size += params->maxNumOfTcpPortFiltering * sizeof(t_PortTblEntry);
+
+    // add here for more protocols
+
+    // statistics
+    size = ROUND_UP(size,4);
+    size += sizeof(t_ArStatistics);
+
+    ArCommonDescPtr = FM_MURAM_AllocMem(p_FmPort->h_FmMuram, size, 0x10);
+    
+    param_page = XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rgpr));
+    WRITE_UINT32(*param_page,
+            (uint32_t)(XX_VirtToPhys(ArCommonDescPtr) - p_FmPort->fmMuramPhysBaseAddr));
+    return E_OK;
+}
+
+t_FmPortDsarTablesSizes* FM_PORT_GetDsarTablesMaxSizes(t_Handle h_FmPortRx)
+{
+    t_FmPort *p_FmPort= (t_FmPort *)h_FmPortRx;
+    return p_FmPort->deepSleepVars.autoResMaxSizes;
+}
+
+struct arOffsets
+{
+    uint32_t arp;
+    uint32_t nd;
+    uint32_t icmpv4;
+    uint32_t icmpv6;
+    uint32_t snmp;
+    uint32_t stats;
+    uint32_t filtIp;
+    uint32_t filtUdp;
+    uint32_t filtTcp;
+};
+
+static uint32_t AR_ComputeOffsets(struct arOffsets* of, struct t_FmPortDsarParams *params)
+{
+    uint32_t size = sizeof(t_ArCommonDesc);
+    // ARP
+    if (params->p_AutoResArpInfo)
+    {
+        size = ROUND_UP(size,4);
+        of->arp = size;
+        size += sizeof(t_DsarArpDescriptor);
+        size += sizeof(t_DsarArpBindingEntry) * params->p_AutoResArpInfo->tableSize;
+        size += sizeof(t_DsarArpStatistics);
+    }
+    // ICMPV4
+    if (params->p_AutoResEchoIpv4Info)
+    {
+        size = ROUND_UP(size,4);
+        of->icmpv4 = size;
+        size += sizeof(t_DsarIcmpV4Descriptor);
+        size += sizeof(t_DsarIcmpV4BindingEntry) * params->p_AutoResEchoIpv4Info->tableSize;
+        size += sizeof(t_DsarIcmpV4Statistics);
+    }
+    // ICMPV6
+    if (params->p_AutoResEchoIpv6Info)
+    {
+        size = ROUND_UP(size,4);
+        of->icmpv6 = size;
+        size += sizeof(t_DsarIcmpV6Descriptor);
+        size += sizeof(t_DsarIcmpV6BindingEntry) * params->p_AutoResEchoIpv6Info->tableSize;
+        size += sizeof(t_DsarIcmpV6Statistics);
+    }
+    // ND
+    if (params->p_AutoResNdpInfo)
+    {
+        size = ROUND_UP(size,4);
+        of->nd = size;
+        size += sizeof(t_DsarNdDescriptor);
+        size += sizeof(t_DsarIcmpV6BindingEntry) *
+            (params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp);
+        size += sizeof(t_DsarIcmpV6Statistics);
+    }
+    //filters
+    size = ROUND_UP(size,4);
+    if (params->p_AutoResFilteringInfo)
+    {
+        of->filtIp = size;
+        size += params->p_AutoResFilteringInfo->ipProtTableSize;
+        size = ROUND_UP(size,4);
+        of->filtUdp = size;
+        size += params->p_AutoResFilteringInfo->udpPortsTableSize * sizeof(t_PortTblEntry);
+        size = ROUND_UP(size,4);
+        of->filtTcp = size;
+        size += params->p_AutoResFilteringInfo->tcpPortsTableSize * sizeof(t_PortTblEntry);
+    }
+    // add here for more protocols
+    // statistics
+    size = ROUND_UP(size,4);
+    of->stats = size;
+    size += sizeof(t_ArStatistics);
+    return size;
+}
+
+uint32_t* ARDesc;
+
+t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
+{
+    int i,j;
+    t_FmPort            *p_FmPort= (t_FmPort *)h_FmPortRx;
+    t_FmPort            *p_FmPortTx = (t_FmPort *)params->h_FmPortTx;
+    t_DsarArpDescriptor *ArpDescriptor;
+    t_DsarIcmpV4Descriptor* ICMPV4Descriptor;
+    t_DsarIcmpV6Descriptor* ICMPV6Descriptor;
+    t_DsarNdDescriptor* NDDescriptor;
+    uint64_t fmMuramVirtBaseAddr = (uint64_t)XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr);
+    uint32_t *param_page = XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rgpr));
+    t_ArCommonDesc *ArCommonDescPtr = (t_ArCommonDesc*)(XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(*param_page)));
+    struct arOffsets* of;
+    uint8_t tmp = 0;
+
+    p_FmPort->deepSleepVars.autoResOffsets = XX_Malloc(sizeof(struct arOffsets));
+    of = (struct arOffsets *)p_FmPort->deepSleepVars.autoResOffsets;
+    IOMemSet32(ArCommonDescPtr, 0, AR_ComputeOffsets(of, params));
+
+    // common
+    WRITE_UINT8(ArCommonDescPtr->arTxPort, p_FmPortTx->hardwarePortId);
+    WRITE_UINT32(ArCommonDescPtr->activeHPNIA, GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne));
+    WRITE_UINT16(ArCommonDescPtr->snmpPort, 161);
+
+    // ARP
+    if (params->p_AutoResArpInfo)
+    {
+	t_DsarArpBindingEntry* arp_bindings;
+        ArpDescriptor = (t_DsarArpDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->arp);
+        WRITE_UINT32(ArCommonDescPtr->p_ArpDescriptor, PTR_TO_UINT(ArpDescriptor) - fmMuramVirtBaseAddr);
+        arp_bindings = (t_DsarArpBindingEntry*)(PTR_TO_UINT(ArpDescriptor) + sizeof(t_DsarArpDescriptor));
+        WRITE_UINT16(ArpDescriptor->control, 0);
+        if (params->p_AutoResArpInfo->tableSize)
+        {
+            t_FmPortDsarArpEntry* arp_entry = params->p_AutoResArpInfo->p_AutoResTable;
+            WRITE_UINT16(*(uint16_t*)&ArCommonDescPtr->macStationAddr[0], *(uint16_t*)&arp_entry[0].mac[0]);
+            WRITE_UINT32(*(uint32_t*)&ArCommonDescPtr->macStationAddr[2], *(uint32_t*)&arp_entry[0].mac[2]);
+            WRITE_UINT16(ArpDescriptor->numOfBindings, params->p_AutoResArpInfo->tableSize);
+
+            for (i = 0; i < params->p_AutoResArpInfo->tableSize; i++)
+            {
+                // TODO: check that mac address is the same in all entries
+                WRITE_UINT32(arp_bindings[i].ipv4Addr, arp_entry[i].ipAddress);
+                if (arp_entry[i].isVlan)
+                    WRITE_UINT16(arp_bindings[i].vlanId, arp_entry[i].vid & 0xFFF);
+            }
+            WRITE_UINT32(ArpDescriptor->p_Bindings, PTR_TO_UINT(arp_bindings) - fmMuramVirtBaseAddr);
+        }
+        WRITE_UINT32(ArpDescriptor->p_Statistics, PTR_TO_UINT(arp_bindings) +
+            sizeof(t_DsarArpBindingEntry) * params->p_AutoResArpInfo->tableSize - fmMuramVirtBaseAddr);
+    }
+
+    // ICMPV4
+    if (params->p_AutoResEchoIpv4Info)
+    {
+	t_DsarIcmpV4BindingEntry* icmpv4_bindings;
+        ICMPV4Descriptor = (t_DsarIcmpV4Descriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->icmpv4);
+        WRITE_UINT32(ArCommonDescPtr->p_IcmpV4Descriptor, PTR_TO_UINT(ICMPV4Descriptor) - fmMuramVirtBaseAddr);
+        icmpv4_bindings = (t_DsarIcmpV4BindingEntry*)(PTR_TO_UINT(ICMPV4Descriptor) + sizeof(t_DsarIcmpV4Descriptor));
+        WRITE_UINT16(ICMPV4Descriptor->control, 0);
+        if (params->p_AutoResEchoIpv4Info->tableSize)
+        {
+            t_FmPortDsarArpEntry* arp_entry = params->p_AutoResEchoIpv4Info->p_AutoResTable;
+            WRITE_UINT16(*(uint16_t*)&ArCommonDescPtr->macStationAddr[0], *(uint16_t*)&arp_entry[0].mac[0]);
+            WRITE_UINT32(*(uint32_t*)&ArCommonDescPtr->macStationAddr[2], *(uint32_t*)&arp_entry[0].mac[2]);
+            WRITE_UINT16(ICMPV4Descriptor->numOfBindings, params->p_AutoResEchoIpv4Info->tableSize);
+
+            for (i = 0; i < params->p_AutoResEchoIpv4Info->tableSize; i++)
+            {
+                // TODO: check that mac address is the same in all entries
+                WRITE_UINT32(icmpv4_bindings[i].ipv4Addr, arp_entry[i].ipAddress);
+                if (arp_entry[i].isVlan)
+                    WRITE_UINT16(icmpv4_bindings[i].vlanId, arp_entry[i].vid & 0xFFF);
+            }
+            WRITE_UINT32(ICMPV4Descriptor->p_Bindings, PTR_TO_UINT(icmpv4_bindings) - fmMuramVirtBaseAddr);
+        }
+        WRITE_UINT32(ICMPV4Descriptor->p_Statistics, PTR_TO_UINT(icmpv4_bindings) +
+            sizeof(t_DsarIcmpV4BindingEntry) * params->p_AutoResEchoIpv4Info->tableSize - fmMuramVirtBaseAddr);
+    }
+
+    // ICMPV6
+    if (params->p_AutoResEchoIpv6Info)
+    {
+	t_DsarIcmpV6BindingEntry* icmpv6_bindings;
+        ICMPV6Descriptor = (t_DsarIcmpV6Descriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->icmpv6);
+        WRITE_UINT32(ArCommonDescPtr->p_IcmpV6Descriptor, PTR_TO_UINT(ICMPV6Descriptor) - fmMuramVirtBaseAddr);
+        icmpv6_bindings = (t_DsarIcmpV6BindingEntry*)(PTR_TO_UINT(ICMPV6Descriptor) + sizeof(t_DsarIcmpV6Descriptor));
+        WRITE_UINT16(ICMPV6Descriptor->control, 0);
+        if (params->p_AutoResEchoIpv6Info->tableSize)
+        {
+            t_FmPortDsarNdpEntry* ndp_entry = params->p_AutoResEchoIpv6Info->p_AutoResTable;
+            WRITE_UINT16(*(uint16_t*)&ArCommonDescPtr->macStationAddr[0], *(uint16_t*)&ndp_entry[0].mac[0]);
+            WRITE_UINT32(*(uint32_t*)&ArCommonDescPtr->macStationAddr[2], *(uint32_t*)&ndp_entry[0].mac[2]);
+            WRITE_UINT16(ICMPV6Descriptor->numOfBindings, params->p_AutoResEchoIpv6Info->tableSize);
+
+            for (i = 0; i < params->p_AutoResEchoIpv6Info->tableSize; i++)
+            {
+                // TODO: check that mac address is the same in all entries
+                for (j = 0; j < 4; j++)
+                    WRITE_UINT32(icmpv6_bindings[i].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
+                if (ndp_entry[i].isVlan)
+                    WRITE_UINT16(*(uint16_t*)&icmpv6_bindings[i].ipv6Addr[4], ndp_entry[i].vid & 0xFFF); // writing vlan
+            }
+            WRITE_UINT32(ICMPV6Descriptor->p_Bindings, PTR_TO_UINT(icmpv6_bindings) - fmMuramVirtBaseAddr);
+        }
+        WRITE_UINT32(ICMPV6Descriptor->p_Statistics, PTR_TO_UINT(icmpv6_bindings) +
+            sizeof(t_DsarIcmpV6BindingEntry) * params->p_AutoResEchoIpv6Info->tableSize - fmMuramVirtBaseAddr);
+    }
+
+    // ND
+    if (params->p_AutoResNdpInfo)
+    {
+	t_DsarIcmpV6BindingEntry* icmpv6_bindings;
+        NDDescriptor = (t_DsarNdDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->nd);
+        WRITE_UINT32(ArCommonDescPtr->p_NdDescriptor, PTR_TO_UINT(NDDescriptor) - fmMuramVirtBaseAddr);
+        icmpv6_bindings = (t_DsarIcmpV6BindingEntry*)(PTR_TO_UINT(NDDescriptor) + sizeof(t_DsarNdDescriptor));
+        WRITE_UINT16(NDDescriptor->control, 0);
+        if (params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp)
+        {
+            t_FmPortDsarNdpEntry* ndp_entry = params->p_AutoResNdpInfo->p_AutoResTableAssigned;
+            WRITE_UINT16(*(uint16_t*)&ArCommonDescPtr->macStationAddr[0], *(uint16_t*)&ndp_entry[0].mac[0]);
+            WRITE_UINT32(*(uint32_t*)&ArCommonDescPtr->macStationAddr[2], *(uint32_t*)&ndp_entry[0].mac[2]);
+            WRITE_UINT16(NDDescriptor->numOfBindings, params->p_AutoResNdpInfo->tableSizeAssigned
+                + params->p_AutoResNdpInfo->tableSizeTmp);
+
+            for (i = 0; i < params->p_AutoResNdpInfo->tableSizeAssigned; i++)
+            {
+                // TODO: check that mac address is the same in all entries
+                for (j = 0; j < 4; j++)
+                    WRITE_UINT32(icmpv6_bindings[i].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
+                if (ndp_entry[i].isVlan)
+                    WRITE_UINT16(*(uint16_t*)&icmpv6_bindings[i].ipv6Addr[4], ndp_entry[i].vid & 0xFFF); // writing vlan
+            }
+            ndp_entry = params->p_AutoResNdpInfo->p_AutoResTableTmp;
+            for (i = 0; i < params->p_AutoResNdpInfo->tableSizeTmp; i++)
+            {
+                // TODO: check that mac address is the same in all entries
+                for (j = 0; j < 4; j++)
+                    WRITE_UINT32(icmpv6_bindings[i + params->p_AutoResNdpInfo->tableSizeAssigned].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
+                if (ndp_entry[i].isVlan)
+                    WRITE_UINT16(*(uint16_t*)&icmpv6_bindings[i + params->p_AutoResNdpInfo->tableSizeAssigned].ipv6Addr[4], ndp_entry[i].vid & 0xFFF); // writing vlan
+            }
+            WRITE_UINT32(NDDescriptor->p_Bindings, PTR_TO_UINT(icmpv6_bindings) - fmMuramVirtBaseAddr);
+        }
+        WRITE_UINT32(NDDescriptor->p_Statistics, PTR_TO_UINT(icmpv6_bindings) + sizeof(t_DsarIcmpV6BindingEntry)
+            * (params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp)
+            - fmMuramVirtBaseAddr);
+        WRITE_UINT32(NDDescriptor->solicitedAddr, 0xFFFFFFFF);
+    }
+
+    // filtering
+    if (params->p_AutoResFilteringInfo)
+    {
+        if (params->p_AutoResFilteringInfo->ipProtDropOnHit)
+            tmp |= IP_PROT_TBL_PASS_MASK;
+        if (params->p_AutoResFilteringInfo->udpPortDropOnHit)
+            tmp |= UDP_PORT_TBL_PASS_MASK;
+        if (params->p_AutoResFilteringInfo->tcpPortDropOnHit)
+            tmp |= TCP_PORT_TBL_PASS_MASK;
+        WRITE_UINT8(ArCommonDescPtr->filterControl, tmp);
+
+        // ip filtering
+        if (params->p_AutoResFilteringInfo->ipProtTableSize)
+        {
+            uint8_t* ip_tbl = (uint8_t*)(PTR_TO_UINT(ArCommonDescPtr) + of->filtIp);
+            WRITE_UINT8(ArCommonDescPtr->ipProtocolTblSize, params->p_AutoResFilteringInfo->ipProtTableSize);
+            for (i = 0; i < params->p_AutoResFilteringInfo->ipProtTableSize; i++)
+                WRITE_UINT8(ip_tbl[i], params->p_AutoResFilteringInfo->p_IpProtTablePtr[i]);
+            WRITE_UINT32(ArCommonDescPtr->p_IpProtocolFiltTbl, PTR_TO_UINT(ip_tbl) - fmMuramVirtBaseAddr);
+        }
+
+        // udp filtering
+        if (params->p_AutoResFilteringInfo->udpPortsTableSize)
+        {
+            t_PortTblEntry* udp_tbl = (t_PortTblEntry*)(PTR_TO_UINT(ArCommonDescPtr) + of->filtUdp);
+            WRITE_UINT8(ArCommonDescPtr->udpPortTblSize, params->p_AutoResFilteringInfo->udpPortsTableSize);
+            for (i = 0; i < params->p_AutoResFilteringInfo->udpPortsTableSize; i++)
+            {
+                WRITE_UINT32(udp_tbl[i].Ports,
+                    (params->p_AutoResFilteringInfo->p_UdpPortsTablePtr[i].srcPort << 16) +
+                    params->p_AutoResFilteringInfo->p_UdpPortsTablePtr[i].dstPort);
+                WRITE_UINT32(udp_tbl[i].PortsMask,
+                    (params->p_AutoResFilteringInfo->p_UdpPortsTablePtr[i].srcPortMask << 16) +
+                    params->p_AutoResFilteringInfo->p_UdpPortsTablePtr[i].dstPortMask);
+            }
+            WRITE_UINT32(ArCommonDescPtr->p_UdpPortFiltTbl, PTR_TO_UINT(udp_tbl) - fmMuramVirtBaseAddr);
+        }
+
+        // tcp filtering
+        if (params->p_AutoResFilteringInfo->tcpPortsTableSize)
+        {
+            t_PortTblEntry* tcp_tbl = (t_PortTblEntry*)(PTR_TO_UINT(ArCommonDescPtr) + of->filtTcp);
+            WRITE_UINT8(ArCommonDescPtr->tcpPortTblSize, params->p_AutoResFilteringInfo->tcpPortsTableSize);
+            for (i = 0; i < params->p_AutoResFilteringInfo->tcpPortsTableSize; i++)
+            {
+                WRITE_UINT32(tcp_tbl[i].Ports,
+                    (params->p_AutoResFilteringInfo->p_TcpPortsTablePtr[i].srcPort << 16) +
+                    params->p_AutoResFilteringInfo->p_TcpPortsTablePtr[i].dstPort);
+                WRITE_UINT32(tcp_tbl[i].PortsMask,
+                    (params->p_AutoResFilteringInfo->p_TcpPortsTablePtr[i].srcPortMask << 16) +
+                    params->p_AutoResFilteringInfo->p_TcpPortsTablePtr[i].dstPortMask);
+            }
+            WRITE_UINT32(ArCommonDescPtr->p_TcpPortFiltTbl, PTR_TO_UINT(tcp_tbl) - fmMuramVirtBaseAddr);
+        }
+    }
+    // common stats
+    WRITE_UINT32(ArCommonDescPtr->p_ArStats, PTR_TO_UINT(ArCommonDescPtr) + of->stats - fmMuramVirtBaseAddr);
+
+    // get into Deep Sleep sequence:
+    // Stage 6: configure tx port to im
+    p_FmPort->deepSleepVars.fmbm_tcfg = GET_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcfg);
+    WRITE_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcfg, GET_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcfg) | BMI_PORT_CFG_IM);
+    // ????
+    p_FmPort->deepSleepVars.fmbm_tcmne = GET_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcmne);
+    WRITE_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcmne, 0xE);
+    // Stage 7:echo
+    p_FmPort->deepSleepVars.fmbm_rfne = GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne);
+    WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne, 0x440000);
+    p_FmPort->deepSleepVars.fmbm_rfpne = GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne);
+    
+    FmPcdEnable(p_FmPort->h_Fm);
+    WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne, 0x2E);
+    // Stage 8: We don't support magic packet for now.
+    // Stage 9: Accumulate mode
+//    WRITE_UINT32(p_FmPort->port.bmi_regs->rx.fmbm_rcfg, GET_UINT32(p_FmPort->port.bmi_regs->rx.fmbm_rcfg) | BMI_PORT_CFG_AM);
+    ARDesc = UINT_TO_PTR(XX_VirtToPhys(ArCommonDescPtr));
+    return E_OK;
+}
+
+void FM_PORT_Dsar_DumpRegs()
+{
+    uint32_t* hh = XX_PhysToVirt(PTR_TO_UINT(ARDesc));
+    DUMP_MEMORY(hh, 0x180);
+}
+
+void FM_PORT_ExitDsar(t_Handle h_FmPortRx, t_Handle h_FmPortTx)
+{
+    t_FmPort *p_FmPort = (t_FmPort *)h_FmPortRx;
+    t_FmPort *p_FmPortTx = (t_FmPort *)h_FmPortTx;
+    if (p_FmPort->deepSleepVars.autoResOffsets)
+    {
+        XX_Free(p_FmPort->deepSleepVars.autoResOffsets);
+        p_FmPort->deepSleepVars.autoResOffsets = 0;
+    }
+    if (p_FmPort->deepSleepVars.autoResMaxSizes)
+    {
+        XX_Free(p_FmPort->deepSleepVars.autoResMaxSizes);
+        p_FmPort->deepSleepVars.autoResMaxSizes = 0;
+    }
+    WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne, p_FmPort->deepSleepVars.fmbm_rfpne);
+    WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne, p_FmPort->deepSleepVars.fmbm_rfne);
+    WRITE_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcmne, p_FmPort->deepSleepVars.fmbm_tcmne);
+    WRITE_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcfg, p_FmPort->deepSleepVars.fmbm_tcfg);
+}
+
+bool FM_PORT_IsInDsar(t_Handle h_FmPort)
+{
+    t_FmPort *p_FmPort = (t_FmPort *)h_FmPort;
+    return PTR_TO_UINT(p_FmPort->deepSleepVars.autoResOffsets);
+}
+
+t_Error FM_PORT_GetDsarStats(t_Handle h_FmPortRx, t_FmPortDsarStats *stats)
+{
+    t_FmPort *p_FmPort = (t_FmPort *)h_FmPortRx;
+    struct arOffsets *of = (struct arOffsets*)p_FmPort->deepSleepVars.autoResOffsets;
+    uint8_t* fmMuramVirtBaseAddr = XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr);
+    uint32_t *param_page = XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rgpr));
+    t_ArCommonDesc *ArCommonDescPtr = (t_ArCommonDesc*)(XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(*param_page)));
+    t_DsarArpDescriptor *ArpDescriptor = (t_DsarArpDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->arp);
+    t_DsarArpStatistics* arp_stats = (t_DsarArpStatistics*)(PTR_TO_UINT(ArpDescriptor->p_Statistics) + fmMuramVirtBaseAddr);
+    t_DsarIcmpV4Descriptor* ICMPV4Descriptor = (t_DsarIcmpV4Descriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->icmpv4);
+    t_DsarIcmpV4Statistics* icmpv4_stats = (t_DsarIcmpV4Statistics*)(PTR_TO_UINT(ICMPV4Descriptor->p_Statistics) + fmMuramVirtBaseAddr);
+    t_DsarNdDescriptor* NDDescriptor = (t_DsarNdDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->nd);
+    t_NdStatistics* nd_stats = (t_NdStatistics*)(PTR_TO_UINT(NDDescriptor->p_Statistics) + fmMuramVirtBaseAddr);
+    t_DsarIcmpV6Descriptor* ICMPV6Descriptor = (t_DsarIcmpV6Descriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->icmpv6);
+    t_DsarIcmpV6Statistics* icmpv6_stats = (t_DsarIcmpV6Statistics*)(PTR_TO_UINT(ICMPV6Descriptor->p_Statistics) + fmMuramVirtBaseAddr);
+    stats->arpArCnt = arp_stats->arCnt;
+    stats->echoIcmpv4ArCnt = icmpv4_stats->arCnt;
+    stats->ndpArCnt = nd_stats->arCnt;
+    stats->echoIcmpv6ArCnt = icmpv6_stats->arCnt;
+    return E_OK;
+}

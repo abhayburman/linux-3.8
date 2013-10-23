@@ -656,6 +656,8 @@ bool        FmPcdIsAdvancedOffloadSupported(t_Handle h_FmPcd);
 bool        FmPcdLockTryLockAll(t_Handle h_FmPcd);
 void        FmPcdLockUnlockAll(t_Handle h_FmPcd);
 t_Error     FmPcdHcSync(t_Handle h_FmPcd);
+t_Error     FmPcdEnable(t_Handle h_Fm);
+
 
 /***********************************************************************/
 /*          Common API for FM-PCD KG module                            */

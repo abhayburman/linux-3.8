@@ -60,6 +60,7 @@
 #include <sysdev/fsl_soc.h>
 #include <linux/stat.h>	   /* For file access mask */
 #include <linux/skbuff.h>
+#include <linux/proc_fs.h>
 
 /* NetCommSw Headers --------------- */
 #include "std_ext.h"
@@ -709,7 +710,7 @@ static t_Error CheckNConfigFmAdvArgs (t_LnxWrpFmDev *p_LnxWrpFmDev)
 {
     struct device_node  *dev_node;
     t_Error             err = E_INVALID_VALUE;
-    /*const uint32_t      *uint32_prop;*/
+    const uint32_t      *uint32_prop;
     const char          *str_prop;
     int                 lenp;
 
@@ -725,6 +726,16 @@ static t_Error CheckNConfigFmAdvArgs (t_LnxWrpFmDev *p_LnxWrpFmDev)
             err = FM_ConfigDmaAidMode(p_LnxWrpFmDev->h_Dev, e_FM_DMA_AID_OUT_TNUM);
     }
 
+    uint32_prop = (uint32_t *)of_get_property(dev_node, "tnum-aging-period",
+	&lenp);
+    if (uint32_prop) {
+    	if (WARN_ON(lenp != sizeof(uint32_t)))
+            RETURN_ERROR(MINOR, E_INVALID_VALUE, NO_MSG);
+ 
+        err = FM_ConfigTnumAgingPeriod(p_LnxWrpFmDev->h_Dev,
+		(uint16_t)uint32_prop[0]/*tnumAgingPeriod*/);
+    }
+        
     if (err != E_OK)
         RETURN_ERROR(MINOR, err, NO_MSG);
 
@@ -1328,6 +1339,99 @@ int fm_port_del_rate_limit(struct fm_port *port)
 	return 0;
 }
 EXPORT_SYMBOL(fm_port_del_rate_limit);
+
+void FM_PORT_Dsar_DumpRegs(void);
+int ar_showmem(struct file *file, const char __user *buffer,
+		unsigned long count, void *data)
+{
+	FM_PORT_Dsar_DumpRegs();
+	return 2;
+}
+
+struct auto_res_tables_sizes *fm_port_get_autores_maxsize(
+	struct fm_port *port)
+{
+	t_LnxWrpFmPortDev   *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
+	return &p_LnxWrpFmPortDev->dsar_table_sizes;
+}
+EXPORT_SYMBOL(fm_port_get_autores_maxsize);
+
+int fm_port_enter_autores_for_deepsleep(struct fm_port *port,
+	struct auto_res_port_params *params)
+{
+	t_LnxWrpFmPortDev   *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
+		/*Register other under /proc/autoresponse */
+	struct proc_dir_entry *ar_dir;
+	uint32_t *ar_data;
+	struct proc_dir_entry   *proc_file;
+	uint32_t ret;
+    	if (WARN_ON(sizeof(t_FmPortDsarParams) != sizeof(struct auto_res_port_params)))
+            return -EFAULT;
+	
+	FM_PORT_EnterDsar(p_LnxWrpFmPortDev->h_Dev, (t_FmPortDsarParams*)params);
+	ar_dir =  proc_mkdir("myar", NULL);
+	if (!ar_dir)
+		return -ENOMEM;
+
+	/*Allocate space to recieve data*/
+	ar_data = kzalloc(sizeof(*ar_data), GFP_KERNEL);
+	if (!ar_data)
+		return -ENOMEM;
+
+	proc_file = create_proc_entry("myar/showmem", 0644, NULL);
+	if (!proc_file) {
+		printk(KERN_CRIT "Cannot create proc entry\n");
+		ret = -EFAULT;
+		return ret;
+	}
+	proc_file->write_proc = ar_showmem;
+	proc_file->data = ar_data;
+	return 0;
+}
+EXPORT_SYMBOL(fm_port_enter_autores_for_deepsleep);
+
+void fm_port_exit_auto_res_for_deep_sleep(struct fm_port *port_rx,
+	struct fm_port *port_tx)
+{
+	FM_PORT_ExitDsar(port_rx, port_tx);
+}
+EXPORT_SYMBOL(fm_port_exit_auto_res_for_deep_sleep);
+
+int fm_port_get_autores_stats(struct fm_port *port,
+	struct auto_res_port_stats *stats)
+{
+	t_LnxWrpFmPortDev *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
+    	if (WARN_ON(sizeof(t_FmPortDsarStats) != sizeof(struct auto_res_port_stats)))
+            return -EFAULT;
+	return FM_PORT_GetDsarStats(p_LnxWrpFmPortDev->h_Dev, (t_FmPortDsarStats*)stats);
+}
+EXPORT_SYMBOL(fm_port_get_autores_stats);
+
+int fm_port_suspend(struct fm_port *port)
+{
+	t_LnxWrpFmPortDev *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
+	if (!FM_PORT_IsInDsar(p_LnxWrpFmPortDev->h_Dev))
+		return FM_PORT_Disable(p_LnxWrpFmPortDev->h_Dev);
+	else
+		return 0;
+}
+EXPORT_SYMBOL(fm_port_suspend);
+
+int fm_port_resume(struct fm_port *port)
+{
+	t_LnxWrpFmPortDev *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
+	if (!FM_PORT_IsInDsar(p_LnxWrpFmPortDev->h_Dev))
+		return FM_PORT_Enable(p_LnxWrpFmPortDev->h_Dev);
+	else
+		return 0;
+}
+EXPORT_SYMBOL(fm_port_resume);
+
+bool fm_port_is_in_auto_res_mode(struct fm_port *port)
+{
+	return FM_PORT_IsInDsar(port);
+}
+EXPORT_SYMBOL(fm_port_is_in_auto_res_mode);
 
 int fm_mac_set_exception(struct fm_mac_dev *fm_mac_dev,
 		e_FmMacExceptions exception, bool enable)
