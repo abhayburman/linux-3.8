@@ -3,7 +3,7 @@
  *
  * Author: Scott Wood <scottwood@freescale.com>
  *
- * Copyright (C) 2006-2012 Freescale Semiconductor, Inc. All rights reserved.
+ * Copyright (C) 2006-2014 Freescale Semiconductor, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -14,7 +14,16 @@
 #include <asm/ppc_asm.h>
 #include <asm/reg.h>
 #include <asm/asm-offsets.h>
+#include <asm/fsl_sleep.h>
 
+	.section .data
+	.align	5
+	.global mpc85xx_sleep_save_area
+mpc85xx_sleep_save_area:
+/* assume that FSL_CPU_SR_SIZE is equal to or large than STATE_SAVE_SIZE */
+	.space	FSL_CPU_SR_SIZE
+
+#ifdef CONFIG_PPC32
 #define SS_TB		0x00
 #define SS_HID		0x08 /* 2 HIDs */
 #define SS_IAC		0x10 /* 2 IACs */
@@ -41,8 +50,6 @@
 
 	.section .data
 	.align	5
-mpc85xx_sleep_save_area:
-	.space	STATE_SAVE_SIZE
 ccsrbase_low:
 	.long	0
 ccsrbase_high:
@@ -606,4 +613,418 @@ mpc85xx_deep_resume:
 	lis	r3, 1
 	mtdec	r3
 
+	blr
+#endif
+
+
+#define do_save_gpr_reg(reg, addr) \
+	PPC_STL reg, addr(r10)
+
+#define do_restore_gpr_reg(reg, addr) \
+	PPC_LL reg, addr(r10)
+
+#define do_save_fpr_reg(reg, addr) \
+	stfd	reg, addr(r10)
+
+#define do_restore_fpr_reg(reg, addr) \
+	lfd	reg, addr(r10)
+
+#define do_save_spr_reg(reg, addr) \
+	mfspr	r0, SPRN_##reg ;\
+	PPC_STL r0, addr(r10)
+
+#define do_restore_spr_reg(reg, addr) \
+	PPC_LL r0, addr(r10) ;\
+	mtspr	SPRN_##reg, r0
+
+#define do_save_special_reg(special, addr) \
+	mf##special	r0 ;\
+	PPC_STL r0, addr(r10)
+
+#define do_restore_special_reg(special, addr) \
+	PPC_LL r0, addr(r10) ;\
+	mt##special	r0
+
+#define do_sr_general_gpr_regs(func) \
+	do_##func##_gpr_reg(r1, SR_GPR1) ;\
+	do_##func##_gpr_reg(r2, SR_GPR2) ;\
+	do_##func##_gpr_reg(r13, SR_GPR13 + 0x00) ;\
+	do_##func##_gpr_reg(r14, SR_GPR13 + 0x08) ;\
+	do_##func##_gpr_reg(r15, SR_GPR13 + 0x10) ;\
+	do_##func##_gpr_reg(r16, SR_GPR13 + 0x18) ;\
+	do_##func##_gpr_reg(r17, SR_GPR13 + 0x20) ;\
+	do_##func##_gpr_reg(r18, SR_GPR13 + 0x28) ;\
+	do_##func##_gpr_reg(r19, SR_GPR13 + 0x30) ;\
+	do_##func##_gpr_reg(r20, SR_GPR13 + 0x38) ;\
+	do_##func##_gpr_reg(r21, SR_GPR13 + 0x40) ;\
+	do_##func##_gpr_reg(r22, SR_GPR13 + 0x48) ;\
+	do_##func##_gpr_reg(r23, SR_GPR13 + 0x50) ;\
+	do_##func##_gpr_reg(r24, SR_GPR13 + 0x58) ;\
+	do_##func##_gpr_reg(r25, SR_GPR13 + 0x60) ;\
+	do_##func##_gpr_reg(r26, SR_GPR13 + 0x68) ;\
+	do_##func##_gpr_reg(r27, SR_GPR13 + 0x70) ;\
+	do_##func##_gpr_reg(r28, SR_GPR13 + 0x78) ;\
+	do_##func##_gpr_reg(r29, SR_GPR13 + 0x80) ;\
+	do_##func##_gpr_reg(r30, SR_GPR13 + 0x88) ;\
+	do_##func##_gpr_reg(r31, SR_GPR13 + 0x90)
+
+#define do_sr_fpr_regs(func) \
+	do_##func##_fpr_reg(fr14, SR_FPR14 + 0x00) ;\
+	do_##func##_fpr_reg(fr15, SR_FPR14 + 0x08) ;\
+	do_##func##_fpr_reg(fr16, SR_FPR14 + 0x10) ;\
+	do_##func##_fpr_reg(fr17, SR_FPR14 + 0x18) ;\
+	do_##func##_fpr_reg(fr18, SR_FPR14 + 0x20) ;\
+	do_##func##_fpr_reg(fr19, SR_FPR14 + 0x28) ;\
+	do_##func##_fpr_reg(fr20, SR_FPR14 + 0x30) ;\
+	do_##func##_fpr_reg(fr21, SR_FPR14 + 0x38) ;\
+	do_##func##_fpr_reg(fr22, SR_FPR14 + 0x40) ;\
+	do_##func##_fpr_reg(fr23, SR_FPR14 + 0x48) ;\
+	do_##func##_fpr_reg(fr24, SR_FPR14 + 0x50) ;\
+	do_##func##_fpr_reg(fr25, SR_FPR14 + 0x58) ;\
+	do_##func##_fpr_reg(fr26, SR_FPR14 + 0x60) ;\
+	do_##func##_fpr_reg(fr27, SR_FPR14 + 0x68) ;\
+	do_##func##_fpr_reg(fr28, SR_FPR14 + 0x70) ;\
+	do_##func##_fpr_reg(fr29, SR_FPR14 + 0x78) ;\
+	do_##func##_fpr_reg(fr30, SR_FPR14 + 0x80) ;\
+	do_##func##_fpr_reg(fr31, SR_FPR14 + 0x88)
+
+#define do_sr_general_branch_regs(func) \
+	do_##func##_special_reg(CR, SR_CR)
+
+#define do_sr_general_pcr_regs(func) \
+	do_##func##_spr_reg(EPCR, SR_EPCR) ;\
+	do_##func##_spr_reg(HID0, SR_HID0 + 0x00)
+
+#define do_sr_e500_pcr_regs(func) \
+	do_##func##_spr_reg(HID1, SR_HID0 + 0x08)
+
+#define do_sr_save_tb_regs \
+	do_save_spr_reg(TBRU, SR_TBU) ;\
+	do_save_spr_reg(TBRL, SR_TBL)
+
+#define do_sr_restore_tb_regs \
+	do_restore_spr_reg(TBWU, SR_TBU) ;\
+	do_restore_spr_reg(TBWL, SR_TBL)
+
+#define do_sr_general_time_regs(func) \
+	do_sr_##func##_tb_regs ;\
+	do_##func##_spr_reg(TCR, SR_TCR)
+
+#define do_sr_interrupt_regs(func) \
+	do_##func##_spr_reg(IVPR, SR_IVPR) ;\
+	do_##func##_spr_reg(IVOR0, SR_IVOR0 + 0x00) ;\
+	do_##func##_spr_reg(IVOR1, SR_IVOR0 + 0x08) ;\
+	do_##func##_spr_reg(IVOR2, SR_IVOR0 + 0x10) ;\
+	do_##func##_spr_reg(IVOR3, SR_IVOR0 + 0x18) ;\
+	do_##func##_spr_reg(IVOR4, SR_IVOR0 + 0x20) ;\
+	do_##func##_spr_reg(IVOR5, SR_IVOR0 + 0x28) ;\
+	do_##func##_spr_reg(IVOR6, SR_IVOR0 + 0x30) ;\
+	do_##func##_spr_reg(IVOR7, SR_IVOR0 + 0x38) ;\
+	do_##func##_spr_reg(IVOR8, SR_IVOR0 + 0x40) ;\
+	do_##func##_spr_reg(IVOR10, SR_IVOR0 + 0x50) ;\
+	do_##func##_spr_reg(IVOR11, SR_IVOR0 + 0x58) ;\
+	do_##func##_spr_reg(IVOR12, SR_IVOR0 + 0x60) ;\
+	do_##func##_spr_reg(IVOR13, SR_IVOR0 + 0x68) ;\
+	do_##func##_spr_reg(IVOR14, SR_IVOR0 + 0x70) ;\
+	do_##func##_spr_reg(IVOR15, SR_IVOR0 + 0x78)
+
+#define do_e6500_sr_interrupt_regs(func) \
+	do_##func##_spr_reg(IVOR9, SR_IVOR0 + 0x48) ;\
+	do_##func##_spr_reg(IVOR32, SR_IVOR32 + 0x00) ;\
+	do_##func##_spr_reg(IVOR33, SR_IVOR32 + 0x08) ;\
+	do_##func##_spr_reg(IVOR35, SR_IVOR32 + 0x18) ;\
+	do_##func##_spr_reg(IVOR36, SR_IVOR32 + 0x20) ;\
+	do_##func##_spr_reg(IVOR37, SR_IVOR32 + 0x28) ;\
+	do_##func##_spr_reg(IVOR38, SR_IVOR32 + 0x30) ;\
+	do_##func##_spr_reg(IVOR39, SR_IVOR32 + 0x38) ;\
+	do_##func##_spr_reg(IVOR40, SR_IVOR32 + 0x40) ;\
+	do_##func##_spr_reg(IVOR41, SR_IVOR32 + 0x48)
+
+#define do_e5500_sr_interrupt_regs(func) \
+	do_##func##_spr_reg(IVOR9, SR_IVOR0 + 0x48) ;\
+	do_##func##_spr_reg(IVOR35, SR_IVOR32 + 0x18) ;\
+	do_##func##_spr_reg(IVOR36, SR_IVOR32 + 0x20) ;\
+	do_##func##_spr_reg(IVOR37, SR_IVOR32 + 0x28) ;\
+	do_##func##_spr_reg(IVOR38, SR_IVOR32 + 0x30) ;\
+	do_##func##_spr_reg(IVOR39, SR_IVOR32 + 0x38) ;\
+	do_##func##_spr_reg(IVOR40, SR_IVOR32 + 0x40) ;\
+	do_##func##_spr_reg(IVOR41, SR_IVOR32 + 0x48)
+
+#define do_e500_sr_interrupt_regs(func) \
+	do_##func##_spr_reg(IVOR32, SR_IVOR32 + 0x00) ;\
+	do_##func##_spr_reg(IVOR33, SR_IVOR32 + 0x08) ;\
+	do_##func##_spr_reg(IVOR34, SR_IVOR32 + 0x10)
+
+#define do_e500mc_sr_interrupt_regs(func) \
+	do_##func##_spr_reg(IVOR9, SR_IVOR0 + 0x48) ;\
+	do_##func##_spr_reg(IVOR35, SR_IVOR32 + 0x18) ;\
+	do_##func##_spr_reg(IVOR36, SR_IVOR32 + 0x20) ;\
+	do_##func##_spr_reg(IVOR37, SR_IVOR32 + 0x28) ;\
+	do_##func##_spr_reg(IVOR38, SR_IVOR32 + 0x30) ;\
+	do_##func##_spr_reg(IVOR39, SR_IVOR32 + 0x38) ;\
+	do_##func##_spr_reg(IVOR40, SR_IVOR32 + 0x40) ;\
+	do_##func##_spr_reg(IVOR41, SR_IVOR32 + 0x48)
+
+#define do_sr_general_software_regs(func) \
+	do_##func##_spr_reg(SPRG1, SR_SPRG1) ;\
+	do_##func##_spr_reg(SPRG3, SR_SPRG3)
+
+#define do_sr_general_mmu_regs(func) \
+	do_##func##_spr_reg(PID0, SR_PID0 + 0x00)
+
+#define do_sr_e500_mmu_regs(func) \
+	do_##func##_spr_reg(PID1, SR_PID0 + 0x08) ;\
+	do_##func##_spr_reg(PID2, SR_PID0 + 0x10)
+
+#define do_sr_debug_regs(func) \
+	do_##func##_spr_reg(DBCR0, SR_DBCR0 + 0x00) ;\
+	do_##func##_spr_reg(DBCR1, SR_DBCR0 + 0x08) ;\
+	do_##func##_spr_reg(DBCR2, SR_DBCR0 + 0x10) ;\
+	do_##func##_spr_reg(IAC1, SR_IAC1 + 0x00) ;\
+	do_##func##_spr_reg(IAC2, SR_IAC1 + 0x08) ;\
+	do_##func##_spr_reg(DAC1, SR_DAC1 + 0x00) ;\
+	do_##func##_spr_reg(DAC2, SR_DAC1 + 0x08)
+
+#define do_e6500_sr_debug_regs(func) \
+	do_##func##_spr_reg(IAC3, SR_IAC1 + 0x10) ;\
+	do_##func##_spr_reg(IAC4, SR_IAC1 + 0x18)
+
+_GLOBAL(fsl_cpu_base_save)
+	do_sr_general_gpr_regs(save)
+	do_sr_general_branch_regs(save)
+	do_sr_general_pcr_regs(save)
+	do_sr_general_software_regs(save)
+	do_sr_general_mmu_regs(save)
+
+1:
+	mfspr	r5, SPRN_TBRU
+	do_sr_general_time_regs(save)
+	mfspr	r6, SPRN_TBRU
+	cmpw	r5, r6
+	bne	1b
+
+	blr
+
+_GLOBAL(fsl_cpu_base_restore)
+	do_sr_general_gpr_regs(restore)
+	do_sr_general_branch_regs(restore)
+	do_sr_general_pcr_regs(restore)
+	do_sr_general_software_regs(restore)
+	do_sr_general_mmu_regs(restore)
+
+	isync
+
+1:
+	/* Restore Time registers */
+	/* clear tb lower to avoid wrap */
+	li	r0, 0
+	mtspr	SPRN_TBWL, r0
+	do_sr_general_time_regs(restore)
+
+	/* clear out status */
+	mfspr   r0,SPRN_TSR
+	mtspr   SPRN_TSR, r0
+
+	blr
+
+/* Base registers, e500v1, e500v2 need to do some special save/restore */
+_GLOBAL(e500_base_special_save)
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V1@l
+	cmpw	r11, r12
+	beq	500f
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V2@l
+	cmpw	r11, r12
+	bne	1f
+
+500:
+	do_sr_e500_pcr_regs(save)
+	do_sr_e500_mmu_regs(save)
+1:
+	blr
+
+_GLOBAL(e500_base_special_restore)
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V1@l
+	cmpw	r11, r12
+	beq	500f
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V2@l
+	cmpw	r11, r12
+	bne	1f
+
+500:
+	do_sr_e500_pcr_regs(save)
+	do_sr_e500_mmu_regs(save)
+1:
+	blr
+
+_GLOBAL(fsl_cpu_append_save)
+	mfspr	r0, SPRN_PVR
+	rlwinm	r11, r0, 16, 16, 31
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E6500@l
+	cmpw	r11, r12
+	beq	e6500_append_save
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E5500@l
+	cmpw	r11, r12
+	beq	e5500_append_save
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500MC@l
+	cmpw	r11, r12
+	beq	e500mc_append_save
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V2@l
+	cmpw	r11, r12
+	beq	e500v2_append_save
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V1@l
+	cmpw	r11, r12
+	beq	e500v1_append_save
+
+	b	1f
+
+e6500_append_save:
+	do_e6500_sr_interrupt_regs(save)
+	do_e6500_sr_debug_regs(save)
+	b	1f
+
+e5500_append_save:
+	do_e5500_sr_interrupt_regs(save)
+	b	1f
+
+e500mc_append_save:
+	do_e500mc_sr_interrupt_regs(save)
+	b	1f
+
+e500v2_append_save:
+e500v1_append_save:
+	do_e500_sr_interrupt_regs(save)
+
+1:
+	do_sr_interrupt_regs(save)
+	do_sr_debug_regs(save)
+
+	blr
+
+_GLOBAL(fsl_cpu_append_restore)
+	mfspr	r0, SPRN_PVR
+	rlwinm	r11, r0, 16, 16, 31
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E6500@l
+	cmpw	r11, r12
+	beq	e6500_append_restore
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E5500@l
+	cmpw	r11, r12
+	beq	e5500_append_restore
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500MC@l
+	cmpw	r11, r12
+	beq	e500mc_append_restore
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V2@l
+	cmpw	r11, r12
+	beq	e500v2_append_restore
+
+	lis	r12, 0
+	ori	r12, r12, PVR_VER_E500V1@l
+	cmpw	r11, r12
+	beq	e500v1_append_restore
+
+	b	1f
+
+e6500_append_restore:
+	do_e6500_sr_interrupt_regs(restore)
+	do_e6500_sr_debug_regs(restore)
+	b	1f
+
+e5500_append_restore:
+	do_e5500_sr_interrupt_regs(restore)
+	b	1f
+
+e500mc_append_restore:
+	do_e500mc_sr_interrupt_regs(restore)
+	b	1f
+
+e500v2_append_restore:
+e500v1_append_restore:
+	do_e500_sr_interrupt_regs(restore)
+
+1:
+	do_sr_interrupt_regs(restore)
+	do_sr_debug_regs(restore)
+
+	sync
+
+	blr
+
+/*
+ * r3 = the virtual address of buffer
+ * r4 = core save type, 0-BASE_SAVE, 1-ALL_SAVE
+ * r5 = the return address for resume
+ */
+_GLOBAL(booke_cpu_state_save)
+	mr	r10, r3
+	mflr	r9
+
+	do_save_gpr_reg(r5, SR_LR)
+	do_save_special_reg(msr, SR_MSR)
+
+	/* if core_save_type is BASE_SAVE, goto 1f */
+	cmpwi	r4, 0
+	beq	1f
+
+	bl	fsl_cpu_append_save
+
+1:
+	bl	e500_base_special_save
+
+	bl	fsl_cpu_base_save
+
+	mtlr	r9
+	blr
+
+/*
+ * r3 = the virtual address of buffer
+ * r4 = core save type, 0-BASE_SAVE, 1-ALL_SAVE
+ * return:
+ *   r3 = saved return address
+ *   r4 = save MSR value
+ */
+_GLOBAL(booke_cpu_state_restore)
+	mr	r10, r3
+	mflr	r9
+
+	/* if core_save_type is BASE_SAVE, goto 1f */
+	cmpwi	r4, 0
+	beq	1f
+
+	bl	fsl_cpu_append_restore
+
+1:
+	bl	e500_base_special_restore
+
+	bl	fsl_cpu_base_restore
+
+	/* return MSR */
+	PPC_LL r4, SR_MSR(r10)
+
+	/* return the saved lr register value */
+	do_restore_gpr_reg(r3, SR_LR)
+
+	mtlr	r9
 	blr
