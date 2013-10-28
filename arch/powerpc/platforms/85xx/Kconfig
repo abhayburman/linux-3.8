@@ -314,6 +314,26 @@ config P5040_DS
 	help
 	  This option enables support for the P5040 DS board
 
+config T104x_QDS
+	bool "Freescale T104x QDS"
+	select DEFAULT_UIMAGE
+	select E500
+	select PPC_E500MC
+	select PHYS_64BIT
+	select SWIOTLB
+	select ARCH_REQUIRE_GPIOLIB
+	select GENERIC_GPIO
+	select HAS_RAPIDIO
+	select PPC_EPAPR_HV_PIC
+	select HAS_FSL_QBMAN
+	select MDIO_BUS_MUX if FSL_DPAA_ETH
+	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
+	help
+	  This option enables support for the T04x QDS board
+	  The T104x application development system T104x QDS is a complete
+	  debugging environment intended for engineers developing
+	  applications for the T1040/T1042.
+
 config PPC_QEMU_E500
 	bool "QEMU generic e500 platform"
 	select DEFAULT_UIMAGE
