@@ -675,7 +675,7 @@ extern struct list_head pci_root_buses;	/* list of all known PCI buses */
 extern int no_pci_devices(void);
 
 void pcibios_setup_device(struct pci_dev *dev);
-void pcibios_fixup_bus(struct pci_bus *);
+extern void pcibios_fixup_bus(struct pci_bus *);
 int __must_check pcibios_enable_device(struct pci_dev *, int mask);
 /* Architecture specific versions may override this (weak) */
 char *pcibios_setup(char *str);
