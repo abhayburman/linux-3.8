@@ -5328,10 +5328,108 @@ static uint32_t AR_ComputeOffsets(struct arOffsets* of, struct t_FmPortDsarParam
 }
 
 uint32_t* ARDesc;
+void PrsEnable(t_Handle p_FmPcd);
+void PrsDisable(t_Handle p_FmPcd);
+int PrsIsEnabled(t_Handle p_FmPcd);
+
+static t_Error DsarCheckParams(t_FmPortDsarParams *params, t_FmPortDsarTablesSizes *sizes)
+{
+    bool macInit = FALSE;
+    uint8_t mac[6];
+    int i;
+    
+    // check table sizes
+    if (sizes->maxNumOfArpEntries < params->p_AutoResArpInfo->tableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Arp table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfEchoIpv4Entries < params->p_AutoResEchoIpv4Info->tableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: EchoIpv4 table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfNdpEntries < params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: NDP table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfEchoIpv6Entries < params->p_AutoResEchoIpv6Info->tableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: EchoIpv6 table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfSnmpEntries < params->p_AutoResSnmpInfo->tableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Snmp table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfIpProtFiltering < params->p_AutoResFilteringInfo->ipProtTableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: ip filter table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfTcpPortFiltering < params->p_AutoResFilteringInfo->udpPortsTableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: udp filter table size exceeds the configured maximum size."));
+    if (sizes->maxNumOfUdpPortFiltering < params->p_AutoResFilteringInfo->tcpPortsTableSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: tcp filter table size exceeds the configured maximum size."));
+	
+    // check only 1 MAC address is configured (this is what ucode currently supports)
+    if (params->p_AutoResArpInfo && params->p_AutoResArpInfo->tableSize)
+    {
+	i = 0;
+        if (!macInit)
+	{
+            memcpy(mac, params->p_AutoResArpInfo->p_AutoResTable[0].mac, 6);
+	    i = 1;
+	    macInit = TRUE;
+	}
+	for (; i < params->p_AutoResArpInfo->tableSize; i++)
+	    if (memcmp(mac, params->p_AutoResArpInfo->p_AutoResTable[i].mac, 6))
+	        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Only 1 mac address is currently supported."));
+    }
+    if (params->p_AutoResEchoIpv4Info && params->p_AutoResEchoIpv4Info->tableSize)
+    {
+	i = 0;
+        if (!macInit)
+	{
+            memcpy(mac, params->p_AutoResEchoIpv4Info->p_AutoResTable[0].mac, 6);
+	    i = 1;
+	    macInit = TRUE;
+	}
+	for (; i < params->p_AutoResEchoIpv4Info->tableSize; i++)
+	    if (memcmp(mac, params->p_AutoResEchoIpv4Info->p_AutoResTable[i].mac, 6))
+	        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Only 1 mac address is currently supported."));
+    }
+    if (params->p_AutoResEchoIpv6Info && params->p_AutoResEchoIpv6Info->tableSize)
+    {
+	i = 0;
+        if (!macInit)
+	{
+            memcpy(mac, params->p_AutoResEchoIpv6Info->p_AutoResTable[0].mac, 6);
+	    i = 1;
+	    macInit = TRUE;
+	}
+	for (; i < params->p_AutoResEchoIpv6Info->tableSize; i++)
+	    if (memcmp(mac, params->p_AutoResEchoIpv6Info->p_AutoResTable[i].mac, 6))
+	        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Only 1 mac address is currently supported."));
+    }
+    if (params->p_AutoResNdpInfo && params->p_AutoResNdpInfo->tableSizeAssigned)
+    {
+	i = 0;
+        if (!macInit)
+	{
+            memcpy(mac, params->p_AutoResNdpInfo->p_AutoResTableAssigned[0].mac, 6);
+	    i = 1;
+	    macInit = TRUE;
+	}
+	for (; i < params->p_AutoResNdpInfo->tableSizeAssigned; i++)
+	    if (memcmp(mac, params->p_AutoResNdpInfo->p_AutoResTableAssigned[i].mac, 6))
+	        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Only 1 mac address is currently supported."));
+    }
+    if (params->p_AutoResNdpInfo && params->p_AutoResNdpInfo->tableSizeTmp)
+    {
+	i = 0;
+        if (!macInit)
+	{
+            memcpy(mac, params->p_AutoResNdpInfo->p_AutoResTableTmp[0].mac, 6);
+	    i = 1;
+	    macInit = TRUE;
+	}
+	for (; i < params->p_AutoResNdpInfo->tableSizeTmp; i++)
+	    if (memcmp(mac, params->p_AutoResNdpInfo->p_AutoResTableTmp[i].mac, 6))
+	        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Only 1 mac address is currently supported."));
+    }
+    return E_OK;
+}
 
 t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 {
     int i,j;
+    t_Error err;
+    uint32_t nia;
     t_FmPort            *p_FmPort= (t_FmPort *)h_FmPortRx;
     t_FmPort            *p_FmPortTx = (t_FmPort *)params->h_FmPortTx;
     t_DsarArpDescriptor *ArpDescriptor;
@@ -5343,14 +5441,23 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
     t_ArCommonDesc *ArCommonDescPtr = (t_ArCommonDesc*)(XX_PhysToVirt(p_FmPort->fmMuramPhysBaseAddr + GET_UINT32(*param_page)));
     struct arOffsets* of;
     uint8_t tmp = 0;
+    t_Handle *h_FmPcd;
 
+    err = DsarCheckParams(params, p_FmPort->deepSleepVars.autoResMaxSizes);
+    if (err != E_OK)
+	return err;
+	
     p_FmPort->deepSleepVars.autoResOffsets = XX_Malloc(sizeof(struct arOffsets));
     of = (struct arOffsets *)p_FmPort->deepSleepVars.autoResOffsets;
     IOMemSet32(ArCommonDescPtr, 0, AR_ComputeOffsets(of, params));
 
     // common
     WRITE_UINT8(ArCommonDescPtr->arTxPort, p_FmPortTx->hardwarePortId);
-    WRITE_UINT32(ArCommonDescPtr->activeHPNIA, GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne));
+    nia = GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne); // bmi nia
+    if ((nia & 0x007C0000) == 0x00440000) // bmi nia is parser
+        WRITE_UINT32(ArCommonDescPtr->activeHPNIA, GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne));
+    else
+        WRITE_UINT32(ArCommonDescPtr->activeHPNIA, nia);
     WRITE_UINT16(ArCommonDescPtr->snmpPort, 161);
 
     // ARP
@@ -5370,7 +5477,6 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 
             for (i = 0; i < params->p_AutoResArpInfo->tableSize; i++)
             {
-                // TODO: check that mac address is the same in all entries
                 WRITE_UINT32(arp_bindings[i].ipv4Addr, arp_entry[i].ipAddress);
                 if (arp_entry[i].isVlan)
                     WRITE_UINT16(arp_bindings[i].vlanId, arp_entry[i].vid & 0xFFF);
@@ -5398,7 +5504,6 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 
             for (i = 0; i < params->p_AutoResEchoIpv4Info->tableSize; i++)
             {
-                // TODO: check that mac address is the same in all entries
                 WRITE_UINT32(icmpv4_bindings[i].ipv4Addr, arp_entry[i].ipAddress);
                 if (arp_entry[i].isVlan)
                     WRITE_UINT16(icmpv4_bindings[i].vlanId, arp_entry[i].vid & 0xFFF);
@@ -5426,7 +5531,6 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 
             for (i = 0; i < params->p_AutoResEchoIpv6Info->tableSize; i++)
             {
-                // TODO: check that mac address is the same in all entries
                 for (j = 0; j < 4; j++)
                     WRITE_UINT32(icmpv6_bindings[i].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
                 if (ndp_entry[i].isVlan)
@@ -5456,7 +5560,6 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 
             for (i = 0; i < params->p_AutoResNdpInfo->tableSizeAssigned; i++)
             {
-                // TODO: check that mac address is the same in all entries
                 for (j = 0; j < 4; j++)
                     WRITE_UINT32(icmpv6_bindings[i].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
                 if (ndp_entry[i].isVlan)
@@ -5465,7 +5568,6 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
             ndp_entry = params->p_AutoResNdpInfo->p_AutoResTableTmp;
             for (i = 0; i < params->p_AutoResNdpInfo->tableSizeTmp; i++)
             {
-                // TODO: check that mac address is the same in all entries
                 for (j = 0; j < 4; j++)
                     WRITE_UINT32(icmpv6_bindings[i + params->p_AutoResNdpInfo->tableSizeAssigned].ipv6Addr[j], ndp_entry[i].ipAddress[j]);
                 if (ndp_entry[i].isVlan)
@@ -5548,8 +5650,15 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
     p_FmPort->deepSleepVars.fmbm_rfne = GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne);
     WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne, 0x440000);
     p_FmPort->deepSleepVars.fmbm_rfpne = GET_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne);
+    h_FmPcd = FmGetPcd(p_FmPort->h_Fm);
+    if (!PrsIsEnabled(h_FmPcd))
+    {
+        p_FmPort->deepSleepVars.dsarEnabledParser = TRUE;
+        PrsEnable(h_FmPcd);
+    }
+    else
+        p_FmPort->deepSleepVars.dsarEnabledParser = FALSE;
     
-    FmPcdEnable(p_FmPort->h_Fm);
     WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne, 0x2E);
     // Stage 8: We don't support magic packet for now.
     // Stage 9: Accumulate mode
@@ -5578,6 +5687,9 @@ void FM_PORT_ExitDsar(t_Handle h_FmPortRx, t_Handle h_FmPortTx)
         XX_Free(p_FmPort->deepSleepVars.autoResMaxSizes);
         p_FmPort->deepSleepVars.autoResMaxSizes = 0;
     }
+    
+    if (p_FmPort->deepSleepVars.dsarEnabledParser)
+        PrsDisable(FmGetPcd(p_FmPort->h_Fm));
     WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfpne, p_FmPort->deepSleepVars.fmbm_rfpne);
     WRITE_UINT32(p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rfne, p_FmPort->deepSleepVars.fmbm_rfne);
     WRITE_UINT32(p_FmPortTx->p_FmPortBmiRegs->txPortBmiRegs.fmbm_tcmne, p_FmPort->deepSleepVars.fmbm_tcmne);

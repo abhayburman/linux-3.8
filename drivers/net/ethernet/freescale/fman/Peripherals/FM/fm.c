@@ -5205,10 +5205,7 @@ t_Error FM_ForceIntr (t_Handle h_Fm, e_FmExceptions exception)
     return E_OK;
 }
 
-t_Error FM_PCD_Enable(t_Handle h_FmPcd);
-t_Error FmPcdEnable(t_Handle h_Fm)
+t_Handle FmGetPcd(t_Handle h_Fm)
 {
-    t_Fm *p_Fm = (t_Fm*)h_Fm;
-    FM_PCD_Enable(p_Fm->h_Pcd);
-    return 0;
+	return ((t_Fm*)h_Fm)->h_Pcd;
 }

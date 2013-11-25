@@ -861,6 +861,7 @@ typedef struct t_FmPortDsarVars {
     uint32_t                    fmbm_tcmne;
     uint32_t                    fmbm_rfne;
     uint32_t                    fmbm_rfpne;
+    bool                        dsarEnabledParser;
 } t_FmPortDsarVars;
 
 typedef struct {
