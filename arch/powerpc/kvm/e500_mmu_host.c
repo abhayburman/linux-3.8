@@ -234,24 +234,6 @@ void kvmppc_lrat_invalidate(struct kvm_vcpu *vcpu)
 }
 #endif
 
-#ifdef CONFIG_KVM_BOOKE_HV
-void inval_ea_on_host(struct kvm_vcpu *vcpu, gva_t ea,
-		      int pid, int sas, int sind)
-{
-	unsigned long flags;
-
-	local_irq_save(flags);
-	mtspr(SPRN_MAS6, (pid << MAS6_SPID_SHIFT) |
-	      sas | (sind << MAS6_SIND_SHIFT));
-	mtspr(SPRN_MAS5, MAS5_SGS | vcpu->arch.lpid);
-	asm volatile("tlbilx 3, 0, %[ea]\n" : : [ea] "r" (ea));
-
-	mtspr(SPRN_MAS5, 0);
-	isync();
-	local_irq_restore(flags);
-}
-#endif
-
 /*
  * Acquire a mas0 with victim hint, as if we just took a TLB miss.
  *
