@@ -29,6 +29,7 @@
 #include <linux/of_platform.h>
 #include <linux/bootmem.h>
 #include <linux/genalloc.h>
+#include <linux/syscore_ops.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/fsl_guts.h>
@@ -40,10 +41,10 @@
 /* Handling access violations */
 #define make64(high, low) (((u64)(high) << 32) | (low))
 
-struct pamu_isr_data {
+static struct pamu_info {
 	void __iomem *pamu_reg_base;	/* Base address of PAMU regs*/
 	unsigned int count;		/* The number of PAMUs */
-};
+} pamu_info_data;
 
 static struct paace *ppaact;
 static struct paace *spaact;
@@ -824,7 +825,7 @@ static void __init setup_omt(struct ome *omt)
  * Get the maximum number of PAACT table entries
  * and subwindows supported by PAMU
  */
-static void get_pamu_cap_values(unsigned long pamu_reg_base)
+static void get_pamu_cap_values(void *pamu_reg_base)
 {
 	u32 pc_val;
 
@@ -834,9 +835,8 @@ static void get_pamu_cap_values(unsigned long pamu_reg_base)
 }
 
 /* Setup PAMU registers pointing to PAACT, SPAACT and OMT */
-int setup_one_pamu(unsigned long pamu_reg_base, unsigned long pamu_reg_size,
-	           phys_addr_t ppaact_phys, phys_addr_t spaact_phys,
-		   phys_addr_t omt_phys)
+int setup_one_pamu(void *pamu_reg_base, phys_addr_t ppaact_phys,
+		   phys_addr_t spaact_phys, phys_addr_t omt_phys)
 {
 	u32 *pc;
 	struct pamu_mmap_regs *pamu_regs;
@@ -956,7 +956,7 @@ static void __init setup_liodns(void)
 
 irqreturn_t pamu_av_isr(int irq, void *arg)
 {
-	struct pamu_isr_data *data = arg;
+	struct pamu_info *data = arg;
 	phys_addr_t phys;
 	unsigned int i, j, ret;
 
@@ -1206,8 +1206,7 @@ static int __init fsl_pamu_probe(struct platform_device *pdev)
 	struct ccsr_guts __iomem *guts_regs = NULL;
 	u32 pamubypenr, pamu_counter;
 	unsigned long pamu_reg_off;
-	unsigned long pamu_reg_base;
-	struct pamu_isr_data *data = NULL;
+	void __iomem *pamu_reg_base;
 	struct device_node *guts_node;
 	u64 size;
 	struct page *p;
@@ -1239,17 +1238,11 @@ static int __init fsl_pamu_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	data = kzalloc(sizeof(struct pamu_isr_data), GFP_KERNEL);
-	if (!data) {
-		dev_err(&pdev->dev, "PAMU isr data memory allocation failed\n");
-		ret = -ENOMEM;
-		goto error;
-	}
-	data->pamu_reg_base = pamu_regs;
-	data->count = size / PAMU_OFFSET;
+	pamu_info_data.pamu_reg_base = pamu_regs;
+	pamu_info_data.count = size / PAMU_OFFSET;
 
 	/* The ISR needs access to the regs, so we won't iounmap them */
-	ret = request_irq(irq, pamu_av_isr, 0, "pamu", data);
+	ret = request_irq(irq, pamu_av_isr, 0, "pamu", &pamu_info_data);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "error %i installing ISR for irq %i\n",
 			ret, irq);
@@ -1273,7 +1266,7 @@ static int __init fsl_pamu_probe(struct platform_device *pdev)
 	}
 
 	/* read in the PAMU capability registers */
-	get_pamu_cap_values((unsigned long)pamu_regs);
+	get_pamu_cap_values(pamu_regs);
 	/*
 	 * To simplify the allocation of a coherency domain, we allocate the
 	 * PAACT and the OMT in the same memory buffer.  Unfortunately, this
@@ -1352,9 +1345,9 @@ static int __init fsl_pamu_probe(struct platform_device *pdev)
 	for (pamu_reg_off = 0, pamu_counter = 0x80000000; pamu_reg_off < size;
 	     pamu_reg_off += PAMU_OFFSET, pamu_counter >>= 1) {
 
-		pamu_reg_base = (unsigned long) pamu_regs + pamu_reg_off;
-		setup_one_pamu(pamu_reg_base, pamu_reg_off, ppaact_phys,
-				 spaact_phys, omt_phys);
+		pamu_reg_base = pamu_regs + pamu_reg_off;
+		setup_one_pamu(pamu_reg_base, ppaact_phys, spaact_phys,
+			       omt_phys);
 		/* Disable PAMU bypass for this PAMU */
 		pamubypenr &= ~pamu_counter;
 	}
@@ -1377,12 +1370,7 @@ error_genpool:
 
 error:
 	if (irq != NO_IRQ)
-		free_irq(irq, data);
-
-	if (data) {
-		memset(data, 0, sizeof(struct pamu_isr_data));
-		kfree(data);
-	}
+		free_irq(irq, &pamu_info_data);
 
 	if (pamu_regs)
 		iounmap(pamu_regs);
@@ -1397,6 +1385,59 @@ error:
 
 	return ret;
 }
+
+#ifdef CONFIG_SUSPEND
+static int iommu_suspend(void)
+{
+	int i;
+
+	for (i = 0; i < pamu_info_data.count; i++) {
+		u32 val;
+		void __iomem *p;
+
+		p = pamu_info_data.pamu_reg_base + i * PAMU_OFFSET;
+		val = in_be32((u32 *)(p + PAMU_PICS));
+		/* Disable access violation interrupts */
+		out_be32((u32 *)(p + PAMU_PICS),
+				 val & ~PAMU_ACCESS_VIOLATION_ENABLE);
+
+		/*
+		 * Disable PAMU authorization and transalation.
+		 * PAMU would be enabled once system resumes.
+		 */
+		out_be32((u32 *) (p + PAMU_PC), 0);
+	}
+
+	return 0;
+}
+
+static void iommu_resume(void)
+{
+	int i;
+
+	for (i = 0; i < pamu_info_data.count; i++) {
+		void __iomem *p;
+
+		p = pamu_info_data.pamu_reg_base + i * PAMU_OFFSET;
+		/* setup PAMU tables for authorization and translation */
+		setup_one_pamu(p, virt_to_phys(ppaact), virt_to_phys(spaact),
+				virt_to_phys(omt));
+	}
+}
+
+static struct syscore_ops iommu_syscore_ops = {
+	.resume		= iommu_resume,
+	.suspend	= iommu_suspend,
+};
+
+static void __init init_iommu_pm_ops(void)
+{
+	register_syscore_ops(&iommu_syscore_ops);
+}
+
+#else
+static inline void init_iommu_pm_ops(void) {}
+#endif	/* CONFIG_SUSPEND */
 
 static const struct of_device_id fsl_of_pamu_ids[] = {
 	{
@@ -1472,6 +1513,9 @@ static __init int fsl_pamu_init(void)
 		       np->full_name, ret);
 		goto error_device_add;
 	}
+
+	/* setup power management operations */
+	init_iommu_pm_ops();
 
 	return 0;
 
