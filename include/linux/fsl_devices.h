@@ -26,6 +26,7 @@
 #define FSL_USB_VER_2_4		3
 
 #include <linux/types.h>
+#include <linux/suspend.h>
 
 /*
  * Some conventions on how we handle peripherals on Freescale chips
@@ -146,4 +147,6 @@ int fsl_deep_sleep(void);
 static inline int fsl_deep_sleep(void) { return 0; }
 #endif
 
+extern void set_pm_suspend_state(suspend_state_t state);
+extern suspend_state_t pm_suspend_state(void);
 #endif /* _FSL_DEVICE_H_ */
