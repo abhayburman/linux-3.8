@@ -22,6 +22,7 @@
 #else
 #define debug(format, arg...)
 #endif
+static struct list_head pkc_list;
 
 /* Internal context of CAAM driver. May carry session specific
      PKC information like key */
@@ -1332,23 +1333,19 @@ static struct caam_pkc_template driver_pkc[] = {
 
 struct caam_pkc_alg {
 	struct list_head entry;
-	struct device *ctrldev;
 	struct crypto_alg crypto_alg;
 };
 
 /* Per session pkc's driver context creation function */
 static int caam_pkc_cra_init(struct crypto_tfm *tfm)
 {
-	struct crypto_alg *alg = tfm->__crt_alg;
-	struct caam_pkc_alg *caam_alg =
-	    container_of(alg, struct caam_pkc_alg, crypto_alg);
 	struct caam_pkc_context_s *ctx = crypto_tfm_ctx(tfm);
-	struct caam_drv_private *priv = dev_get_drvdata(caam_alg->ctrldev);
-	struct platform_device *pdev;
-	int tgt_jr = atomic_inc_return(&priv->tfm_count);
 
-	pdev = priv->jrpdev[(tgt_jr / 2) % priv->total_jobrs];
-	ctx->dev = &pdev->dev;
+	ctx->dev = caam_jr_alloc();
+	if (IS_ERR(ctx->dev)) {
+		pr_err("Job Ring Device allocation for transform failed\n");
+		return PTR_ERR(ctx->dev);
+	}
 
 	return 0;
 }
@@ -1356,11 +1353,11 @@ static int caam_pkc_cra_init(struct crypto_tfm *tfm)
 /* Per session pkc's driver context cleanup function */
 static void caam_pkc_cra_exit(struct crypto_tfm *tfm)
 {
-	/* Nothing to cleanup in private context */
+	struct caam_pkc_context_s *ctx = crypto_tfm_ctx(tfm);
+	caam_jr_free(ctx->dev);
 }
 
-static struct caam_pkc_alg *caam_pkc_alloc(struct device *ctrldev,
-					   struct caam_pkc_template *template,
+static struct caam_pkc_alg *caam_pkc_alloc(struct caam_pkc_template *template,
 					   bool keyed)
 {
 	struct caam_pkc_alg *t_alg;
@@ -1368,7 +1365,7 @@ static struct caam_pkc_alg *caam_pkc_alloc(struct device *ctrldev,
 
 	t_alg = kzalloc(sizeof(struct caam_pkc_alg), GFP_KERNEL);
 	if (!t_alg) {
-		dev_err(ctrldev, "failed to allocate t_alg\n");
+		pr_err("failed to allocate t_alg\n");
 		return NULL;
 	}
 
@@ -1394,7 +1391,6 @@ static struct caam_pkc_alg *caam_pkc_alloc(struct device *ctrldev,
 	alg->cra_alignmask = 0;
 	alg->cra_flags = CRYPTO_ALG_ASYNC | template->type;
 	alg->cra_type = &crypto_pkc_type;
-	t_alg->ctrldev = ctrldev;
 
 	return t_alg;
 }
@@ -1403,9 +1399,6 @@ static struct caam_pkc_alg *caam_pkc_alloc(struct device *ctrldev,
 static int __init caam_pkc_init(void)
 {
 	struct device_node *dev_node;
-	struct platform_device *pdev;
-	struct device *ctrldev;
-	struct caam_drv_private *priv;
 	int i = 0, err = 0;
 
 	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
@@ -1418,15 +1411,7 @@ static int __init caam_pkc_init(void)
 	if (of_device_is_compatible(dev_node,"fsl,sec-v6.0"))
 		return -ENODEV;
 
-	pdev = of_find_device_by_node(dev_node);
-	if (!pdev)
-		return -ENODEV;
-
-	ctrldev = &pdev->dev;
-	priv = dev_get_drvdata(ctrldev);
-	of_node_put(dev_node);
-
-	INIT_LIST_HEAD(&priv->pkc_list);
+	INIT_LIST_HEAD(&pkc_list);
 
 	/* register crypto algorithms the device supports */
 	for (i = 0; i < ARRAY_SIZE(driver_pkc); i++) {
@@ -1434,60 +1419,38 @@ static int __init caam_pkc_init(void)
 		struct caam_pkc_alg *t_alg;
 
 		/* register pkc algorithm */
-		t_alg = caam_pkc_alloc(ctrldev, &driver_pkc[i], true);
+		t_alg = caam_pkc_alloc(&driver_pkc[i], true);
 		if (IS_ERR(t_alg)) {
 			err = PTR_ERR(t_alg);
-			dev_warn(ctrldev, "%s alg allocation failed\n",
-				 driver_pkc[i].driver_name);
+			pr_warn("%s alg allocation failed\n",
+				driver_pkc[i].driver_name);
 			continue;
 		}
 
 		err = crypto_register_alg(&t_alg->crypto_alg);
 		if (err) {
-			dev_warn(ctrldev, "%s alg registration failed\n",
-				 t_alg->crypto_alg.cra_driver_name);
+			pr_warn("%s alg registration failed\n",
+				t_alg->crypto_alg.cra_driver_name);
 			kfree(t_alg);
 		} else {
-			list_add_tail(&t_alg->entry, &priv->pkc_list);
+			list_add_tail(&t_alg->entry, &pkc_list);
 		}
 	}
 
-	if (!list_empty(&priv->pkc_list))
-		dev_info(ctrldev, "%s algorithms registered in /proc/crypto\n",
-			 (char *)of_get_property(dev_node, "compatible", NULL));
+	if (!list_empty(&pkc_list))
+		pr_info("%s algorithms registered in /proc/crypto\n",
+			(char *)of_get_property(dev_node, "compatible", NULL));
 
 	return err;
 }
 
 static void __exit caam_pkc_exit(void)
 {
-	struct device_node *dev_node;
-	struct platform_device *pdev;
-	struct device *ctrldev;
-	struct caam_drv_private *priv;
 	struct caam_pkc_alg *t_alg, *n;
-
-	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
-
-	if (!dev_node) {
-		dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec4.0");
-		if (!dev_node)
-			return;
-	}
-
-	pdev = of_find_device_by_node(dev_node);
-
-	if (!pdev)
+	if (!pkc_list.next)
 		return;
 
-	ctrldev = &pdev->dev;
-	of_node_put(dev_node);
-	priv = dev_get_drvdata(ctrldev);
-
-	if (!priv->pkc_list.next)
-		return;
-
-	list_for_each_entry_safe(t_alg, n, &priv->pkc_list, entry) {
+	list_for_each_entry_safe(t_alg, n, &pkc_list, entry) {
 		crypto_unregister_alg(&t_alg->crypto_alg);
 		list_del(&t_alg->entry);
 		kfree(t_alg);

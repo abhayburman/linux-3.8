@@ -53,6 +53,7 @@
 #include "error.h"
 #include "sg_sw_sec4.h"
 #include "key_gen.h"
+#include "ctrl.h"
 
 /*
  * crypto alg
@@ -89,6 +90,7 @@
 #else
 #define debug(format, arg...)
 #endif
+static struct list_head alg_list;
 
 /* Set DK bit in class 1 operation if shared */
 static inline void append_dec_op1(u32 *desc, u32 type)
@@ -2763,7 +2765,6 @@ static struct caam_alg_template driver_algs[] = {
 
 struct caam_crypto_alg {
 	struct list_head entry;
-	struct device *ctrldev;
 	int class1_alg_type;
 	int class2_alg_type;
 	int alg_op;
@@ -2776,9 +2777,6 @@ static int caam_cra_init(struct crypto_tfm *tfm)
 	struct caam_crypto_alg *caam_alg =
 		 container_of(alg, struct caam_crypto_alg, crypto_alg);
 	struct caam_ctx *ctx = crypto_tfm_ctx(tfm);
-	struct caam_drv_private *priv = dev_get_drvdata(caam_alg->ctrldev);
-	struct platform_device *pdev;
-	int tgt_jr = atomic_inc_return(&priv->tfm_count);
 	/* Digest sizes for MD5, SHA1, SHA-224, SHA-256, SHA-384, SHA-512 */
 	static const u8 digest_size[] = {
 		MD5_DIGEST_SIZE,
@@ -2789,12 +2787,11 @@ static int caam_cra_init(struct crypto_tfm *tfm)
 		SHA512_DIGEST_SIZE
 	};
 
-	/*
-	 * distribute tfms across job rings to ensure in-order
-	 * crypto request processing per tfm
-	 */
-	pdev = priv->jrpdev[(tgt_jr / 2) % priv->total_jobrs];
-	ctx->jrdev = &pdev->dev;
+	ctx->jrdev = caam_jr_alloc();
+	if (IS_ERR(ctx->jrdev)) {
+		pr_err("Job Ring Device allocation for transform failed\n");
+		return PTR_ERR(ctx->jrdev);
+	}
 
 	/* copy descriptor header template value */
 	ctx->class1_alg_type = OP_TYPE_CLASS1_ALG | caam_alg->class1_alg_type;
@@ -2831,44 +2828,26 @@ static void caam_cra_exit(struct crypto_tfm *tfm)
 		dma_unmap_single(ctx->jrdev, ctx->sh_desc_givenc_dma,
 				 desc_bytes(ctx->sh_desc_givenc),
 				 DMA_TO_DEVICE);
+
+	caam_jr_free(ctx->jrdev);
 }
 
 static void __exit caam_algapi_exit(void)
 {
 
-	struct device_node *dev_node;
-	struct platform_device *pdev;
-	struct device *ctrldev;
-	struct caam_drv_private *priv;
 	struct caam_crypto_alg *t_alg, *n;
 
-	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
-	if (!dev_node) {
-		dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec4.0");
-		if (!dev_node)
-			return;
-	}
-
-	pdev = of_find_device_by_node(dev_node);
-	if (!pdev)
+	if (!alg_list.next)
 		return;
 
-	ctrldev = &pdev->dev;
-	of_node_put(dev_node);
-	priv = dev_get_drvdata(ctrldev);
-
-	if (!priv->alg_list.next)
-		return;
-
-	list_for_each_entry_safe(t_alg, n, &priv->alg_list, entry) {
+	list_for_each_entry_safe(t_alg, n, &alg_list, entry) {
 		crypto_unregister_alg(&t_alg->crypto_alg);
 		list_del(&t_alg->entry);
 		kfree(t_alg);
 	}
 }
 
-static struct caam_crypto_alg *caam_alg_alloc(struct device *ctrldev,
-					      struct caam_alg_template
+static struct caam_crypto_alg *caam_alg_alloc(struct caam_alg_template
 					      *template)
 {
 	struct caam_crypto_alg *t_alg;
@@ -2876,7 +2855,7 @@ static struct caam_crypto_alg *caam_alg_alloc(struct device *ctrldev,
 
 	t_alg = kzalloc(sizeof(struct caam_crypto_alg), GFP_KERNEL);
 	if (!t_alg) {
-		dev_err(ctrldev, "failed to allocate t_alg\n");
+		pr_err("failed to allocate t_alg\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -2908,18 +2887,15 @@ static struct caam_crypto_alg *caam_alg_alloc(struct device *ctrldev,
 	t_alg->class1_alg_type = template->class1_alg_type;
 	t_alg->class2_alg_type = template->class2_alg_type;
 	t_alg->alg_op = template->alg_op;
-	t_alg->ctrldev = ctrldev;
 
 	return t_alg;
 }
 
 static int __init caam_algapi_init(void)
 {
-	struct device_node *dev_node;
-	struct platform_device *pdev;
-	struct device *ctrldev;
-	struct caam_drv_private *priv;
 	int i = 0, err = 0;
+	struct device_node *dev_node;
+	int era;
 
 	dev_node = of_find_compatible_node(NULL, NULL, "fsl,sec-v4.0");
 	if (!dev_node) {
@@ -2931,49 +2907,40 @@ static int __init caam_algapi_init(void)
 	if (of_device_is_compatible(dev_node,"fsl,sec-v6.0"))
 		return -ENODEV;
 
-	pdev = of_find_device_by_node(dev_node);
-	if (!pdev)
-		return -ENODEV;
+	INIT_LIST_HEAD(&alg_list);
 
-	ctrldev = &pdev->dev;
-	priv = dev_get_drvdata(ctrldev);
-	of_node_put(dev_node);
-
-	INIT_LIST_HEAD(&priv->alg_list);
-
-	atomic_set(&priv->tfm_count, -1);
+	era = caam_get_era();
 
 	/* register crypto algorithms the device supports */
 	for (i = 0; i < ARRAY_SIZE(driver_algs); i++) {
 		struct caam_crypto_alg *t_alg;
 
 		/* check if h/w supports alg */
-		if (priv->era > 0 && priv->era < driver_algs[i].min_era) {
-			dev_warn(ctrldev, "%s needs Era %d or higher but SEC is Era %d, skipping it\n",
-				 driver_algs[i].driver_name,
-				 driver_algs[i].min_era, priv->era);
+		if (era > 0 && era < driver_algs[i].min_era) {
+			pr_warn("%s needs Era %d or higher but SEC is Era %d, skipping it\n",
+				driver_algs[i].driver_name,
+				 driver_algs[i].min_era, era);
 			continue;
 		}
 
-		t_alg = caam_alg_alloc(ctrldev, &driver_algs[i]);
+		t_alg = caam_alg_alloc(&driver_algs[i]);
 		if (IS_ERR(t_alg)) {
 			err = PTR_ERR(t_alg);
-			dev_warn(ctrldev, "%s alg allocation failed\n",
-				 driver_algs[i].driver_name);
+			pr_warn("%s alg allocation failed\n",
+				driver_algs[i].driver_name);
 			continue;
 		}
 
 		err = crypto_register_alg(&t_alg->crypto_alg);
 		if (err) {
-			dev_warn(ctrldev, "%s alg registration failed\n",
+			pr_warn("%s alg registration failed\n",
 				t_alg->crypto_alg.cra_driver_name);
 			kfree(t_alg);
 		} else
-			list_add_tail(&t_alg->entry, &priv->alg_list);
+			list_add_tail(&t_alg->entry, &alg_list);
 	}
-	if (!list_empty(&priv->alg_list))
-		dev_info(ctrldev, "%s algorithms registered in /proc/crypto\n",
-			 (char *)of_get_property(dev_node, "compatible", NULL));
+	if (!list_empty(&alg_list))
+		pr_info("caam algorithms registered in /proc/crypto\n");
 
 	return err;
 }

@@ -17,6 +17,8 @@
 #include "qi.h"
 #endif
 
+int era;
+
 /*
  * Descriptor to instantiate RNG State Handle 0 in normal mode and
  * load the JDKEK, TDKEK and TDSK registers
@@ -359,9 +361,14 @@ static void kick_trng(struct platform_device *pdev, int ent_delay)
  * caam_get_era() - Return the ERA of the SEC on SoC, based
  * on the SEC_VID register.
  * Returns the ERA number (1..4) or -ENOTSUPP if the ERA is unknown.
- * @caam_id - the value of the SEC_VID register
  **/
-int caam_get_era(u64 caam_id)
+int caam_get_era(void)
+{
+	return era;
+}
+EXPORT_SYMBOL(caam_get_era);
+
+int find_era(u64 caam_id)
 {
 	struct sec_vid *sec_vid = (struct sec_vid *)&caam_id;
 	static const struct {
@@ -386,7 +393,6 @@ int caam_get_era(u64 caam_id)
 
 	return -ENOTSUPP;
 }
-EXPORT_SYMBOL(caam_get_era);
 
 /* Probe routine for CAAM top (controller) level */
 static int caam_probe(struct platform_device *pdev)
@@ -576,11 +582,11 @@ static int caam_probe(struct platform_device *pdev)
 	/* NOTE: RTIC detection ought to go here, around Si time */
 
 	caam_id = rd_reg64(&topregs->ctrl.perfmon.caam_id);
-	ctrlpriv->era = caam_get_era(caam_id);
+	era = find_era(caam_id);
 
 	/* Report "alive" for developer to see */
 	dev_info(dev, "device ID = 0x%016llx (Era %d)\n", caam_id,
-		 ctrlpriv->era);
+		 era);
 	dev_info(dev, "job rings = %d, qi = %d\n",
 		 ctrlpriv->total_jobrs, ctrlpriv->qi_present);
 
