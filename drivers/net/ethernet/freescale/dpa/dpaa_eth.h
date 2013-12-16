@@ -395,8 +395,6 @@ struct dpa_priv_s {
 		 */
 		u32 cgr_congested_count;
 	} cgr_data;
-	/* Use a per-port CGR for ingress traffic. */
-	struct qman_cgr ingress_cgr;
 
 #ifdef CONFIG_FSL_DPAA_TS
 	bool ts_tx_en; /* Tx timestamping enabled */

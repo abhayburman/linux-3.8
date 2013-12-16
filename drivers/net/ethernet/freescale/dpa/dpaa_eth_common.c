@@ -991,6 +991,25 @@ static void dpaa_eth_cgscn(struct qman_portal *qm, struct qman_cgr *cgr,
 	}
 }
 
+/* Size in bytes of the Congestion State notification threshold on 10G ports */
+#define DPA_CS_THRESHOLD_10G	0x10000000
+/* Size in bytes of the Congestion State notification threshold on 1G ports.
+
+ * The 1G dTSECs can quite easily be flooded by cores doing Tx in a tight loop
+ * (e.g. by sending UDP datagrams at "while(1) speed"),
+ * and the larger the frame size, the more acute the problem.
+ *
+ * So we have to find a balance between these factors:
+ *	- avoiding the device staying congested for a prolonged time (risking
+ *	  the netdev watchdog to fire - see also the tx_timeout module param);
+ *	- affecting performance of protocols such as TCP, which otherwise
+ *	  behave well under the congestion notification mechanism;
+ *	- preventing the Tx cores from tightly-looping (as if the congestion
+ *	  threshold was too low to be effective);
+ *	- running out of memory if the CS threshold is set too high.
+ */
+#define DPA_CS_THRESHOLD_1G	0x06000000
+
 int dpaa_eth_cgr_init(struct dpa_priv_s *priv)
 {
 	struct qm_mcc_initcgr initcgr;
@@ -1014,9 +1033,9 @@ int dpaa_eth_cgr_init(struct dpa_priv_s *priv)
 	 * In such cases, we ought to reconfigure the threshold, too.
 	 */
 	if (priv->mac_dev->if_support & SUPPORTED_10000baseT_Full)
-		cs_th = CONFIG_FSL_DPAA_CS_THRESHOLD_10G;
+		cs_th = DPA_CS_THRESHOLD_10G;
 	else
-		cs_th = CONFIG_FSL_DPAA_CS_THRESHOLD_1G;
+		cs_th = DPA_CS_THRESHOLD_1G;
 	qm_cgr_cs_thres_set64(&initcgr.cgr.cs_thres, cs_th, 1);
 
 	initcgr.we_mask |= QM_CGR_WE_CSTD_EN;
@@ -1205,7 +1224,10 @@ int dpa_fq_init(struct dpa_fq *dpa_fq, bool td_enable)
 		/* Try to reduce the number of portal interrupts for
 		 * Tx Confirmation FQs.
 		 */
-		if (dpa_fq->fq_type == FQ_TYPE_TX_CONFIRM)
+		if (dpa_fq->fq_type == FQ_TYPE_TX_CONF_MQ)
+			/* This is messy, because HOLDACTIVE invalidates the
+			 * AVOIDBLOCK bit set below for every ingress FQ.
+			 */
 			initfq.fqd.fq_ctrl |= QM_FQCTRL_HOLDACTIVE;
 
 		/* FQ placement */
@@ -1282,22 +1304,6 @@ int dpa_fq_init(struct dpa_fq *dpa_fq, bool td_enable)
 			initfq.fqd.context_b = 0;
 		}
 #endif
-
-		/* Put all ingress queues in our "ingress CGR". */
-		if (dpa_fq->fq_type == FQ_TYPE_RX_DEFAULT ||
-				dpa_fq->fq_type == FQ_TYPE_RX_ERROR ||
-				dpa_fq->fq_type == FQ_TYPE_RX_PCD) {
-			initfq.we_mask |= QM_INITFQ_WE_CGID;
-			initfq.fqd.fq_ctrl |= QM_FQCTRL_CGE;
-			initfq.fqd.cgid = priv->ingress_cgr.cgrid;
-			/* Set a fixed overhead accounting, just like for the
-			 * egress CGR.
-			 */
-			initfq.we_mask |= QM_INITFQ_WE_OAC;
-			initfq.fqd.oac_init.oac = QM_OAC_CG;
-			initfq.fqd.oac_init.oal = min(sizeof(struct sk_buff) +
-				priv->tx_headroom, (size_t)FSL_QMAN_MAX_OAL);
-		}
 
 		/* Initialization common to all ingress queues */
 		if (dpa_fq->flags & QMAN_FQ_FLAG_NO_ENQUEUE) {

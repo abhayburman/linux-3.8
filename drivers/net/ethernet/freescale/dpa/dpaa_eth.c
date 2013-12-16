@@ -674,51 +674,6 @@ dpa_priv_bp_probe(struct device *dev)
 	return dpa_bp;
 }
 
-/* Place all ingress FQs (Rx Default, Rx Error, PCD FQs) in a dedicated CGR.
- * We won't be sending congestion notifications to FMan; for now, we just use
- * this CGR to generate enqueue rejections to FMan in order to drop the frames
- * before they reach our ingress queues and eat up memory.
- */
-#define DPA_INGRESS_CS_THRESHOLD	0x10000000
-static int dpaa_eth_priv_ingress_cgr_init(struct dpa_priv_s *priv)
-{
-	struct qm_mcc_initcgr initcgr;
-	u32 cs_th;
-	int err;
-
-	err = qman_alloc_cgrid(&priv->ingress_cgr.cgrid);
-	if (err < 0) {
-		pr_err("Error %d allocating CGR ID\n", err);
-		goto out_error;
-	}
-
-	/* Enable CS TD, but disable Congestion State Change Notifications. */
-	initcgr.we_mask = QM_CGR_WE_CS_THRES;
-	initcgr.cgr.cscn_en = QM_CGR_EN;
-	cs_th = CONFIG_FSL_DPAA_INGRESS_CS_THRESHOLD;
-	qm_cgr_cs_thres_set64(&initcgr.cgr.cs_thres, cs_th, 1);
-
-	initcgr.we_mask |= QM_CGR_WE_CSTD_EN;
-	initcgr.cgr.cstd_en = QM_CGR_EN;
-
-	/* This is actually a hack, because this CGR will be associated with
-	 * our affine SWP. However, we'll place our ingress FQs in it.
-	 */
-	err = qman_create_cgr(&priv->ingress_cgr, QMAN_CGR_FLAG_USE_INIT,
-		&initcgr);
-	if (err < 0) {
-		pr_err("Error %d creating ingress CGR with ID %d\n", err,
-			priv->ingress_cgr.cgrid);
-		qman_release_cgrid(priv->ingress_cgr.cgrid);
-		goto out_error;
-	}
-	pr_debug("Created ingress CGR %d for netdev with hwaddr %pM\n",
-		 priv->ingress_cgr.cgrid, priv->mac_dev->addr);
-
-out_error:
-	return err;
-}
-
 static int dpa_priv_bp_create(struct net_device *net_dev, struct dpa_bp *dpa_bp,
 		size_t count)
 {
@@ -823,15 +778,6 @@ dpaa_eth_priv_probe(struct platform_device *_of_dev)
 	 */
 	dpa_bp->size = dpa_bp_size(&buf_layout[RX]);
 
-#ifdef CONFIG_FSL_DPAA_ETH_JUMBO_FRAME
-	/* We only want to use jumbo frame optimization if we actually have
-	 * L2 MAX FRM set for jumbo frames as well.
-	 */
-	if (fm_get_max_frm() < 9600)
-		dev_warn(dev,
-			"Invalid configuration: if jumbo frames support is on, FSL_FM_MAX_FRAME_SIZE should be set to 9600\n");
-#endif
-
 	INIT_LIST_HEAD(&priv->dpa_fq_list);
 
 	memset(&port_fqs, 0, sizeof(port_fqs));
@@ -881,12 +827,7 @@ dpaa_eth_priv_probe(struct platform_device *_of_dev)
 	err = dpaa_eth_cgr_init(priv);
 	if (err < 0) {
 		dev_err(dev, "Error initializing CGR\n");
-		goto tx_cgr_init_failed;
-	}
-	err = dpaa_eth_priv_ingress_cgr_init(priv);
-	if (err < 0) {
-		dev_err(dev, "Error initializing ingress CGR\n");
-		goto rx_cgr_init_failed;
+		goto cgr_init_failed;
 	}
 
 	/* Add the FQs to the interface, and make them active */
@@ -933,29 +874,32 @@ dpaa_eth_priv_probe(struct platform_device *_of_dev)
 
 	return 0;
 
-netdev_init_failed:
 napi_add_failed:
-	dpa_private_napi_del(net_dev);
-	free_percpu(priv->percpu_priv);
+netdev_init_failed:
+	if (net_dev) {
+		dpa_private_napi_del(net_dev);
+		free_percpu(priv->percpu_priv);
+	}
 alloc_percpu_failed:
-	dpa_fq_free(dev, &priv->dpa_fq_list);
 fq_alloc_failed:
-	qman_release_cgrid(priv->ingress_cgr.cgrid);
-	qman_delete_cgr(&priv->ingress_cgr);
-rx_cgr_init_failed:
-	qman_release_cgrid(priv->cgr_data.cgr.cgrid);
-	qman_delete_cgr(&priv->cgr_data.cgr);
-tx_cgr_init_failed:
+	if (net_dev) {
+		dpa_fq_free(dev, &priv->dpa_fq_list);
+		qman_release_cgrid(priv->cgr_data.cgr.cgrid);
+		qman_delete_cgr(&priv->cgr_data.cgr);
+	}
+cgr_init_failed:
 add_channel_failed:
 get_channel_failed:
-	dpa_bp_free(priv, priv->dpa_bp);
+	if (net_dev)
+		dpa_bp_free(priv, priv->dpa_bp);
 bp_create_failed:
 fq_probe_failed:
 	devm_kfree(dev, buf_layout);
 alloc_failed:
 mac_probe_failed:
 	dev_set_drvdata(dev, NULL);
-	free_netdev(net_dev);
+	if (net_dev)
+		free_netdev(net_dev);
 alloc_etherdev_mq_failed:
 	if (atomic_read(&dpa_bp->refs) == 0)
 		devm_kfree(dev, dpa_bp);
