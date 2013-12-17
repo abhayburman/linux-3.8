@@ -93,13 +93,20 @@ static irqreturn_t usdpaa_irq_handler(int irq, void *_ctx)
 {
 	unsigned long flags;
 	struct usdpaa_irq_ctx *ctx = _ctx;
+	/* Set the inhibit register.  This will be reenabled
+	 * once the USDPAA code handles the IRQ
+	 * NOTE: This is done first because when Linux RT extensions
+	 * are enabled this IRQ call can be preempted during the
+	 * wake_up_all() call which may trigger the user space code
+	 * it handle and reenable this interrupt. By inhibiting the
+	 * IRQ before waking up anyone waiting we avoid this issue.
+	 */
+	out_be32(ctx->inhibit_addr, 0x1);
+
 	spin_lock_irqsave(&ctx->lock, flags);
 	++ctx->irq_count;
 	spin_unlock_irqrestore(&ctx->lock, flags);
 	wake_up_all(&ctx->wait_queue);
-	/* Set the inhibit register.  This will be reenabled
-	   once the USDPAA code handles the IRQ */
-	out_be32(ctx->inhibit_addr, 0x1);
 	return IRQ_HANDLED;
 }
 
