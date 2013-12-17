@@ -272,7 +272,6 @@ static int caam_remove(struct platform_device *pdev)
 {
 	struct device *ctrldev;
 	struct caam_drv_private *ctrlpriv;
-	struct caam_drv_private_jr *jrpriv;
 	struct caam_full __iomem *topregs;
 	int ring, ret = 0;
 
@@ -280,18 +279,16 @@ static int caam_remove(struct platform_device *pdev)
 	ctrlpriv = dev_get_drvdata(ctrldev);
 	topregs = (struct caam_full __iomem *)ctrlpriv->ctrl;
 
-	/* shut down JobRs */
+	/* Remove platform devices for JobRs */
 	for (ring = 0; ring < ctrlpriv->total_jobrs; ring++) {
-		ret |= caam_jr_shutdown(ctrlpriv->jrdev[ring]);
-		jrpriv = dev_get_drvdata(ctrlpriv->jrdev[ring]);
-		irq_dispose_mapping(jrpriv->irq);
+		if (ctrlpriv->jrpdev[ring])
+			of_device_unregister(ctrlpriv->jrpdev[ring]);
 	}
 
 #ifdef CONFIG_FSL_QMAN
 	if (ctrlpriv->qidev)
 		caam_qi_shutdown(ctrlpriv->qidev);
 #endif
-
 	/* De-initialize RNG state handles initialized by this driver. */
 	if (ctrlpriv->rng4_sh_init)
 		deinstantiate_rng(ctrldev, ctrlpriv->rng4_sh_init);
@@ -304,7 +301,7 @@ static int caam_remove(struct platform_device *pdev)
 	/* Unmap controller region */
 	iounmap(&topregs->ctrl);
 
-	kfree(ctrlpriv->jrdev);
+	kfree(ctrlpriv->jrpdev);
 	kfree(ctrlpriv);
 
 	return ret;
@@ -463,8 +460,9 @@ static int caam_probe(struct platform_device *pdev)
 			rspec++;
 	}
 
-	ctrlpriv->jrdev = kzalloc(sizeof(struct device *) * rspec, GFP_KERNEL);
-	if (ctrlpriv->jrdev == NULL) {
+	ctrlpriv->jrpdev = kzalloc(sizeof(struct platform_device *) * rspec,
+								GFP_KERNEL);
+	if (ctrlpriv->jrpdev == NULL) {
 		iounmap(&topregs->ctrl);
 		return -ENOMEM;
 	}
@@ -472,13 +470,24 @@ static int caam_probe(struct platform_device *pdev)
 	ring = 0;
 	ctrlpriv->total_jobrs = 0;
 	for_each_compatible_node(np, NULL, "fsl,sec-v4.0-job-ring") {
-		caam_jr_probe(pdev, np, ring);
+		ctrlpriv->jrpdev[ring] =
+				of_platform_device_create(np, NULL, dev);
+		if (!ctrlpriv->jrpdev[ring]) {
+			pr_warn("JR%d Platform device creation error\n", ring);
+			continue;
+		}
 		ctrlpriv->total_jobrs++;
 		ring++;
 	}
 	if (!ring) {
 		for_each_compatible_node(np, NULL, "fsl,sec4.0-job-ring") {
-			caam_jr_probe(pdev, np, ring);
+			ctrlpriv->jrpdev[ring] =
+				of_platform_device_create(np, NULL, dev);
+			if (!ctrlpriv->jrpdev[ring]) {
+				pr_warn("JR%d Platform device creation error\n",
+					ring);
+				continue;
+			}
 			ctrlpriv->total_jobrs++;
 			ring++;
 		}

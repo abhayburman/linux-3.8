@@ -2777,6 +2777,7 @@ static int caam_cra_init(struct crypto_tfm *tfm)
 		 container_of(alg, struct caam_crypto_alg, crypto_alg);
 	struct caam_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct caam_drv_private *priv = dev_get_drvdata(caam_alg->ctrldev);
+	struct platform_device *pdev;
 	int tgt_jr = atomic_inc_return(&priv->tfm_count);
 	/* Digest sizes for MD5, SHA1, SHA-224, SHA-256, SHA-384, SHA-512 */
 	static const u8 digest_size[] = {
@@ -2792,7 +2793,8 @@ static int caam_cra_init(struct crypto_tfm *tfm)
 	 * distribute tfms across job rings to ensure in-order
 	 * crypto request processing per tfm
 	 */
-	ctx->jrdev = priv->jrdev[(tgt_jr / 2) % priv->total_jobrs];
+	pdev = priv->jrpdev[(tgt_jr / 2) % priv->total_jobrs];
+	ctx->jrdev = &pdev->dev;
 
 	/* copy descriptor header template value */
 	ctx->class1_alg_type = OP_TYPE_CLASS1_ALG | caam_alg->class1_alg_type;

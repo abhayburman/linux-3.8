@@ -1344,9 +1344,12 @@ static int caam_pkc_cra_init(struct crypto_tfm *tfm)
 	    container_of(alg, struct caam_pkc_alg, crypto_alg);
 	struct caam_pkc_context_s *ctx = crypto_tfm_ctx(tfm);
 	struct caam_drv_private *priv = dev_get_drvdata(caam_alg->ctrldev);
+	struct platform_device *pdev;
 	int tgt_jr = atomic_inc_return(&priv->tfm_count);
 
-	ctx->dev = priv->jrdev[tgt_jr % priv->total_jobrs];
+	pdev = priv->jrpdev[(tgt_jr / 2) % priv->total_jobrs];
+	ctx->dev = &pdev->dev;
+
 	return 0;
 }
 
