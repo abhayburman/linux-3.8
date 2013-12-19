@@ -269,6 +269,10 @@ nothing_to_copy:
 	/* Kick decrementer */
 	li	r0,1
 	mtdec	r0
+
+	/* Invalidate all tlbs */
+	bl	_tlbil_all
+
 #endif
 	RESTORE_SPECIAL(XER)
 
