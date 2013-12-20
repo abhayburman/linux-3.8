@@ -1290,9 +1290,9 @@ static void fsl_pci_syscore_do_suspend(struct pci_controller *hose)
 
 	switch (pm_state) {
 	case PM_SUSPEND_STANDBY:
-		if (SVR_SOC_VER(svr) != SVR_T4240 && SVR_REV(svr) != 0x20)
-			break;
-		send_pme_turnoff_message(hose);
+		if ((SVR_SOC_VER(svr) == SVR_T4240 && SVR_REV(svr) == 0x20) ||
+		   (SVR_SOC_VER(svr) == SVR_T2080 && SVR_REV(svr) == 0x10))
+			send_pme_turnoff_message(hose);
 		break;
 	case PM_SUSPEND_MEM:
 		pcie_slot_flag = 0;
@@ -1325,15 +1325,20 @@ static void fsl_pci_syscore_do_resume(struct pci_controller *hose)
 
 	switch (pm_state) {
 	case PM_SUSPEND_STANDBY:
-		if (SVR_SOC_VER(svr) != SVR_T4240 && SVR_REV(svr) != 0x20)
-			break;
-		/* Send Exit L2 State Message */
-		setbits32(&pci->pex_pmcr, 0x2);
+		if ((SVR_SOC_VER(svr) == SVR_T4240 && SVR_REV(svr) == 0x20) ||
+		   (SVR_SOC_VER(svr) == SVR_T2080 && SVR_REV(svr) == 0x10)) {
+			/* Send Exit L2 State Message */
+			setbits32(&pci->pex_pmcr, 0x2);
 
-		/* PME Enable */
-		indirect_read_config(hose->bus, 0, PCI_FSL_PM_CTRL, 4, &pms);
-		pms |= 0x100;
-		indirect_write_config(hose->bus, 0, PCI_FSL_PM_CTRL, 4, pms);
+			/* PME Enable */
+			indirect_read_config(hose->bus, 0, PCI_FSL_PM_CTRL,
+						4, &pms);
+
+			pms |= 0x100;
+
+			indirect_write_config(hose->bus, 0, PCI_FSL_PM_CTRL,
+						4, pms);
+		}
 		break;
 	case PM_SUSPEND_MEM:
 		if (SVR_SOC_VER(svr) != SVR_P1022 || pcie_slot_flag)
