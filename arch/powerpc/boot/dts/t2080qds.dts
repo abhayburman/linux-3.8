@@ -63,12 +63,12 @@
 &soc {
 	fman0: fman@400000 {
 		fm1mac1: ethernet@e0000 { /* DTSEC1/10GEC3 */
-			phy-handle = <&sgmii_phy_s3_1e>;
+			phy-handle = <&phy_sgmii_s3_1e>;
 			phy-connection-type = "xgmii";
 		};
 
 		fm1mac2: ethernet@e2000 { /* DTSEC2/10GEC4 */
-			phy-handle = <&sgmii_phy_s3_1d>;
+			phy-handle = <&phy_sgmii_s3_1d>;
 			phy-connection-type = "xgmii";
 		};
 
@@ -83,12 +83,12 @@
 		};
 
 		fm1mac5: ethernet@e8000 {
-			phy-handle = <&sgmii_phy_s2_1e>;
+			phy-handle = <&phy_sgmii_s2_1e>;
 			phy-connection-type = "sgmii";
 		};
 
 		fm1mac6: ethernet@ea000 {
-			phy-handle = <&sgmii_phy_s2_1d>;
+			phy-handle = <&phy_sgmii_s2_1d>;
 			phy-connection-type = "sgmii";
 		};
 
@@ -98,7 +98,7 @@
 		};
 
 		fm1mac10: ethernet@f2000 { /* DTSEC10/10GEC2 */
-			phy-handle = <&sgmii_phy_s3_1f>;
+			phy-handle = <&phy_sgmii_s3_1f>;
 			phy-connection-type = "xgmii";
 		};
 
@@ -173,16 +173,16 @@
 			#size-cells = <0>;
 			/*status = "disabled";*/
 
-			sgmii_phy_s2_1c: ethernet-phy@1c {
+			phy_sgmii_s2_1c: ethernet-phy@1c {
 				reg = <0x1c>;
 			};
-			sgmii_phy_s2_1d: ethernet-phy@1d {
+			phy_sgmii_s2_1d: ethernet-phy@1d {
 				reg = <0x1d>;
 			};
-			sgmii_phy_s2_1e: ethernet-phy@1e {
+			phy_sgmii_s2_1e: ethernet-phy@1e {
 				reg = <0x1e>;
 			};
-			sgmii_phy_s2_1f: ethernet-phy@1f {
+			phy_sgmii_s2_1f: ethernet-phy@1f {
 				reg = <0x1f>;
 			};
 		};
@@ -194,16 +194,16 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			sgmii_phy_s3_1c: ethernet-phy@1c {
+			phy_sgmii_s3_1c: ethernet-phy@1c {
 				reg = <0x1c>;
 			};
-			sgmii_phy_s3_1d: ethernet-phy@1d {
+			phy_sgmii_s3_1d: ethernet-phy@1d {
 				reg = <0x1d>;
 			};
-			sgmii_phy_s3_1e: ethernet-phy@1e {
+			phy_sgmii_s3_1e: ethernet-phy@1e {
 				reg = <0x1e>;
 			};
-			sgmii_phy_s3_1f: ethernet-phy@1f {
+			phy_sgmii_s3_1f: ethernet-phy@1f {
 				reg = <0x1f>;
 			};
 		};
