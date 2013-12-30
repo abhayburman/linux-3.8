@@ -59,6 +59,8 @@
 
 /* Used for Spansion flashes only. */
 #define	OPCODE_BRWR		0x17	/* Bank register write */
+#define	OPCODE_DP		0xb9	/* Enter deep power down mode */
+#define	OPCODE_RES		0xab	/* Exit deep power down mode */
 
 /* Status Register bits. */
 #define	SR_WIP			1	/* Write in progress */
@@ -987,11 +989,46 @@ static int m25p_remove(struct spi_device *spi)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int m25p_suspend(struct device *dev)
+{
+	struct m25p *flash = dev_get_drvdata(dev);
+	int ret;
+
+	flash->command[0] = OPCODE_DP;
+	mutex_lock(&flash->lock);
+	/* Wait until finished previous write/erase command. */
+	ret = wait_till_ready(flash);
+	if (ret) {
+		mutex_unlock(&flash->lock);
+		return ret;
+	}
+	ret = spi_write(flash->spi, flash->command, 1);
+	mutex_unlock(&flash->lock);
+
+	return ret;
+}
+
+static int m25p_resume(struct device *dev)
+{
+	struct m25p *flash = dev_get_drvdata(dev);
+	int ret;
+
+	flash->command[0] = OPCODE_RES;
+
+	return spi_write(flash->spi, flash->command, 1);
+}
+#endif /* CONFIG_PM_SLEEP */
+
+static const struct dev_pm_ops m25p_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(m25p_suspend, m25p_resume)
+};
 
 static struct spi_driver m25p80_driver = {
 	.driver = {
 		.name	= "m25p80",
 		.owner	= THIS_MODULE,
+		.pm	= &m25p_pm,
 	},
 	.id_table	= m25p_ids,
 	.probe	= m25p_probe,
