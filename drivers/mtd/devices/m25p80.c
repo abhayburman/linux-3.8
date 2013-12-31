@@ -892,7 +892,8 @@ static int m25p_probe(struct spi_device *spi)
 	if (data && data->name)
 		flash->mtd.name = data->name;
 	else
-		flash->mtd.name = dev_name(&spi->dev);
+		flash->mtd.name = kasprintf(GFP_KERNEL, "%s.%d",
+				id->name, spi->chip_select);
 
 	flash->mtd.type = MTD_NORFLASH;
 	flash->mtd.writesize = 1;
