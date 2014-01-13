@@ -31,11 +31,11 @@
  */
 
 /**************************************************************************//**
- @File          dsar_common.h
+ @File          fm_port_dsar.h
 
  @Description   Deep Sleep Auto Response project - common module header file.               
 
-                Author - Itai Katz
+                Author - Eyal Harari
                 
  @Cautions      See the FMan Controller spec and design document for more information.
 *//***************************************************************************/
@@ -349,7 +349,74 @@ typedef _Packed struct
 	uint32_t solicitedAddr;                 /**< Solicited Node Multicast Group Address */
 } _PackedType t_DsarNdDescriptor;
 
+/**************************************************************************//**
+@Description    Deep Sleep Auto Response SNMP OIDs table entry
+                 
+*//***************************************************************************/
+typedef struct {
+    uint16_t oidSize;     /**< Size in octets of the OID. */
+    uint16_t resSize;     /**< Size in octets of the value that is attached to the OID. */
+    uint32_t p_Oid;       /**< Pointer to the OID. OID is encoded in BER but type and length are excluded. */
+    uint32_t resValOrPtr; /**< Value (for up to 4 octets) or pointer to the Value. Encoded in BER. */
+    uint32_t reserved;
+} t_OidsTblEntry;
 
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP IPv4 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
+*//***************************************************************************/
+typedef struct
+{
+    uint32_t ipv4Addr; /*!< 32 bit IPv4 Address. */
+    uint16_t vlanId;   /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+                       /*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+    uint16_t reserved;
+} t_DsarSnmpIpv4AddrTblEntry;
+
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP IPv6 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
+*//***************************************************************************/
+#pragma pack(push,1)
+typedef struct
+{
+    uint32_t ipv6Addr[4];  /*!< 4 * 32 bit IPv6 Address.                                                     */
+    uint16_t vlanId;       /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+                           /*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+    uint16_t reserved;
+} t_DsarSnmpIpv6AddrTblEntry;
+#pragma pack(pop)
+
+/**************************************************************************//**
+@Description    Deep Sleep Auto Response SNMP statistics table
+                 
+*//***************************************************************************/
+typedef struct {
+    uint32_t snmpErrCnt;  /**< Counts SNMP errors (wrong version, BER encoding, format). */
+    uint32_t snmpCommunityErrCnt; /**< Counts messages that were dropped due to insufficient permission. */
+    uint32_t snmpTotalDiscardCnt; /**< Counts any message that was dropped. */
+    uint32_t snmpGetReqCnt; /**< Counts the number of get-request messages */
+    uint32_t snmpGetNextReqCnt; /**< Counts the number of get-next-request messages */
+} t_snmpStats;
+
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP Descriptor
+
+*//***************************************************************************/
+typedef struct
+{
+    uint16_t control;                          /**< Control bits [0-15]. */
+    uint16_t maxSnmpMsgLength;                 /**< Maximal allowed SNMP message length. */
+    uint16_t numOfIpv4Addresses;               /**< Number of entries in IPv4 addresses table. */
+    uint16_t numOfIpv6Addresses;               /**< Number of entries in IPv6 addresses table. */
+    uint32_t p_Ipv4AddrTbl; /**< Pointer to IPv4 addresses table. */
+    uint32_t p_Ipv6AddrTbl; /**< Pointer to IPv6 addresses table. */
+    uint32_t p_RdOnlyCommunityStr;             /**< Pointer to the Read Only Community String. */
+    uint32_t p_RdWrCommunityStr;               /**< Pointer to the Read Write Community String. */
+    uint32_t p_OidsTbl;                 /**< Pointer to OIDs table. */
+    uint32_t oidsTblSize;                      /**< Number of entries in OIDs table. */
+    uint32_t p_Statistics;                 /**< Pointer to SNMP statistics table. */
+} t_DsarSnmpDescriptor;
 
 /**************************************************************************//**
 @Description    Deep Sleep Auto Response (Common) Statistics

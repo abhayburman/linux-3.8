@@ -564,7 +564,7 @@ static t_Error CheckNConfigFmPortAdvArgs (t_LnxWrpFmPortDev *p_LnxWrpFmPortDev)
 	&lenp);
     if (uint32_prop) {
     
-    	if (WARN_ON(lenp != sizeof(uint32_t)*6))
+    	if (WARN_ON(lenp != sizeof(uint32_t)*8))
             RETURN_ERROR(MINOR, E_INVALID_VALUE, NO_MSG);
     	if (WARN_ON(p_LnxWrpFmPortDev->settings.param.portType !=
 		e_FM_PORT_TYPE_RX) &&
@@ -583,11 +583,14 @@ static t_Error CheckNConfigFmPortAdvArgs (t_LnxWrpFmPortDev *p_LnxWrpFmPortDev)
 		(uint16_t)uint32_prop[2];
         p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_echo_ipv6_entries  =
 		(uint16_t)uint32_prop[3];
-        p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_snmp_entries       =
+        p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_snmp_ipv4_entries   =
 		(uint16_t)uint32_prop[4];
+        p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_snmp_ipv6_entries   =
+		(uint16_t)uint32_prop[5];
+        p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_snmp_oid_entries   =
+		(uint16_t)uint32_prop[6];
         p_LnxWrpFmPortDev->dsar_table_sizes.max_num_of_snmp_char          =
-	(uint16_t)uint32_prop[5];
-
+	(uint16_t)uint32_prop[7];
         uint32_prop = (uint32_t *)of_get_property(port_node,
 		"ar-filters-sizes", &lenp);
         if (uint32_prop) {

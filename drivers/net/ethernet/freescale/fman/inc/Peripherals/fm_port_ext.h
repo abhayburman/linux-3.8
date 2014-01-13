@@ -444,8 +444,10 @@ typedef struct t_FmPortDsarTablesSizes
     uint16_t   maxNumOfEchoIpv4Entries;
     uint16_t   maxNumOfNdpEntries;
     uint16_t   maxNumOfEchoIpv6Entries;
-    uint16_t   maxNumOfSnmpEntries;
-    uint16_t   maxNumOfSnmpChar; /* total amount of character needed for the snmp table */
+    uint16_t   maxNumOfSnmpIPV4Entries;
+    uint16_t   maxNumOfSnmpIPV6Entries;
+    uint16_t   maxNumOfSnmpOidEntries;
+    uint16_t   maxNumOfSnmpOidChar; /* total amount of character needed for the snmp table */
     
     uint16_t   maxNumOfIpProtFiltering;
     uint16_t   maxNumOfTcpPortFiltering;
@@ -1383,26 +1385,56 @@ typedef struct t_FmPortDsarEchoIpv6Info
 } t_FmPortDsarEchoIpv6Info;
 
 /**************************************************************************//**
- @Description   Structure for Deep Sleep Auto Response SNMP Entry
+@Description    Deep Sleep Auto Response SNMP OIDs table entry
+                 
 *//***************************************************************************/
-typedef struct t_FmPortDsarSnmpEntry
-{
-    uint16_t     oidSize;
-    uint8_t      *p_OidVal; /* only the oid string */
-    uint16_t     resSize;
-    uint8_t      *p_ResVal; /* resVal will be the entire reply, i.e. "Type|Length|Value" */
-} t_FmPortDsarSnmpEntry;
+typedef struct {
+    uint16_t oidSize;     /**< Size in octets of the OID. */
+    uint16_t resSize;     /**< Size in octets of the value that is attached to the OID. */
+    uint8_t *p_Oid;       /**< Pointer to the OID. OID is encoded in BER but type and length are excluded. */
+    uint64_t resValOrPtr; /**< Value (for up to 4 octets) or pointer to the Value. Encoded in BER. */
+} t_FmPortDsarOidsEntry;
 
 /**************************************************************************//**
- @Description   Structure for Deep Sleep Auto Response SNMP info
+ @Description   Deep Sleep Auto Response SNMP IPv4 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
 *//***************************************************************************/
-typedef struct t_FmPortDsarSnmpInfo
+typedef struct
 {
-    char                *p_CommunityReadWriteString;
-    char                *p_CommunityReadOnlyString;
-    bool                getallFlag;
-    uint8_t             tableSize;
-    t_FmPortDsarSnmpEntry  *p_AutoResTable;
+    uint32_t ipv4Addr; /*!< 32 bit IPv4 Address. */
+    bool      isVlan;
+    uint16_t vid;   /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+                       /*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+} t_FmPortDsarSnmpIpv4AddrTblEntry;
+
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP IPv6 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
+*//***************************************************************************/
+typedef struct
+{
+    uint32_t ipv6Addr[4];  /*!< 4 * 32 bit IPv6 Address.                                                     */
+    bool      isVlan;
+    uint16_t vid;       /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+                           /*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+} t_FmPortDsarSnmpIpv6AddrTblEntry;
+
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP Descriptor
+
+*//***************************************************************************/
+typedef struct
+{
+    uint16_t control;                          /**< Control bits [0-15]. */
+    uint16_t maxSnmpMsgLength;                 /**< Maximal allowed SNMP message length. */
+    uint16_t numOfIpv4Addresses;               /**< Number of entries in IPv4 addresses table. */
+    uint16_t numOfIpv6Addresses;               /**< Number of entries in IPv6 addresses table. */
+    t_FmPortDsarSnmpIpv4AddrTblEntry *p_Ipv4AddrTbl; /**< Pointer to IPv4 addresses table. */
+    t_FmPortDsarSnmpIpv6AddrTblEntry *p_Ipv6AddrTbl; /**< Pointer to IPv6 addresses table. */
+    uint8_t *p_RdOnlyCommunityStr;             /**< Pointer to the Read Only Community String. */
+    uint8_t *p_RdWrCommunityStr;               /**< Pointer to the Read Write Community String. */
+    t_FmPortDsarOidsEntry *p_OidsTbl;                 /**< Pointer to OIDs table. */
+    uint32_t oidsTblSize;                      /**< Number of entries in OIDs table. */
 } t_FmPortDsarSnmpInfo;
 
 /**************************************************************************//**

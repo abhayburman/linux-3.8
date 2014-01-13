@@ -5225,6 +5225,14 @@ static t_Error FmPortConfigAutoResForDeepSleepSupport1(t_FmPort *p_FmPort)
     size += sizeof(t_DsarNdDescriptor);
     size += sizeof(t_DsarIcmpV6BindingEntry) * params->maxNumOfNdpEntries;
     size += sizeof(t_DsarIcmpV6Statistics);
+    //SNMP
+    size = ROUND_UP(size,4);
+    size += sizeof(t_DsarSnmpDescriptor);
+    size += sizeof(t_DsarSnmpIpv4AddrTblEntry) * params->maxNumOfSnmpIPV4Entries;
+    size += sizeof(t_DsarSnmpIpv6AddrTblEntry) * params->maxNumOfSnmpIPV6Entries;
+    size += sizeof(t_OidsTblEntry) * params->maxNumOfSnmpOidEntries;
+    size += params->maxNumOfSnmpOidChar;
+    size += sizeof(t_DsarIcmpV6Statistics);
     //filters
     size = ROUND_UP(size,4);
     size += params->maxNumOfIpProtFiltering;
@@ -5266,7 +5274,7 @@ struct arOffsets
     uint32_t filtTcp;
 };
 
-static uint32_t AR_ComputeOffsets(struct arOffsets* of, struct t_FmPortDsarParams *params)
+static uint32_t AR_ComputeOffsets(struct arOffsets* of, struct t_FmPortDsarParams *params, t_FmPort *p_FmPort)
 {
     uint32_t size = sizeof(t_ArCommonDesc);
     // ARP
@@ -5306,6 +5314,18 @@ static uint32_t AR_ComputeOffsets(struct arOffsets* of, struct t_FmPortDsarParam
             (params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp);
         size += sizeof(t_DsarIcmpV6Statistics);
     }
+    // SNMP
+    if (params->p_AutoResSnmpInfo)
+    {
+        size = ROUND_UP(size,4);
+        of->snmp = size;
+        size += sizeof(t_DsarSnmpDescriptor);
+        size += sizeof(t_DsarSnmpIpv4AddrTblEntry) * params->p_AutoResSnmpInfo->numOfIpv4Addresses;
+        size += sizeof(t_DsarSnmpIpv6AddrTblEntry) * params->p_AutoResSnmpInfo->numOfIpv6Addresses;
+        size += sizeof(t_OidsTblEntry) * params->p_AutoResSnmpInfo->oidsTblSize;
+        size += p_FmPort->deepSleepVars.autoResMaxSizes->maxNumOfSnmpOidChar;
+        size += sizeof(t_DsarIcmpV6Statistics);
+    }
     //filters
     size = ROUND_UP(size,4);
     if (params->p_AutoResFilteringInfo)
@@ -5339,23 +5359,29 @@ static t_Error DsarCheckParams(t_FmPortDsarParams *params, t_FmPortDsarTablesSiz
     int i;
     
     // check table sizes
-    if (sizes->maxNumOfArpEntries < params->p_AutoResArpInfo->tableSize)
+    if (params->p_AutoResArpInfo && sizes->maxNumOfArpEntries < params->p_AutoResArpInfo->tableSize)
         RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Arp table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfEchoIpv4Entries < params->p_AutoResEchoIpv4Info->tableSize)
+    if (params->p_AutoResEchoIpv4Info && sizes->maxNumOfEchoIpv4Entries < params->p_AutoResEchoIpv4Info->tableSize)
         RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: EchoIpv4 table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfNdpEntries < params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp)
+    if (params->p_AutoResNdpInfo && sizes->maxNumOfNdpEntries < params->p_AutoResNdpInfo->tableSizeAssigned + params->p_AutoResNdpInfo->tableSizeTmp)
         RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: NDP table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfEchoIpv6Entries < params->p_AutoResEchoIpv6Info->tableSize)
+    if (params->p_AutoResEchoIpv6Info && sizes->maxNumOfEchoIpv6Entries < params->p_AutoResEchoIpv6Info->tableSize)
         RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: EchoIpv6 table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfSnmpEntries < params->p_AutoResSnmpInfo->tableSize)
-        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Snmp table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfIpProtFiltering < params->p_AutoResFilteringInfo->ipProtTableSize)
-        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: ip filter table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfTcpPortFiltering < params->p_AutoResFilteringInfo->udpPortsTableSize)
-        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: udp filter table size exceeds the configured maximum size."));
-    if (sizes->maxNumOfUdpPortFiltering < params->p_AutoResFilteringInfo->tcpPortsTableSize)
-        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: tcp filter table size exceeds the configured maximum size."));
-	
+    if (params->p_AutoResSnmpInfo && sizes->maxNumOfSnmpOidEntries < params->p_AutoResSnmpInfo->oidsTblSize)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Snmp Oid table size exceeds the configured maximum size."));
+    if (params->p_AutoResSnmpInfo && sizes->maxNumOfSnmpIPV4Entries < params->p_AutoResSnmpInfo->numOfIpv4Addresses)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Snmp ipv4 table size exceeds the configured maximum size."));
+    if (params->p_AutoResSnmpInfo && sizes->maxNumOfSnmpIPV6Entries < params->p_AutoResSnmpInfo->numOfIpv6Addresses)
+        RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: Snmp ipv6 table size exceeds the configured maximum size."));
+    if (params->p_AutoResFilteringInfo)
+    {
+        if (sizes->maxNumOfIpProtFiltering < params->p_AutoResFilteringInfo->ipProtTableSize)
+            RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: ip filter table size exceeds the configured maximum size."));
+        if (sizes->maxNumOfTcpPortFiltering < params->p_AutoResFilteringInfo->udpPortsTableSize)
+            RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: udp filter table size exceeds the configured maximum size."));
+        if (sizes->maxNumOfUdpPortFiltering < params->p_AutoResFilteringInfo->tcpPortsTableSize)
+            RETURN_ERROR(MAJOR, E_INVALID_VALUE, ("DSAR: tcp filter table size exceeds the configured maximum size."));
+    }
     // check only 1 MAC address is configured (this is what ucode currently supports)
     if (params->p_AutoResArpInfo && params->p_AutoResArpInfo->tableSize)
     {
@@ -5425,6 +5451,20 @@ static t_Error DsarCheckParams(t_FmPortDsarParams *params, t_FmPortDsarTablesSiz
     return E_OK;
 }
 
+static int GetBERLen(uint8_t* buf)
+{
+    if (*buf & 0x80)
+    {
+        if ((*buf & 0x7F) == 1)
+            return buf[1];
+        else
+            return *(uint16_t*)&buf[1]; // assuming max len is 2
+    }
+    else
+        return buf[0];
+}
+#define TOTAL_BER_LEN(len) (len < 128) ? len + 2 : len + 3
+
 t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 {
     int i,j;
@@ -5449,7 +5489,7 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
 	
     p_FmPort->deepSleepVars.autoResOffsets = XX_Malloc(sizeof(struct arOffsets));
     of = (struct arOffsets *)p_FmPort->deepSleepVars.autoResOffsets;
-    IOMemSet32(ArCommonDescPtr, 0, AR_ComputeOffsets(of, params));
+    IOMemSet32(ArCommonDescPtr, 0, AR_ComputeOffsets(of, params, p_FmPort));
 
     // common
     WRITE_UINT8(ArCommonDescPtr->arTxPort, p_FmPortTx->hardwarePortId);
@@ -5581,6 +5621,82 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
         WRITE_UINT32(NDDescriptor->solicitedAddr, 0xFFFFFFFF);
     }
 
+    // SNMP
+    if (params->p_AutoResSnmpInfo)
+    {
+        t_FmPortDsarSnmpInfo *snmpSrc = params->p_AutoResSnmpInfo;
+        t_DsarSnmpIpv4AddrTblEntry* snmpIpv4Addr;
+        t_DsarSnmpIpv6AddrTblEntry* snmpIpv6Addr;
+        t_OidsTblEntry* snmpOid;
+        uint8_t *charPointer;
+        int len;
+        t_DsarSnmpDescriptor* SnmpDescriptor = (t_DsarSnmpDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->snmp);
+        WRITE_UINT32(ArCommonDescPtr->p_SnmpDescriptor, PTR_TO_UINT(SnmpDescriptor) - fmMuramVirtBaseAddr);
+        WRITE_UINT16(SnmpDescriptor->control, snmpSrc->control);
+        WRITE_UINT16(SnmpDescriptor->maxSnmpMsgLength, snmpSrc->maxSnmpMsgLength);
+        snmpIpv4Addr = (t_DsarSnmpIpv4AddrTblEntry*)(PTR_TO_UINT(SnmpDescriptor) + sizeof(t_DsarSnmpDescriptor));
+        if (snmpSrc->numOfIpv4Addresses)
+        {
+            t_FmPortDsarSnmpIpv4AddrTblEntry* snmpIpv4AddrSrc = snmpSrc->p_Ipv4AddrTbl;
+            WRITE_UINT16(SnmpDescriptor->numOfIpv4Addresses, snmpSrc->numOfIpv4Addresses);
+            for (i = 0; i < snmpSrc->numOfIpv4Addresses; i++)
+            {
+                WRITE_UINT32(snmpIpv4Addr[i].ipv4Addr, snmpIpv4AddrSrc[i].ipv4Addr);
+                if (snmpIpv4AddrSrc[i].isVlan)
+                    WRITE_UINT16(snmpIpv4Addr[i].vlanId, snmpIpv4AddrSrc[i].vid & 0xFFF);
+            }
+            WRITE_UINT32(SnmpDescriptor->p_Ipv4AddrTbl, PTR_TO_UINT(snmpIpv4Addr) - fmMuramVirtBaseAddr);
+        }
+        snmpIpv6Addr = (t_DsarSnmpIpv6AddrTblEntry*)(PTR_TO_UINT(snmpIpv4Addr)
+                + sizeof(t_DsarSnmpIpv4AddrTblEntry) * snmpSrc->numOfIpv4Addresses);
+        if (snmpSrc->numOfIpv6Addresses)
+        {
+            t_FmPortDsarSnmpIpv6AddrTblEntry* snmpIpv6AddrSrc = snmpSrc->p_Ipv6AddrTbl;
+            WRITE_UINT16(SnmpDescriptor->numOfIpv6Addresses, snmpSrc->numOfIpv6Addresses);
+            for (i = 0; i < snmpSrc->numOfIpv6Addresses; i++)
+            {
+                for (j = 0; j < 4; j++)
+                    WRITE_UINT32(snmpIpv6Addr[i].ipv6Addr[j], snmpIpv6AddrSrc[i].ipv6Addr[j]);
+                if (snmpIpv6AddrSrc[i].isVlan)
+                    WRITE_UINT16(snmpIpv6Addr[i].vlanId, snmpIpv6AddrSrc[i].vid & 0xFFF);
+            }
+            WRITE_UINT32(SnmpDescriptor->p_Ipv6AddrTbl, PTR_TO_UINT(snmpIpv6Addr) - fmMuramVirtBaseAddr);
+        }
+        snmpOid = (t_OidsTblEntry*)(PTR_TO_UINT(snmpIpv6Addr)
+                + sizeof(t_DsarSnmpIpv6AddrTblEntry) * snmpSrc->numOfIpv6Addresses);
+        charPointer = (uint8_t*)(PTR_TO_UINT(snmpOid)
+                + sizeof(t_OidsTblEntry) * snmpSrc->oidsTblSize);
+        len = TOTAL_BER_LEN(GetBERLen(&snmpSrc->p_RdOnlyCommunityStr[1]));
+        Mem2IOCpy32(charPointer, snmpSrc->p_RdOnlyCommunityStr, len);
+        WRITE_UINT32(SnmpDescriptor->p_RdOnlyCommunityStr, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
+        charPointer += len;
+        len = TOTAL_BER_LEN(GetBERLen(&snmpSrc->p_RdWrCommunityStr[1]));
+        Mem2IOCpy32(charPointer, snmpSrc->p_RdWrCommunityStr, len);
+        WRITE_UINT32(SnmpDescriptor->p_RdWrCommunityStr, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
+        charPointer += len;
+        WRITE_UINT32(SnmpDescriptor->oidsTblSize, snmpSrc->oidsTblSize);
+        WRITE_UINT32(SnmpDescriptor->p_OidsTbl, PTR_TO_UINT(snmpOid) - fmMuramVirtBaseAddr);
+        for (i = 0; i < snmpSrc->oidsTblSize; i++)
+        {
+            WRITE_UINT16(snmpOid->oidSize, snmpSrc->p_OidsTbl[i].oidSize);
+            WRITE_UINT16(snmpOid->resSize, snmpSrc->p_OidsTbl[i].resSize);
+            Mem2IOCpy32(charPointer, snmpSrc->p_OidsTbl[i].p_Oid, snmpSrc->p_OidsTbl[i].oidSize);
+            WRITE_UINT32(snmpOid->p_Oid, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
+            charPointer += snmpSrc->p_OidsTbl[i].oidSize;
+            if (snmpSrc->p_OidsTbl[i].resSize <= 4)
+                WRITE_UINT32(snmpOid->resValOrPtr, snmpSrc->p_OidsTbl[i].resValOrPtr);
+            else
+            {
+                Mem2IOCpy32(charPointer, UINT_TO_PTR(snmpSrc->p_OidsTbl[i].resValOrPtr), snmpSrc->p_OidsTbl[i].resSize);
+                WRITE_UINT32(snmpOid->resValOrPtr, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
+                charPointer += len;
+            }
+            snmpOid++;
+        }
+        charPointer = UINT_TO_PTR(ROUND_UP(PTR_TO_UINT(charPointer),4));
+        WRITE_UINT32(SnmpDescriptor->p_Statistics, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
+    }
+    
     // filtering
     if (params->p_AutoResFilteringInfo)
     {

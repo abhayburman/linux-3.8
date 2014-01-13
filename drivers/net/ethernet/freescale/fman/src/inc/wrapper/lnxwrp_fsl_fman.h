@@ -356,7 +356,9 @@ struct   auto_res_tables_sizes
 	uint16_t   max_num_of_echo_ipv4_entries;
 	uint16_t   max_num_of_ndp_entries;
 	uint16_t   max_num_of_echo_ipv6_entries;
-	uint16_t   max_num_of_snmp_entries;
+	uint16_t   max_num_of_snmp_ipv4_entries;
+	uint16_t   max_num_of_snmp_ipv6_entries;
+	uint16_t   max_num_of_snmp_oid_entries;
 	uint16_t   max_num_of_snmp_char; /* total amount of character needed
 		for the snmp table */
 	uint16_t   max_num_of_ip_prot_filtering;
@@ -430,13 +432,42 @@ struct   auto_res_snmp_entry
 				i.e. "Type|Length|Value" */
 };
 
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP IPv4 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
+*//***************************************************************************/
+struct auto_res_snmp_ipv4addr_tbl_entry
+{
+	uint32_t ipv4addr; /*!< 32 bit IPv4 Address. */
+	bool      is_vlan;
+	uint16_t vid;   /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+			/*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+};
+
+/**************************************************************************//**
+ @Description   Deep Sleep Auto Response SNMP IPv6 Addresses Table Entry
+                Refer to the FMan Controller spec for more details.
+*//***************************************************************************/
+struct auto_res_snmp_ipv6addr_tbl_entry
+{
+	uint32_t ipv6Addr[4];  /*!< 4 * 32 bit IPv6 Address.                                                     */
+	bool      isVlan;
+	uint16_t vid;       /*!< 12 bits VLAN ID. The 4 left-most bits should be cleared                      */
+			/*!< This field should be 0x0000 for an entry with no VLAN tag or a null VLAN ID. */
+};
+
 struct   auto_res_snmp_info
 {
+	uint16_t control;                          /**< Control bits [0-15]. */
+	uint16_t max_snmp_msg_length;              /**< Maximal allowed SNMP message length. */
+	uint16_t num_ipv4_addresses;               /**< Number of entries in IPv4 addresses table. */
+	uint16_t num_ipv6_addresses;               /**< Number of entries in IPv6 addresses table. */
+	struct auto_res_snmp_ipv4addr_tbl_entry *ipv4addr_tbl; /**< Pointer to IPv4 addresses table. */
+	struct auto_res_snmp_ipv6addr_tbl_entry *ipv6addr_tbl; /**< Pointer to IPv6 addresses table. */
 	char                        *community_read_write_string;
 	char                        *community_read_only_string;
-	bool                        getall_flag;
-	uint8_t                     table_size;
-	struct auto_res_snmp_entry  *auto_res_table;
+	struct auto_res_snmp_entry  *oid_table;
+	uint32_t                     oid_table_size;
 };
 
 /* Filtering */
