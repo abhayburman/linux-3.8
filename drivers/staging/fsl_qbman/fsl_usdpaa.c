@@ -862,7 +862,7 @@ static long ioctl_dma_map(struct file *fp, struct ctx *ctx,
 	map = kmalloc(sizeof(*map), GFP_KERNEL);
 	if (!map)
 		return -ENOMEM;
-
+	down_write(&current->mm->mmap_sem);
 	spin_lock(&mem_lock);
 	if (i->flags & USDPAA_DMA_FLAG_SHARE) {
 		list_for_each_entry(frag, &mem_list, list) {
@@ -903,9 +903,7 @@ static long ioctl_dma_map(struct file *fp, struct ctx *ctx,
 		goto out;
 	}
 	/* Verify there is sufficient space to do the mapping */
-	down_write(&current->mm->mmap_sem);
 	next_addr = usdpaa_get_unmapped_area(fp, next_addr, i->len, 0, 0);
-	up_write(&current->mm->mmap_sem);
 
 	if (next_addr & ~PAGE_MASK) {
 		ret = -ENOMEM;
@@ -1001,6 +999,7 @@ do_map:
 	i->phys_addr = start_frag->base;
 out:
 	spin_unlock(&mem_lock);
+	up_write(&current->mm->mmap_sem);
 
 	if (!ret) {
 		unsigned long longret;
