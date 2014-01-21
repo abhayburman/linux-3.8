@@ -509,6 +509,13 @@ void fsl_pcibios_fixup_bus(struct pci_bus *bus)
 	}
 }
 
+int fsl_pcibios_enable_device_hook(struct pci_dev *dev)
+{
+	set_dma_ops(&dev->dev, &dma_direct_ops);
+
+	return 0;
+}
+
 int __init fsl_add_bridge(struct platform_device *pdev, int is_primary)
 {
 	int len;

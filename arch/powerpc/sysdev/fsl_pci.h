@@ -167,6 +167,7 @@ struct vf_atmu_regs {
 
 extern int fsl_add_bridge(struct platform_device *pdev, int is_primary);
 extern void fsl_pcibios_fixup_bus(struct pci_bus *bus);
+extern int fsl_pcibios_enable_device_hook(struct pci_dev *dev);
 extern int mpc83xx_add_bridge(struct device_node *dev);
 u64 fsl_pci_immrbar_base(struct pci_controller *hose);
 
