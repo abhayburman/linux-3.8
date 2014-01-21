@@ -33,6 +33,7 @@ obj-$(CONFIG_P5040_DS)    += p5040_ds.o corenet_ds.o
 obj-$(CONFIG_T104x_QDS)   += t104x_qds.o corenet_ds.o
 obj-$(CONFIG_T104x_RDB)   += t104x_rdb.o corenet_ds.o
 obj-$(CONFIG_T208x_QDS)   += t208x_qds.o corenet_ds.o
+obj-$(CONFIG_T208x_RDB)   += t208x_rdb.o corenet_ds.o
 obj-$(CONFIG_T4240_QDS)   += t4240_qds.o corenet_ds.o
 obj-$(CONFIG_B4_QDS)	  += b4_qds.o corenet_ds.o
 obj-$(CONFIG_STX_GP3)	  += stx_gp3.o

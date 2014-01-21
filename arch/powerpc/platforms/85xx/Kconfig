@@ -389,6 +389,26 @@ config T208x_QDS
 	help
 	  This option enables support for the T2080/T2081 QDS board
 
+config T208x_RDB
+	bool "Freescale T2080/T2081 RDB"
+	select DEFAULT_UIMAGE
+	select E500
+	select PPC_E500MC
+	select PHYS_64BIT
+	select SWIOTLB
+	select ARCH_REQUIRE_GPIOLIB
+	select GPIO_MPC8XXX
+	select HAS_RAPIDIO
+	select PPC_EPAPR_HV_PIC
+	select HAS_FSL_QBMAN
+	select MDIO_BUS_MUX if FSL_DPAA_ETH
+	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
+	help
+	  This option enables support for the T2080/T2081 RDB board
+	  The T208x application development system T208x PCIe-RDB is a
+	  complete reference development board with debugging environment
+	  intended for engineers developing applications for the T2080/T2081.
+
 config T4240_QDS
 	bool "Freescale T4240 QDS"
 	select DEFAULT_UIMAGE
