@@ -5833,9 +5833,13 @@ t_Error FM_PORT_GetDsarStats(t_Handle h_FmPortRx, t_FmPortDsarStats *stats)
     t_NdStatistics* nd_stats = (t_NdStatistics*)(PTR_TO_UINT(NDDescriptor->p_Statistics) + fmMuramVirtBaseAddr);
     t_DsarIcmpV6Descriptor* ICMPV6Descriptor = (t_DsarIcmpV6Descriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->icmpv6);
     t_DsarIcmpV6Statistics* icmpv6_stats = (t_DsarIcmpV6Statistics*)(PTR_TO_UINT(ICMPV6Descriptor->p_Statistics) + fmMuramVirtBaseAddr);
+    t_DsarSnmpDescriptor* SnmpDescriptor = (t_DsarSnmpDescriptor*)(PTR_TO_UINT(ArCommonDescPtr) + of->snmp);
+    t_DsarSnmpStatistics* snmp_stats = (t_DsarSnmpStatistics*)(PTR_TO_UINT(SnmpDescriptor->p_Statistics) + fmMuramVirtBaseAddr);
     stats->arpArCnt = arp_stats->arCnt;
     stats->echoIcmpv4ArCnt = icmpv4_stats->arCnt;
     stats->ndpArCnt = nd_stats->arCnt;
     stats->echoIcmpv6ArCnt = icmpv6_stats->arCnt;
+    stats->snmpGetCnt = snmp_stats->snmpGetReqCnt;
+    stats->snmpGetNextCnt = snmp_stats->snmpGetNextReqCnt;
     return E_OK;
 }

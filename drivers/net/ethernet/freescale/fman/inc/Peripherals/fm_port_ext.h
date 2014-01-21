@@ -1549,6 +1549,8 @@ typedef struct t_FmPortDsarStats
     uint32_t echoIcmpv4ArCnt;
     uint32_t ndpArCnt;
     uint32_t echoIcmpv6ArCnt;
+    uint32_t snmpGetCnt;
+    uint32_t snmpGetNextCnt;
 } t_FmPortDsarStats;
 
 /**************************************************************************//**

@@ -515,6 +515,49 @@ static int fm_port_dsar_dump_regs(void *h_dev, char *buf, int nn)
 		}
 		iounmap(ICMPV6Descriptor);
 	}
+	if (ArCommonDescPtr->p_SnmpDescriptor)
+	{
+		t_DsarSnmpDescriptor *SnmpDescriptor =
+			(t_DsarSnmpDescriptor*)ioremap(ioread32be(
+			&ArCommonDescPtr->p_SnmpDescriptor) + p_FmPort->
+			fmMuramPhysBaseAddr, sizeof (t_DsarSnmpDescriptor));
+		FM_DMP_LN(buf, n, "\nSNMP\n");
+		FM_DMP_LN(buf, n, "===========\n");
+		FM_DMP_LN(buf, n, "control bits 0x%04x\n", SnmpDescriptor->control);
+		FM_DMP_LN(buf, n, "max message length 0x%04x\n", SnmpDescriptor->maxSnmpMsgLength);
+		if (SnmpDescriptor->numOfIpv4Addresses)
+		{
+			char ip_str[20];
+			t_DsarSnmpIpv4AddrTblEntry* addrs = ioremap(
+				ioread32be(&SnmpDescriptor->p_Ipv4AddrTbl) +
+				p_FmPort->fmMuramPhysBaseAddr,
+				SnmpDescriptor->numOfIpv4Addresses *
+				sizeof(t_DsarSnmpIpv4AddrTblEntry));
+			uint8_t* ip_addr = (uint8_t*)&addrs->ipv4Addr;
+			FM_DMP_LN(buf, n, "      ip          vlan id\n");
+			for (i = 0; i < SnmpDescriptor->numOfIpv4Addresses; i++)
+			{
+				n += sprintf(ip_str, "%d:%d:%d:%d", ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
+				FM_DMP_LN(buf, n, "%-15s     0x%x\n", ip_str, addrs->vlanId);
+			}
+			iounmap(addrs);
+		}
+		if (SnmpDescriptor->p_Statistics)
+		{
+			t_DsarSnmpStatistics* snmpStats = ioremap(
+				ioread32be(&SnmpDescriptor->p_Statistics) +
+				p_FmPort->fmMuramPhysBaseAddr,
+				sizeof(t_DsarSnmpStatistics));
+			FM_DMP_LN(buf, n, "statistics\n");
+			FM_DMP_LN(buf, n, "snmpErrCnt:          0x%x\n", snmpStats->snmpErrCnt);
+			FM_DMP_LN(buf, n, "snmpCommunityErrCnt: 0x%x\n", snmpStats->snmpCommunityErrCnt);
+			FM_DMP_LN(buf, n, "snmpTotalDiscardCnt: 0x%x\n", snmpStats->snmpTotalDiscardCnt);
+			FM_DMP_LN(buf, n, "snmpGetReqCnt:       0x%x\n", snmpStats->snmpGetReqCnt);
+			FM_DMP_LN(buf, n, "snmpGetNextReqCnt:   0x%x\n", snmpStats->snmpGetNextReqCnt);
+			iounmap(snmpStats);
+		}
+		iounmap(SnmpDescriptor);
+	}
 	iounmap(ArCommonDescPtr);
 	iounmap(param_page);
 	return n;

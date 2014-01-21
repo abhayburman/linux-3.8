@@ -397,7 +397,7 @@ typedef struct {
     uint32_t snmpTotalDiscardCnt; /**< Counts any message that was dropped. */
     uint32_t snmpGetReqCnt; /**< Counts the number of get-request messages */
     uint32_t snmpGetNextReqCnt; /**< Counts the number of get-next-request messages */
-} t_snmpStats;
+} t_DsarSnmpStatistics;
 
 /**************************************************************************//**
  @Description   Deep Sleep Auto Response SNMP Descriptor
