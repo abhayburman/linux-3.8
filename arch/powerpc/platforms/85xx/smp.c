@@ -45,52 +45,19 @@ static void __iomem *guts_regs;
 static u64 timebase;
 static int tb_req;
 static int tb_valid;
-static u32 cur_booting_core;
-static bool rcpmv2;
+/* indicate if all cpus have brought up at init time */
+static int cpu_bringup_done;
+
+/* specify the cpu PM state when cpu dies, PH15/NAP is the default */
+int qoriq_cpu_die_state = E500_PM_PH15;
 
 extern void fsl_enable_threads(void);
 
 #ifdef CONFIG_PPC_E500MC
-/* get a physical mask of online cores and booting core */
-static inline u32 get_phy_cpu_mask(void)
-{
-	u32 mask;
-	int cpu;
-
-	if (smt_capable()) {
-		/* two threads in one core share one time base */
-		mask = 1 << cpu_core_index_of_thread(cur_booting_core);
-		for_each_online_cpu(cpu)
-			mask |= 1 << cpu_core_index_of_thread(
-					get_hard_smp_processor_id(cpu));
-	} else {
-		mask = 1 << cur_booting_core;
-		for_each_online_cpu(cpu)
-			mask |= 1 << get_hard_smp_processor_id(cpu);
-	}
-
-	return mask;
-}
-
 static void __cpuinit mpc85xx_timebase_freeze(int freeze)
 {
-	u32 *addr;
-	u32 mask = get_phy_cpu_mask();
-
-	if (rcpmv2)
-		addr = &((struct ccsr_rcpm_v2 *)guts_regs)->pctbenr;
-	else
-		addr = &((struct ccsr_rcpm *)guts_regs)->ctbenr;
-
-	if (freeze)
-		clrbits32(addr, mask);
-	else
-		setbits32(addr, mask);
-
-	/* read back to push the previous write */
-	in_be32(addr);
+	qoriq_pm_ops->freeze_time_base(freeze);
 }
-
 #else
 static void __cpuinit mpc85xx_timebase_freeze(int freeze)
 {
@@ -114,13 +81,6 @@ static void __cpuinit mpc85xx_give_timebase(void)
 
 	/* only do time base sync when system is running */
 	if (system_state == SYSTEM_BOOTING)
-		return;
-	/*
-	 * If the booting thread is not the first thread of the core,
-	 * skip time base sync.
-	 */
-	if (smt_capable() &&
-		cur_booting_core != cpu_first_thread_sibling(cur_booting_core))
 		return;
 
 	local_irq_save(flags);
@@ -172,10 +132,6 @@ static void __cpuinit mpc85xx_take_timebase(void)
 	if (system_state == SYSTEM_BOOTING)
 		return;
 
-	if (smt_capable() &&
-		cur_booting_core != cpu_first_thread_sibling(cur_booting_core))
-		return;
-
 	local_irq_save(flags);
 
 	tb_req = 1;
@@ -203,59 +159,38 @@ static inline bool is_core_down(unsigned int thread)
 
 	return !cpumask_intersects(&thd_mask, cpu_online_mask);
 }
+#endif /* CONFIG_PPC_E500MC */
 
-static void __cpuinit smp_85xx_mach_cpu_die(void)
+static void qoriq_cpu_die(void)
 {
 	unsigned int cpu = smp_processor_id();
-
-	local_irq_disable();
-	idle_task_exit();
-	mb();
-
-	mtspr(SPRN_TCR, 0);
-
-	if (is_core_down(cpu))
-		__flush_disable_L1();
-
-	if (cur_cpu_spec->l2cache_type == PPC_L2_CACHE_CORE)
-		disable_backside_L2_cache();
-
-	generic_set_cpu_dead(cpu);
-
-	while (1)
-		;
-}
-
-void platform_cpu_die(unsigned int cpu)
-{
-	unsigned int hw_cpu = get_hard_smp_processor_id(cpu);
-	struct ccsr_rcpm __iomem *rcpm;
-
-	if (rcpmv2 && is_core_down(cpu)) {
-		/* enter PH20 status */
-		setbits32(&((struct ccsr_rcpm_v2 *)guts_regs)->pcph20setr,
-				1 << cpu_core_index_of_thread(hw_cpu));
-	} else if (!rcpmv2 && guts_regs) {
-		rcpm = guts_regs;
-		/* Core Nap Operation */
-		setbits32(&rcpm->cnapcr, 1 << hw_cpu);
-	}
-}
-#else
-/* for e500v1 and e500v2 */
-static void __cpuinit smp_85xx_mach_cpu_die(void)
-{
-	unsigned int cpu = smp_processor_id();
+#ifndef CONFIG_PPC_E500MC
 	u32 tmp;
+#endif
 
 	local_irq_disable();
+#ifdef CONFIG_PPC64
+	__hard_irq_disable();
+#endif
 	idle_task_exit();
-	generic_set_cpu_dead(cpu);
-	mb();
+
+#ifdef CONFIG_PPC_E500MC
+	if (qoriq_pm_ops->irq_mask)
+		qoriq_pm_ops->irq_mask(cpu);
+#endif
 
 	mtspr(SPRN_TCR, 0);
+	mtspr(SPRN_TSR, mfspr(SPRN_TSR));
 
-	__flush_disable_L1();
+	generic_set_cpu_dead(cpu);
+
+	if (cur_cpu_spec->cpu_flush_caches)
+		cur_cpu_spec->cpu_flush_caches();
+
+#ifdef CONFIG_PPC_E500MC
+	if (is_core_down(cpu))
+		qoriq_pm_ops->cpu_enter_state(cpu, qoriq_cpu_die_state);
+#else
 	tmp = (mfspr(SPRN_HID0) & ~(HID0_DOZE|HID0_SLEEP)) | HID0_NAP;
 	mtspr(SPRN_HID0, tmp);
 	isync();
@@ -266,11 +201,11 @@ static void __cpuinit smp_85xx_mach_cpu_die(void)
 	mb();
 	mtmsr(tmp);
 	isync();
+#endif
 
 	while (1)
 		;
 }
-#endif /* CONFIG_PPC_E500MC */
 #endif
 
 static inline void flush_spin_table(void *spin_table)
@@ -295,10 +230,6 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 	int hw_cpu = get_hard_smp_processor_id(nr);
 	int ioremappable;
 	int ret = 0;
-#ifdef CONFIG_PPC_E500MC
-	struct ccsr_rcpm __iomem *rcpm = guts_regs;
-	struct ccsr_rcpm_v2 __iomem *rcpm_v2 = guts_regs;
-#endif
 
 	WARN_ON(nr < 0 || nr >= NR_CPUS);
 	WARN_ON(hw_cpu < 0 || hw_cpu >= NR_CPUS);
@@ -328,7 +259,6 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 			smp_generic_kick_cpu(nr);
 
 			generic_set_cpu_up(nr);
-			cur_booting_core = hw_cpu;
 
 			local_irq_restore(flags);
 
@@ -376,7 +306,7 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 
 	local_irq_save(flags);
 
-	if (system_state == SYSTEM_RUNNING) {
+	if (cpu_bringup_done) {
 		/*
 		 * To keep it compatible with old boot program which uses
 		 * cache-inhibit spin table, we need to flush the cache
@@ -390,11 +320,8 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 
 #ifdef CONFIG_PPC_E500MC
 		/* Due to an erratum, wake the core before reset. */
-		if (rcpmv2)
-			setbits32(&rcpm_v2->pcph20clrr,
-				1 << cpu_core_index_of_thread(hw_cpu));
-		else
-			clrbits32(&rcpm->cnapcr, 1 << hw_cpu);
+		if (qoriq_pm_ops->cpu_exit_state)
+			qoriq_pm_ops->cpu_exit_state(nr, qoriq_cpu_die_state);
 #endif
 
 		/*
@@ -419,6 +346,11 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 
 		/*  clear the acknowledge status */
 		__secondary_hold_acknowledge = -1;
+
+#ifdef CONFIG_PPC_E500MC
+		if (qoriq_pm_ops->irq_unmask)
+			qoriq_pm_ops->irq_unmask(nr);
+#endif
 	}
 	flush_spin_table(spin_table);
 	out_be32(&spin_table->pir, hw_cpu);
@@ -446,7 +378,6 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 #endif
 	/* Corresponding to generic_set_cpu_dead() */
 	generic_set_cpu_up(nr);
-	cur_booting_core = hw_cpu;
 
 out:
 	local_irq_restore(flags);
@@ -572,6 +503,11 @@ static void __cpuinit smp_85xx_setup_cpu(int cpu_nr)
 		doorbell_setup_this_cpu();
 }
 
+static void smp_85xx_bringup_done(void)
+{
+	cpu_bringup_done = 1;
+}
+
 static const struct of_device_id mpc85xx_smp_guts_ids[] = {
 	{ .compatible = "fsl,mpc8572-guts", },
 	{ .compatible = "fsl,p1020-guts", },
@@ -579,8 +515,6 @@ static const struct of_device_id mpc85xx_smp_guts_ids[] = {
 	{ .compatible = "fsl,p1022-guts", },
 	{ .compatible = "fsl,p1023-guts", },
 	{ .compatible = "fsl,p2020-guts", },
-	{ .compatible = "fsl,qoriq-rcpm-1.0", },
-	{ .compatible = "fsl,qoriq-rcpm-2.0", },
 	{ .compatible = "fsl,bsc9132-guts", },
 	{},
 };
@@ -606,15 +540,8 @@ void __init mpc85xx_smp_init(void)
 		smp_85xx_ops.cause_ipi = doorbell_cause_ipi;
 	}
 
-#ifdef CONFIG_HOTPLUG_CPU
-	ppc_md.cpu_die = generic_mach_cpu_die;
-#endif
-
 	np = of_find_matching_node(NULL, mpc85xx_smp_guts_ids);
 	if (np) {
-		if (of_device_is_compatible(np, "fsl,qoriq-rcpm-2.0"))
-			rcpmv2 = true;
-
 		guts_regs = of_iomap(np, 0);
 		of_node_put(np);
 		if (!guts_regs) {
@@ -622,12 +549,19 @@ void __init mpc85xx_smp_init(void)
 								__func__);
 			return;
 		}
-		smp_85xx_ops.give_timebase = mpc85xx_give_timebase;
-		smp_85xx_ops.take_timebase = mpc85xx_take_timebase;
-#ifdef CONFIG_HOTPLUG_CPU
-		ppc_md.cpu_die = smp_85xx_mach_cpu_die;
-#endif
 	}
+
+	if (!strcmp(cur_cpu_spec->cpu_name, "e6500"))
+		qoriq_cpu_die_state = E500_PM_PH20;
+
+#ifdef CONFIG_HOTPLUG_CPU
+	ppc_md.cpu_die = qoriq_cpu_die;
+#endif
+
+	smp_85xx_ops.give_timebase = mpc85xx_give_timebase;
+	smp_85xx_ops.take_timebase = mpc85xx_take_timebase;
+
+	smp_85xx_ops.bringup_done = smp_85xx_bringup_done;
 
 	smp_ops = &smp_85xx_ops;
 
