@@ -33,6 +33,13 @@
 
 #include <linux/fsl_usdpaa.h>
 
+#if defined(CONFIG_PPC64) && defined(CONFIG_SUSPEND)
+static void fsl_suspend_disable_irqs(void)
+{
+	__hard_irq_disable();
+}
+#endif
+
 void __init corenet_ds_pic_init(void)
 {
 	struct mpic *mpic;
@@ -62,6 +69,13 @@ void __init corenet_ds_setup_arch(void)
 	fsl_pci_assign_primary();
 
 	swiotlb_detect_4g();
+
+#if defined(CONFIG_PPC64) && defined(CONFIG_SUSPEND)
+	/*
+	 * really disable irq by writing MSR_EE for 64-bit mode when suspend
+	 */
+	ppc_md.suspend_disable_irqs = fsl_suspend_disable_irqs;
+#endif
 
 	pr_info("%s board from Freescale Semiconductor\n", ppc_md.name);
 }
