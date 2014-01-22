@@ -77,6 +77,8 @@ void __init corenet_ds_setup_arch(void)
 	ppc_md.suspend_disable_irqs = fsl_suspend_disable_irqs;
 #endif
 
+	fsl_rcpm_init();
+
 	pr_info("%s board from Freescale Semiconductor\n", ppc_md.name);
 }
 
