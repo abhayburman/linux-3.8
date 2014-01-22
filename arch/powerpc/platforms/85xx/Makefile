@@ -4,7 +4,7 @@
 obj-$(CONFIG_SMP) += smp.o
 obj-$(CONFIG_SUSPEND)	+= sleep.o
 ifeq ($(CONFIG_FSL_CORENET_RCPM), y)
-obj-$(CONFIG_SUSPEND)	+= qoriq_pm.o
+obj-$(CONFIG_SUSPEND)	+= qoriq_pm.o deepsleep.o
 endif
 obj-$(CONFIG_MPC85xx_CPUFREQ) += cpufreq-jog.o
 

@@ -81,6 +81,7 @@ struct fsl_pm_ops {
 };
 
 extern const struct fsl_pm_ops *qoriq_pm_ops;
+extern void *qixis_base;
 
 #define E500_PM_PH10	1
 #define E500_PM_PH15	2
@@ -94,10 +95,16 @@ extern int sleep_pm_state;
 #define PLAT_PM_SLEEP	20
 #define PLAT_PM_LPM20	30
 
+extern int fsl_dp_iomap(void);
+extern void fsl_dp_iounmap(void);
+
 extern int fsl_rcpm_init(void);
+extern int fsl_enter_epu_deepsleep(void);
+extern void fsl_dp_enter_low(void *ccsr_base, void *dcsr_base,
+				void *qixis_base);
+extern void __entry_deep_sleep(void);
 
 extern void fsl_dp_fsm_setup(void *dcsr_base);
 extern void fsl_dp_fsm_clean(void *dcsr_base);
-
 #endif
 #endif

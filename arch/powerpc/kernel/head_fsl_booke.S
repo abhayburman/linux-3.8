@@ -113,6 +113,18 @@ _ENTRY(__early_start)
 #include "fsl_booke_entry_mapping.S"
 #undef ENTRY_MAPPING_BOOT_SETUP
 
+#ifdef CONFIG_SUSPEND
+	/* if deep_sleep_flag != 0, jump to the deep sleep resume entry */
+	LOAD_REG_ADDR(r4, deep_sleep_flag)
+	lwz	r3, 0(r4)
+	cmpwi	r3, 0
+	beq	11f
+	/* clear deep_sleep_flag */
+	li	r3, 0
+	stw	r3, 0(r4)
+	b	fsl_deepsleep_resume
+11:
+#endif
 	/* Establish the interrupt vector offsets */
 	SET_IVOR(0,  CriticalInput);
 	SET_IVOR(1,  MachineCheck);
@@ -287,6 +299,23 @@ _ENTRY(__early_start)
 	beq	2f;			/* Bail if no table */			\
 	rlwimi	r12, r10, 22, 20, 29;	/* Compute PTE address */		\
 	lwz	r11, 0(r12);		/* Get Linux PTE */
+#endif
+
+#ifdef CONFIG_SUSPEND
+_ENTRY(__entry_deep_sleep)
+/*
+ * Bootloader will jump to here when resuming from deep sleep.
+ * After executing the init code in fsl_booke_entry_mapping.S,
+ * will jump to the real resume entry.
+ */
+	li	r8, 1
+	bl	12f
+12:	mflr	r9
+	addi	r9, r9, (deep_sleep_flag - 12b)
+	stw	r8, 0(r9)
+	b __early_start
+deep_sleep_flag:
+	.long	0
 #endif
 
 /*

@@ -71,10 +71,24 @@ static int __init t104x_qds_probe(void)
 	return 0;
 }
 
+void __init t104x_ds_setup_arch(void)
+{
+	struct device_node *np;
+
+	corenet_ds_setup_arch();
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,fpga-qixis");
+	if (!np)
+		pr_err("%s: Can't find the node of \"fsl,fpga-qixis\"\n",
+			__func__);
+	qixis_base = of_iomap(np, 0);
+	of_node_put(np);
+}
+
 define_machine(t104x_qds) {
 	.name			= "T104x QDS",
 	.probe			= t104x_qds_probe,
-	.setup_arch		= corenet_ds_setup_arch,
+	.setup_arch		= t104x_ds_setup_arch,
 	.init_IRQ		= corenet_ds_pic_init,
 #ifdef CONFIG_PCI
 	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,

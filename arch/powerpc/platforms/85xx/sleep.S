@@ -2,6 +2,7 @@
  * Enter and leave deep sleep/sleep state on MPC85xx
  *
  * Author: Scott Wood <scottwood@freescale.com>
+ *         Chenhui Zhao <chenhui.zhao@freescale.com>
  *
  * Copyright (C) 2006-2014 Freescale Semiconductor, Inc. All rights reserved.
  *
@@ -15,6 +16,7 @@
 #include <asm/reg.h>
 #include <asm/asm-offsets.h>
 #include <asm/fsl_sleep.h>
+#include <asm/mmu.h>
 
 	.section .data
 	.align	5
@@ -1028,3 +1030,259 @@ _GLOBAL(booke_cpu_state_restore)
 
 	mtlr	r9
 	blr
+
+#define FSLDELAY(count)		\
+	li	r3, (count)@l;	\
+	slwi	r3, r3, 10;	\
+	mtctr	r3;		\
+101:	nop;			\
+	bdnz	101b;
+
+#define FSL_DIS_ALL_IRQ		\
+	mfmsr	r8;			\
+	rlwinm	r8, r8, 0, ~MSR_CE;	\
+	rlwinm	r8, r8, 0, ~MSR_ME;	\
+	rlwinm	r8, r8, 0, ~MSR_EE;	\
+	rlwinm	r8, r8, 0, ~MSR_DE;	\
+	mtmsr	r8;			\
+	isync
+
+/*
+ * r3: the base address of CCSR space
+ */
+	.align 6
+_GLOBAL(fsl_dp_enter_low)
+deepsleep_start:
+	LOAD_REG_ADDR(r9, buf_tmp)
+	PPC_STL	r3, 0(r9)
+	PPC_STL	r4, 8(r9)
+	PPC_STL	r5, 16(r9)
+
+	mflr	r5
+	li	r4, 1
+	LOAD_REG_ADDR(r3, mpc85xx_sleep_save_area)
+	bl	booke_cpu_state_save
+
+	LOAD_REG_ADDR(r9, buf_tmp)
+	PPC_LL	r31, 0(r9)
+	PPC_LL	r30, 8(r9)
+	PPC_LL	r29, 16(r9)
+
+	/* flush caches */
+	LOAD_REG_ADDR(r3, cur_cpu_spec)
+	PPC_LL	r3, 0(r3)
+	PPC_LL	r3, CPU_FLUSH_CACHES(r3)
+	PPC_LCMPI  0, r3, 0
+	beq	6f
+#ifdef CONFIG_PPC64
+	PPC_LL	r3, 0(r3)
+#endif
+	mtctr	r3
+	bctrl
+6:
+#define CPC_OFFSET	0x10000
+	mr	r3, r31
+	addis	r3, r3, CPC_OFFSET@h
+	bl	fsl_flush_cpc_cache
+
+	LOAD_REG_ADDR(r8, deepsleep_start)
+	LOAD_REG_ADDR(r9, deepsleep_end)
+
+	/* prefecth TLB */
+#define CCSR_GPIO1_GPDAT	0x130008
+#define CCSR_GPIO1_GPDAT_29	0x4
+	LOAD_REG_IMMEDIATE(r11, CCSR_GPIO1_GPDAT)
+	add	r11, r31, r11
+	lwz	r10, 0(r11)
+
+#define CCSR_RCPM_PCPH15SETR	0xe20b4
+#define CCSR_RCPM_PCPH15SETR_CORE0	0x1
+	LOAD_REG_IMMEDIATE(r12, CCSR_RCPM_PCPH15SETR)
+	add	r12, r31, r12
+	lwz	r10, 0(r12)
+
+#define CCSR_DDR_SDRAM_CFG_2	0x8114
+#define FRC_SR			0x80000000
+	LOAD_REG_IMMEDIATE(r13, CCSR_DDR_SDRAM_CFG_2)
+	add	r13, r31, r13
+	lwz	r10, 0(r13)
+
+#define	DCSR_EPU_EPGCR		0x000
+#define DCSR_EPU_EPGCR_GCE	0x80000000
+	li	r14, DCSR_EPU_EPGCR
+	add	r14, r30, r14
+	lwz	r10, 0(r14)
+
+#define	DCSR_EPU_EPECR15		0x33C
+#define DCSR_EPU_EPECR15_IC0	0x80000000
+	li	r15, DCSR_EPU_EPECR15
+	add	r15, r30, r15
+	lwz	r10, 0(r15)
+
+#define CCSR_SCFG_QMCRDTRSTCR		0xfc40c
+#define CCSR_SCFG_QMCRDTRSTCR_CRDTRST	0x80000000
+	LOAD_REG_IMMEDIATE(r16, CCSR_SCFG_QMCRDTRSTCR)
+	add	r16, r31, r16
+	lwz	r10, 0(r16)
+
+#define QIXIS_PWR_CTL2		0x21
+#define QIXIS_PWR_CTL2_PCTL	0x2
+	addi	r29, r29, QIXIS_PWR_CTL2
+	lbz	r10, 0(r29)
+
+	/* prefecth code */
+1:	lwz	r3, 0(r8)
+	addi	r8, r8, 4
+	cmpw	r8, r9
+	blt	1b
+	msync
+
+	FSL_DIS_ALL_IRQ
+
+	/* put DDR controller in self refresh mode */
+	lwz	r10, 0(r13)
+	oris	r10, r10, FRC_SR@h
+	stw	r10, 0(r13)
+
+	FSLDELAY(50)
+
+	/*
+	 * enable FPGA to translate deep sleep signals,
+	 * the bootloader will clear it when resume
+	 */
+	lbz	r10, 0(r29)
+	ori	r10, r10, QIXIS_PWR_CTL2_PCTL
+	stb	r10, 0(r29)
+
+	/*
+	 * set GPIO1_29 to keep the signal MCKE down,
+	 * the bootloader will clear it when resume
+	 */
+	lwz	r10, 0(r11)
+	ori	r10, r10, CCSR_GPIO1_GPDAT_29
+	stw	r10, 0(r11)
+
+	FSLDELAY(10)
+
+	/* Clear the QMan CITI Credits */
+	lwz	r10, 0(r16)
+	oris	r10, r10, CCSR_SCFG_QMCRDTRSTCR_CRDTRST@h
+	stw	r10, 0(r16)
+
+	/* Enable all EPU Counters */
+	li	r10, 0
+	oris	r10, r10, DCSR_EPU_EPGCR_GCE@h
+	stw	r10, 0(r14)
+
+	/* Enable SCU15 to trigger on RCPM Concentrator 0 */
+	lwz	r10, 0(r15)
+	oris	r10, r10, DCSR_EPU_EPECR15_IC0@h
+	stw	r10, 0(r15)
+
+	/* put Core0 in PH15 mode, trigger EPU FSM */
+	lwz	r10, 0(r12)
+	ori	r10, r10, CCSR_RCPM_PCPH15SETR_CORE0
+	stw	r10, 0(r12)
+
+2:
+	b 2b
+
+	/* leave some space to prevent instruction prefetching
+	   beyond deepsleep_end and used as buffer */
+buf_tmp:
+	.space 128
+	.align 6
+deepsleep_end:
+
+#ifdef CONFIG_PPC32
+
+_GLOBAL(fsl_deepsleep_resume)
+	/* disable interrupts */
+	FSL_DIS_ALL_IRQ
+
+	li	r3, 0
+	mfspr   r24, SPRN_PIR
+	mr	r4, r24
+	bl	call_setup_cpu
+
+	/* Load each CAM entry */
+	LOAD_REG_ADDR(r3, tlbcam_index)
+	lwz	r3, 0(r3)
+	mtctr	r3
+	li	r15, 0
+3:	mr	r3, r15
+	bl	loadcam_entry
+	addi	r15, r15, 1
+	bdnz	3b
+
+	/* restore cpu registers */
+	LOAD_REG_ADDR(r3, mpc85xx_sleep_save_area)
+	li	r4, 1  /* ALL_SAVE */
+	bl	booke_cpu_state_restore
+
+	mtlr	r3
+	mtmsr	r4
+
+	blr
+
+#else /* CONFIG_PPC32 */
+
+_GLOBAL(__entry_deep_sleep)
+	/* disable interrupts */
+	FSL_DIS_ALL_IRQ
+
+	/* switch to 64-bit mode */
+	bl	.enable_64b_mode
+
+	/* set TOC pointer */
+	bl	.relative_toc
+
+	/* setup initial TLBs, jump to kernel space ... */
+	bl	.start_initialization_book3e
+
+	/* address space changed, set TOC pointer again */
+	bl	.relative_toc
+
+	/* call a cpu state restore handler */
+	LOAD_REG_ADDR(r23, cur_cpu_spec)
+	ld	r23,0(r23)
+	ld	r23,CPU_SPEC_RESTORE(r23)
+	cmpdi	0,r23,0
+	beq	1f
+	ld	r23,0(r23)
+	mtctr	r23
+	bctrl
+1:
+	LOAD_REG_ADDR(r3, mpc85xx_sleep_save_area)
+	li	r4, 1
+	bl	booke_cpu_state_restore
+
+	/* save registers to buf_tmp */
+	LOAD_REG_ADDR(r10, buf_tmp)
+	std	r3, 0(r10)
+	std	r4, 8(r10)
+	/* r15 is used by following code, so save it */
+	std	r15, 16(r10)
+
+	/* Load each CAM entry */
+	LOAD_REG_ADDR(r3, tlbcam_index)
+	lwz	r3, 0(r3)
+	mtctr	r3
+	li	r15, 0
+3:	mr	r3, r15
+	bl	loadcam_entry
+	addi	r15, r15, 1
+	bdnz	3b
+
+	LOAD_REG_ADDR(r10, buf_tmp)
+	ld	r15, 16(r10)
+	/* restore MSR */
+	ld	r4, 8(r10)
+	mtmsr	r4
+	/* restore return address */
+	ld	r4, 0(r10)
+	mtlr	r4
+
+	blr
+
+#endif /* CONFIG_PPC32 */

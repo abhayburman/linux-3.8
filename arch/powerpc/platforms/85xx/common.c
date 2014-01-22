@@ -12,6 +12,9 @@
 
 #include "mpc85xx.h"
 
+/* save the base address of qixis registers */
+void *qixis_base;
+
 static struct of_device_id __initdata mpc85xx_common_ids[] = {
 	{ .type = "soc", },
 	{ .compatible = "soc", },

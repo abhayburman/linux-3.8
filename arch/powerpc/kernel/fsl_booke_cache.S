@@ -218,6 +218,23 @@ _GLOBAL(invalidate_enable_L2)
 
 	blr
 
+#define CPC_CPCCSR0		0x0
+#define CPC_CPCCSR0_CPCFL	0x800
+
+/* input r3 = virtual address of CPC  */
+_GLOBAL(fsl_flush_cpc_cache)
+	lwz	r6, CPC_CPCCSR0(r3)
+	ori	r6, r6, CPC_CPCCSR0_CPCFL
+	stw	r6, CPC_CPCCSR0(r3)
+	sync
+
+	/* Wait until completing the flush */
+1:	lwz	r6, CPC_CPCCSR0(r3)
+	andi.	r6, r6, CPC_CPCCSR0_CPCFL
+	bne	1b
+
+	blr
+
 _GLOBAL(__flush_caches_e500)
 	mflr r0
 	bl	flush_dcache_L1
