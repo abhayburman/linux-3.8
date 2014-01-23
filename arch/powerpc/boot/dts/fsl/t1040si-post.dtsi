@@ -218,6 +218,157 @@
 	};
 };
 
+&bportals {
+	#address-cells = <0x1>;
+	#size-cells = <0x1>;
+	compatible = "simple-bus";
+	bman-portal@0 {
+		cell-index = <0x0>;
+		compatible = "fsl,bman-portal";
+		reg = <0x0 0x4000 0x1000000 0x1000>;
+		interrupts = <105 2 0 0>;
+	};
+	bman-portal@4000 {
+		cell-index = <0x1>;
+		compatible = "fsl,bman-portal";
+		reg = <0x4000 0x4000 0x1001000 0x1000>;
+		interrupts = <107 2 0 0>;
+	};
+	bman-portal@8000 {
+		cell-index = <2>;
+		compatible = "fsl,bman-portal";
+		reg = <0x8000 0x4000 0x1002000 0x1000>;
+		interrupts = <109 2 0 0>;
+	};
+	bman-portal@c000 {
+		cell-index = <0x3>;
+		compatible = "fsl,bman-portal";
+		reg = <0xc000 0x4000 0x1003000 0x1000>;
+		interrupts = <111 2 0 0>;
+	};
+	bman-portal@10000 {
+		cell-index = <0x4>;
+		compatible = "fsl,bman-portal";
+		reg = <0x10000 0x4000 0x1004000 0x1000>;
+		interrupts = <113 2 0 0>;
+	};
+	bman-portal@14000 {
+		cell-index = <0x5>;
+		compatible = "fsl,bman-portal";
+		reg = <0x14000 0x4000 0x1005000 0x1000>;
+		interrupts = <115 2 0 0>;
+	};
+	bman-portal@18000 {
+		cell-index = <0x6>;
+		compatible = "fsl,bman-portal";
+		reg = <0x18000 0x4000 0x1006000 0x1000>;
+		interrupts = <117 2 0 0>;
+	};
+	bman-portal@1c000 {
+		cell-index = <0x7>;
+		compatible = "fsl,bman-portal";
+		reg = <0x1c000 0x4000 0x1007000 0x1000>;
+		interrupts = <119 2 0 0>;
+	};
+	bman-portal@20000 {
+		cell-index = <0x8>;
+		compatible = "fsl,bman-portal";
+		reg = <0x20000 0x4000 0x1008000 0x1000>;
+		interrupts = <121 2 0 0>;
+	};
+	bman-portal@24000 {
+		cell-index = <0x9>;
+		compatible = "fsl,bman-portal";
+		reg = <0x24000 0x4000 0x1009000 0x1000>;
+		interrupts = <123 2 0 0>;
+	};
+};
+
+&qportals {
+	#address-cells = <0x1>;
+	#size-cells = <0x1>;
+	compatible = "simple-bus";
+	qportal0: qman-portal@0 {
+		cell-index = <0x0>;
+		compatible = "fsl,qman-portal";
+		reg = <0x0 0x4000 0x1000000 0x1000>;
+		interrupts = <104 0x2 0 0>;
+		fsl,qman-channel-id = <0x0>;
+	};
+
+	qportal1: qman-portal@4000 {
+		cell-index = <0x1>;
+		compatible = "fsl,qman-portal";
+		reg = <0x4000 0x4000 0x1001000 0x1000>;
+		interrupts = <106 0x2 0 0>;
+		fsl,qman-channel-id = <0x1>;
+	};
+
+	qportal2: qman-portal@8000 {
+		cell-index = <0x2>;
+		compatible = "fsl,qman-portal";
+		reg = <0x8000 0x4000 0x1002000 0x1000>;
+		interrupts = <108 0x2 0 0>;
+		fsl,qman-channel-id = <0x2>;
+	};
+
+	qportal3: qman-portal@c000 {
+		cell-index = <0x3>;
+		compatible = "fsl,qman-portal";
+		reg = <0xc000 0x4000 0x1003000 0x1000>;
+		interrupts = <110 0x2 0 0>;
+		fsl,qman-channel-id = <0x3>;
+	};
+
+	qportal4: qman-portal@10000 {
+		cell-index = <0x4>;
+		compatible = "fsl,qman-portal";
+		reg = <0x10000 0x4000 0x1004000 0x1000>;
+		interrupts = <112 0x2 0 0>;
+		fsl,qman-channel-id = <0x4>;
+	};
+
+	qportal5: qman-portal@14000 {
+		cell-index = <0x5>;
+		compatible = "fsl,qman-portal";
+		reg = <0x14000 0x4000 0x1005000 0x1000>;
+		interrupts = <114 0x2 0 0>;
+		fsl,qman-channel-id = <0x5>;
+	};
+
+	qportal6: qman-portal@18000 {
+		cell-index = <0x6>;
+		compatible = "fsl,qman-portal";
+		reg = <0x18000 0x4000 0x1006000 0x1000>;
+		interrupts = <116 0x2 0 0>;
+		fsl,qman-channel-id = <0x6>;
+	};
+
+	qportal7: qman-portal@1c000 {
+		cell-index = <0x7>;
+		compatible = "fsl,qman-portal";
+		reg = <0x1c000 0x4000 0x1007000 0x1000>;
+		interrupts = <118 0x2 0 0>;
+		fsl,qman-channel-id = <0x7>;
+	};
+
+	qportal8: qman-portal@20000 {
+		cell-index = <0x8>;
+		compatible = "fsl,qman-portal";
+		reg = <0x20000 0x4000 0x1008000 0x1000>;
+		interrupts = <120 0x2 0 0>;
+		fsl,qman-channel-id = <0x8>;
+	};
+
+	qportal9: qman-portal@24000 {
+		cell-index = <0x9>;
+		compatible = "fsl,qman-portal";
+		reg = <0x24000 0x4000 0x1009000 0x1000>;
+		interrupts = <122 0x2 0 0>;
+		fsl,qman-channel-id = <0x9>;
+	};
+};
+
 &soc {
 	#address-cells = <1>;
 	#size-cells = <1>;
@@ -384,7 +535,7 @@
 /include/ "qoriq-tdm1.0.dtsi"
 /include/ "qoriq-usb2-mph-0.dtsi"
 		usb0: usb@210000 {
-			compatible = "fsl-usb2-mph-v2.4", "fsl-usb2-mph";
+			compatible = "fsl-usb2-mph-v2.5", "fsl-usb2-mph";
 			fsl,iommu-parent = <&pamu0>;
 			fsl,liodn-reg = <&guts 0x520>; /* USB1LIODNR */
 			phy_type = "utmi";
@@ -392,7 +543,7 @@
 		};
 /include/ "qoriq-usb2-dr-0.dtsi"
 		usb1: usb@211000 {
-			compatible = "fsl-usb2-dr-v2.4", "fsl-usb2-dr";
+			compatible = "fsl-usb2-dr-v2.5", "fsl-usb2-dr";
 			fsl,iommu-parent = <&pamu0>;
 			fsl,liodn-reg = <&guts 0x524>; /* USB2LIODNR */
 			dr_mode = "host";
@@ -416,4 +567,61 @@ sata@221000 {
 			fsl,liodn-reg = <&guts 0x554>; /* SATA2LIODNR */
 };
 /include/ "qoriq-sec5.0-0.dtsi"
+/include/ "qoriq-qman1.dtsi"
+/include/ "qoriq-bman1.dtsi"
+/include/ "qoriq-fman3-0.dtsi"
+/include/ "qoriq-fman3-0-1g-0.dtsi"
+/include/ "qoriq-fman3-0-1g-1.dtsi"
+/include/ "qoriq-fman3-0-1g-2.dtsi"
+/include/ "qoriq-fman3-0-1g-3.dtsi"
+/include/ "qoriq-fman3-0-1g-4.dtsi"
+	fman0: fman@400000 {
+		/* tx - 1g - 0 */
+		port@a8000 {
+			fsl,qman-channel-id = <0x802>;
+		};
+		/* tx - 1g - 1 */
+		port@a9000 {
+			fsl,qman-channel-id = <0x803>;
+		};
+		/* tx - 1g - 2 */
+		port@aa000 {
+			fsl,qman-channel-id = <0x804>;
+		};
+		/* tx - 1g - 3 */
+		port@ab000 {
+			fsl,qman-channel-id = <0x805>;
+		};
+		/* tx - 1g - 4 */
+		port@ac000 {
+			fsl,qman-channel-id = <0x806>;
+		};
+		/* offline - 1 */
+		port@82000 {
+			fsl,qman-channel-id = <0x809>;
+		};
+		/* offline - 2 */
+		port@83000 {
+			fsl,qman-channel-id = <0x80a>;
+		};
+		/* offline - 3 */
+		port@84000 {
+			fsl,qman-channel-id = <0x80b>;
+		};
+		/* offline - 4 */
+		port@85000 {
+			fsl,qman-channel-id = <0x80c>;
+		};
+		/* offline - 5 */
+		port@86000 {
+			fsl,qman-channel-id = <0x80d>;
+		};
+		/* offline - 6 */
+		port@87000 {
+			fsl,qman-channel-id = <0x80e>;
+		};
+		mdio@fd000 {
+			status = "disabled";
+		};
+	};
 };
