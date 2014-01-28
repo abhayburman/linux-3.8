@@ -41,13 +41,15 @@ static int __init t104x_rdb_probe(void)
 	unsigned long root = of_get_flat_dt_root();
 
 	if (of_flat_dt_is_compatible(root, "fsl,T1040RDB") ||
-		of_flat_dt_is_compatible(root, "fsl,T1042RDB"))
+		of_flat_dt_is_compatible(root, "fsl,T1042RDB") ||
+		of_flat_dt_is_compatible(root, "fsl,T1042RDB_PI"))
 
 		return 1;
 
 	/* Check if we're running under the Freescale hypervisor */
 	if (of_flat_dt_is_compatible(root, "fsl,T1040RDBv") ||
-		of_flat_dt_is_compatible(root, "fsl,T1042RDB-hv")) {
+		of_flat_dt_is_compatible(root, "fsl,T1042RDB-hv") ||
+		of_flat_dt_is_compatible(root, "fsl,T1042RDB_PI-hv")) {
 		ppc_md.init_IRQ = ehv_pic_init;
 		ppc_md.get_irq = ehv_pic_get_irq;
 		ppc_md.restart = fsl_hv_restart;
