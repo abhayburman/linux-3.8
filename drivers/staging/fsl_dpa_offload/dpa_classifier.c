@@ -1866,6 +1866,7 @@ static int flush_table(struct dpa_cls_table *ptable)
 				kfree(shadow_entry->key.byte);
 				kfree(shadow_entry->key.mask);
 				kfree(shadow_entry);
+				index_entry->shadow_entry = NULL;
 			}
 
 			cc_node_index = index_entry->int_cc_node_index;
@@ -1874,6 +1875,7 @@ static int flush_table(struct dpa_cls_table *ptable)
 			int_cc_node = &ptable->int_cc_node[cc_node_index];
 
 			dpa_classif_hm_release_chain(index_entry->hmd);
+			index_entry->hmd = DPA_OFFLD_DESC_NONE;
 #ifdef DPA_CLASSIFIER_DEBUG
 			dpa_cls_dbg(("DEBUG: dpa_classifier %s (%d): Remove "
 				"entry #%d from table cc_node=0x%p.\n",
