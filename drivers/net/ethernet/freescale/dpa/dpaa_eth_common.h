@@ -37,6 +37,9 @@
 #include <linux/of_platform.h> /* struct platform_device */
 #include <linux/net_tstamp.h>	/* struct hwtstamp_config */
 
+#include "dpaa_eth.h"
+#include "lnxwrp_fsl_fman.h"
+
 #define dpaa_eth_init_port(type, port, param, errq_id, defq_id, buf_layout,\
 			   frag_enabled) \
 { \
@@ -88,7 +91,7 @@ typedef enum dpaa_eth_hook_result (*dpaa_eth_confirm_hook_t)(
 /* used in napi related functions */
 extern u16 qman_portal_max;
 
-/* from dpa-ethtool.c */
+/* from dpa_ethtool.c */
 extern const struct ethtool_ops dpa_ethtool_ops;
 
 #if defined(CONFIG_AS_FASTPATH) || defined(CONFIG_FSL_FMAN_TEST)
