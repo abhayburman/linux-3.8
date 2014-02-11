@@ -1680,7 +1680,7 @@ int fm_mac_disable_1588_time_stamp(struct fm_mac_dev *fm_mac_dev)
 }
 EXPORT_SYMBOL(fm_mac_disable_1588_time_stamp);
 
-int fm_mac_set_rx_ignore_pause_frames(
+int fm_mac_set_rx_pause_frames(
 		struct fm_mac_dev *fm_mac_dev, bool en)
 {
 	int	_errno;
@@ -1695,7 +1695,7 @@ int fm_mac_set_rx_ignore_pause_frames(
 
 	return _errno;
 }
-EXPORT_SYMBOL(fm_mac_set_rx_ignore_pause_frames);
+EXPORT_SYMBOL(fm_mac_set_rx_pause_frames);
 
 int fm_mac_set_tx_pause_frames(struct fm_mac_dev *fm_mac_dev,
 					     bool en)
