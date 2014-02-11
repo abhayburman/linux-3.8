@@ -5689,7 +5689,7 @@ t_Error FM_PORT_EnterDsar(t_Handle h_FmPortRx, t_FmPortDsarParams *params)
             {
                 Mem2IOCpy32(charPointer, UINT_TO_PTR(snmpSrc->p_OidsTbl[i].resValOrPtr), snmpSrc->p_OidsTbl[i].resSize);
                 WRITE_UINT32(snmpOid->resValOrPtr, PTR_TO_UINT(charPointer) - fmMuramVirtBaseAddr);
-                charPointer += len;
+                charPointer += snmpSrc->p_OidsTbl[i].resSize;
             }
             snmpOid++;
         }
