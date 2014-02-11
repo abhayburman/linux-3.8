@@ -277,6 +277,39 @@ static ssize_t show_fm_port_regs(struct device *dev,
 	return n;
 #endif
 }
+static int fm_port_dsar_dump_mem(void *h_dev, char *buf, int nn)
+{
+	t_FmPort *p_FmPort;
+	t_Fm *p_Fm;
+	uint8_t hardwarePortId;
+	uint32_t *param_page;
+	t_ArCommonDesc *ArCommonDescPtr;
+	uint32_t *mem;
+	int i, n = nn;
+
+	p_FmPort = (t_FmPort *)h_dev;
+	hardwarePortId = p_FmPort->hardwarePortId;
+	p_Fm = (t_Fm *)p_FmPort->h_Fm;
+
+	if (!FM_PORT_IsInDsar(p_FmPort))
+	{
+		FM_DMP_LN(buf, n, "port %u is not a DSAR port\n",
+			hardwarePortId);
+		return n;
+	}
+	FM_DMP_LN(buf, n, "port %u DSAR mem\n", hardwarePortId);
+	FM_DMP_LN(buf, n, "========================\n");
+
+	/* do I need request_mem_region here? */
+	param_page = ioremap(p_FmPort->fmMuramPhysBaseAddr + ioread32be(&p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rgpr), 4);
+	ArCommonDescPtr = (t_ArCommonDesc*)(ioremap(p_FmPort->fmMuramPhysBaseAddr + ioread32be(param_page), sizeof(t_ArCommonDesc))); /* this should be changed*/
+	mem = (uint32_t*)ArCommonDescPtr;
+	for (i = 0; i < 100; i+=4)
+		FM_DMP_LN(buf, n, "%08x %08x %08x %08x\n", mem[i], mem[i + 1], mem[i + 2], mem[i + 3]);
+	iounmap(ArCommonDescPtr);
+	iounmap(param_page);
+	return n;
+}
 
 static int fm_port_dsar_dump_regs(void *h_dev, char *buf, int nn)
 {
@@ -299,7 +332,7 @@ static int fm_port_dsar_dump_regs(void *h_dev, char *buf, int nn)
 	}
 	FM_DMP_LN(buf, n, "port %u DSAR information\n", hardwarePortId);
 	FM_DMP_LN(buf, n, "========================\n");
-	
+
 	/* do I need request_mem_region here? */
 	param_page = ioremap(p_FmPort->fmMuramPhysBaseAddr + ioread32be(&p_FmPort->p_FmPortBmiRegs->rxPortBmiRegs.fmbm_rgpr), 4);
 	ArCommonDescPtr = (t_ArCommonDesc*)(ioremap(p_FmPort->fmMuramPhysBaseAddr + ioread32be(param_page), sizeof(t_ArCommonDesc))); /* this should be changed*/
@@ -563,6 +596,44 @@ static int fm_port_dsar_dump_regs(void *h_dev, char *buf, int nn)
 	return n;
 }
 
+static ssize_t show_fm_port_dsar_mem(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	unsigned long flags;
+	unsigned n = 0;
+#if (defined(DEBUG_ERRORS) && (DEBUG_ERRORS > 0))
+	t_LnxWrpFmPortDev *p_LnxWrpFmPortDev =
+		(t_LnxWrpFmPortDev *) dev_get_drvdata(dev);
+#endif
+	if (attr == NULL || buf == NULL || dev == NULL)
+		return -EINVAL;
+
+#if (defined(DEBUG_ERRORS) && (DEBUG_ERRORS > 0))
+	local_irq_save(flags);
+
+	if (!p_LnxWrpFmPortDev->h_Dev) {
+		n = snprintf(buf, PAGE_SIZE, "\tFM Port not configured...\n");
+		return n;
+	} else {
+		n = snprintf(buf, PAGE_SIZE,
+				"FM port driver registers dump.\n");
+		n = fm_port_dsar_dump_mem(p_LnxWrpFmPortDev->h_Dev, buf, n);
+	}
+
+	local_irq_restore(flags);
+
+	return n;
+#else
+
+	local_irq_save(flags);
+	n = snprintf(buf, PAGE_SIZE,
+			"Debug level is too low to dump registers!!!\n");
+	local_irq_restore(flags);
+
+	return n;
+#endif
+}
+
 static ssize_t show_fm_port_dsar_regs(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -728,6 +799,7 @@ static DEVICE_ATTR(fm_port_bmi_regs, 0x644, show_fm_port_bmi_regs, NULL);
 static DEVICE_ATTR(fm_port_ipv4_opt, 0x644, show_fm_port_ipv4_options, NULL);
 #endif
 static DEVICE_ATTR(fm_port_dsar_regs, 0x644, show_fm_port_dsar_regs, NULL);
+static DEVICE_ATTR(fm_port_dsar_mem, 0x644, show_fm_port_dsar_mem, NULL);
 
 int fm_port_sysfs_create(struct device *dev)
 {
@@ -748,6 +820,7 @@ int fm_port_sysfs_create(struct device *dev)
 	p_LnxWrpFmPortDev->dev_attr_ipv4_opt = &dev_attr_fm_port_ipv4_opt;
 #endif
 	p_LnxWrpFmPortDev->dev_attr_dsar_regs = &dev_attr_fm_port_dsar_regs;
+	p_LnxWrpFmPortDev->dev_attr_dsar_mem = &dev_attr_fm_port_dsar_mem;
 	/* Registers dump entry - in future will be moved to debugfs */
 	if (device_create_file(dev, &dev_attr_fm_port_regs) != 0)
 		return -EIO;
@@ -760,6 +833,8 @@ int fm_port_sysfs_create(struct device *dev)
 		return -EIO;
 #endif
 	if (device_create_file(dev, &dev_attr_fm_port_dsar_regs) != 0)
+		return -EIO;
+	if (device_create_file(dev, &dev_attr_fm_port_dsar_mem) != 0)
 		return -EIO;
 		
 	/* FM Ports statistics */
@@ -831,6 +906,8 @@ void fm_port_sysfs_destroy(struct device *dev)
 #if (DPAA_VERSION >= 11)
 	device_remove_file(dev, p_LnxWrpFmPortDev->dev_attr_ipv4_opt);
 #endif
+	device_remove_file(dev, p_LnxWrpFmPortDev->dev_attr_dsar_regs);
+	device_remove_file(dev, p_LnxWrpFmPortDev->dev_attr_dsar_mem);
 }
 
 

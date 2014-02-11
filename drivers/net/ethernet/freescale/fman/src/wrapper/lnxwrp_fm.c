@@ -1361,31 +1361,10 @@ int fm_port_enter_autores_for_deepsleep(struct fm_port *port,
 {
 	t_LnxWrpFmPortDev   *p_LnxWrpFmPortDev = (t_LnxWrpFmPortDev *)port;
 		/*Register other under /proc/autoresponse */
-	struct proc_dir_entry *ar_dir;
-	uint32_t *ar_data;
-	struct proc_dir_entry   *proc_file;
-	uint32_t ret;
     	if (WARN_ON(sizeof(t_FmPortDsarParams) != sizeof(struct auto_res_port_params)))
             return -EFAULT;
 	
 	FM_PORT_EnterDsar(p_LnxWrpFmPortDev->h_Dev, (t_FmPortDsarParams*)params);
-	ar_dir =  proc_mkdir("myar", NULL);
-	if (!ar_dir)
-		return -ENOMEM;
-
-	/*Allocate space to recieve data*/
-	ar_data = kzalloc(sizeof(*ar_data), GFP_KERNEL);
-	if (!ar_data)
-		return -ENOMEM;
-
-	proc_file = create_proc_entry("myar/showmem", 0644, NULL);
-	if (!proc_file) {
-		printk(KERN_CRIT "Cannot create proc entry\n");
-		ret = -EFAULT;
-		return ret;
-	}
-	proc_file->write_proc = ar_showmem;
-	proc_file->data = ar_data;
 	return 0;
 }
 EXPORT_SYMBOL(fm_port_enter_autores_for_deepsleep);
