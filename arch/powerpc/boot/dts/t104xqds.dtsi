@@ -180,7 +180,6 @@
 					reg = <0xa0>;
 					#address-cells = <1>;
 					#size-cells = <0>;
-					status = "disabled";
 
 					phy_s5_01: ethernet-phy@1c {
 						reg = <0x14>;
@@ -201,7 +200,6 @@
 					reg = <0xc0>;
 					#address-cells = <1>;
 					#size-cells = <0>;
-					status = "disabled";
 
 					phy_s6_01: ethernet-phy@1c {
 						reg = <0x18>;
