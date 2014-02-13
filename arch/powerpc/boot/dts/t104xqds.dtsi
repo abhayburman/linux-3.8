@@ -303,7 +303,7 @@
 
 		fman0: fman@400000 {
 			enet0: ethernet@e0000 {
-				fixed-link = <1 1 1000 0 0>;
+				fixed-link = <0 1 1000 0 0>;
 				phy-connection-type = "sgmii";
 			};
 
