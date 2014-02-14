@@ -735,8 +735,8 @@ static int mpic_timer_suspend(void)
 				continue;
 
 			if (!priv->suspended_timerfreq) {
-				pr_warn("Mpic Timer will not be accurate
-					in deep sleep.\n");
+				pr_warn("Mpic Timer will not be accurate");
+				pr_warn("in deep sleep.\n");
 				continue;
 			}
 
