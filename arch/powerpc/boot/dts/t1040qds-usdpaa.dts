@@ -92,12 +92,12 @@
 			fsl,qman-frame-queues-rx = <0x58 1 0x59 1>;
 			fsl,qman-frame-queues-tx = <0x78 1 0x79 1>;
 		};
-		dpa-fman0-oh@1 {
+		dpa-fman0-oh@2 {
 			compatible = "fsl,dpa-oh";
 			/* Define frame queues for the OH port*/
 			/* <OH Rx error, OH Rx default> */
-			fsl,qman-frame-queues-oh = <0x68 1 0x69 1>;
-			fsl,fman-oh-port = <&fman0_oh1>;
+			fsl,qman-frame-queues-oh = <0x90 1 0x91 1>;
+			fsl,fman-oh-port = <&fman0_oh2>;
 		};
 	};
 };
