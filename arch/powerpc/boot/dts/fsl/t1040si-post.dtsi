@@ -555,7 +555,7 @@
 			phy_type = "utmi";
 		};
 
-	display@180000 {
+	display:display@180000 {
 		compatible = "fsl,t1040-diu", "fsl,diu";
 		reg = <0x180000 1000>;
 		interrupts = <74 2 0 0>;
