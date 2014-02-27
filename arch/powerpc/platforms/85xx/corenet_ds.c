@@ -25,6 +25,8 @@
 #include <asm/prom.h>
 #include <asm/udbg.h>
 #include <asm/mpic.h>
+#include <asm/qe.h>
+#include <asm/qe_ic.h>
 
 #include <linux/of_platform.h>
 #include <sysdev/fsl_soc.h>
@@ -46,6 +48,10 @@ void __init corenet_ds_pic_init(void)
 	unsigned int flags = MPIC_BIG_ENDIAN | MPIC_SINGLE_DEST_CPU |
 		MPIC_NO_RESET;
 
+#ifdef CONFIG_QUICC_ENGINE
+	struct device_node *np;
+#endif
+
 	if (ppc_md.get_irq == mpic_get_coreint_irq)
 		flags |= MPIC_ENABLE_COREINT;
 
@@ -53,6 +59,15 @@ void __init corenet_ds_pic_init(void)
 	BUG_ON(mpic == NULL);
 
 	mpic_init(mpic);
+
+#ifdef CONFIG_QUICC_ENGINE
+	np = of_find_compatible_node(NULL, NULL, "fsl,qe-ic");
+	if (np) {
+		qe_ic_init(np, 0, qe_ic_cascade_low_mpic,
+				qe_ic_cascade_high_mpic);
+		of_node_put(np);
+	}
+#endif
 }
 
 /*
@@ -60,6 +75,9 @@ void __init corenet_ds_pic_init(void)
  */
 void __init corenet_ds_setup_arch(void)
 {
+#ifdef CONFIG_QUICC_ENGINE
+	struct device_node *np;
+#endif
 	mpc85xx_smp_init();
 
 #if defined(CONFIG_PCI) && defined(CONFIG_PPC64)
@@ -80,6 +98,16 @@ void __init corenet_ds_setup_arch(void)
 	fsl_rcpm_init();
 
 	pr_info("%s board from Freescale Semiconductor\n", ppc_md.name);
+
+#ifdef CONFIG_QUICC_ENGINE
+	np = of_find_compatible_node(NULL, NULL, "fsl,qe");
+	if (!np) {
+		pr_err("%s: Could not find Quicc Engine node\n", __func__);
+		return;
+	}
+	qe_reset();
+	of_node_put(np);
+#endif
 }
 
 static const struct of_device_id of_device_ids[] = {
@@ -115,6 +143,8 @@ static const struct of_device_id of_device_ids[] = {
 	},
 	{
 		.compatible	= "fsl,qoriq-pcie-v3.0",
+	},
+	{	.compatible	= "fsl,qe",
 	},
 	/* The following two are for the Freescale hypervisor */
 	{
