@@ -522,6 +522,7 @@ typedef _Packed struct t_FmTrbRegs
 *//***************************************************************************/
 /* masks */
 #define FPM_BRKC_RDBG                   0x00000200
+#define FPM_BRKC_SLP                    0x00000800
 /**************************************************************************//**
  @Description       BMI defines
 *//***************************************************************************/
@@ -629,6 +630,7 @@ typedef struct t_FmSp {
     t_FmMapParam    portsMapping[FM_MAX_NUM_OF_PORTS];
 } t_FmSp;
 #endif /* (DPAA_VERSION >= 11) */
+
 
 typedef struct t_Fm
 {
