@@ -147,8 +147,8 @@
 
 #else  /* (DPAA_VERSION < 11) */
 /* Defaults are registers' reset values */
-#define DEFAULT_PORT_rxFifoPriElevationLevel            (256 * KILOBYTE)
-#define DEFAULT_PORT_rxFifoThreshold                    (256 * KILOBYTE)
+#define DEFAULT_PORT_rxFifoPriElevationLevel            MAX_PORT_FIFO_SIZE
+#define DEFAULT_PORT_rxFifoThreshold                    MAX_PORT_FIFO_SIZE
 
 #define DEFAULT_PORT_txFifoMinFillLevel                 0
 #define DEFAULT_PORT_txFifoLowComfLevel                 (5 * KILOBYTE)
@@ -865,7 +865,6 @@ typedef struct t_FmPortDsarVars {
     uint32_t                    fmbm_rcfg;
     bool                        dsarEnabledParser;
 } t_FmPortDsarVars;
-
 typedef struct {
     struct fman_port            port;
     t_Handle                    h_Fm;
