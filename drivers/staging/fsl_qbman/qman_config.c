@@ -772,7 +772,8 @@ static int __bind_irq(void)
 			"interrupts");
 		return -ENODEV;
 	}
-	ret = request_irq(err_irq, qman_isr, IRQF_SHARED, "qman-err", qm_node);
+	ret = request_irq(err_irq, qman_isr, IRQF_SHARED | IRQF_PERCPU,
+			"qman-err", qm_node);
 	if (ret)  {
 		pr_err("request_irq() failed %d for '%s'\n", ret,
 			qm_node->full_name);
