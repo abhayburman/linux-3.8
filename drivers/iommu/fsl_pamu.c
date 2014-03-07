@@ -1420,11 +1420,6 @@ static int iommu_suspend(void)
 		out_be32((u32 *)(p + PAMU_PICS),
 				 val & ~PAMU_ACCESS_VIOLATION_ENABLE);
 
-		/*
-		 * Disable PAMU authorization and transalation.
-		 * PAMU would be enabled once system resumes.
-		 */
-		out_be32((u32 *) (p + PAMU_PC), 0);
 	}
 
 	return 0;
