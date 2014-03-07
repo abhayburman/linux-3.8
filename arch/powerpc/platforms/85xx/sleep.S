@@ -1057,6 +1057,7 @@ deepsleep_start:
 	PPC_STL	r3, 0(r9)
 	PPC_STL	r4, 8(r9)
 	PPC_STL	r5, 16(r9)
+	PPC_STL	r6, 24(r9)
 
 	mflr	r5
 	li	r4, 1
@@ -1067,6 +1068,7 @@ deepsleep_start:
 	PPC_LL	r31, 0(r9)
 	PPC_LL	r30, 8(r9)
 	PPC_LL	r29, 16(r9)
+	PPC_LL	r28, 24(r9)
 
 	/* flush caches */
 	LOAD_REG_ADDR(r3, cur_cpu_spec)
@@ -1125,9 +1127,19 @@ deepsleep_start:
 	add	r16, r31, r16
 	lwz	r10, 0(r16)
 
+/*
+ * There are two kind of register maps, one for CPLD and the other for FPGA
+ */
+#define CPLD_MISCCSR		0x17
+#define CPLD_MISCCSR_SLEEPEN	0x40
 #define QIXIS_PWR_CTL2		0x21
 #define QIXIS_PWR_CTL2_PCTL	0x2
-	addi	r29, r29, QIXIS_PWR_CTL2
+	li	r3, QIXIS_PWR_CTL2
+	PPC_LCMPI  0, r28, FPGA_FLAG
+	beq	20f
+	li	r3, CPLD_MISCCSR
+20:
+	add	r29, r29, r3
 	lbz	r10, 0(r29)
 
 	/* prefecth code */
@@ -1151,7 +1163,12 @@ deepsleep_start:
 	 * the bootloader will clear it when resume
 	 */
 	lbz	r10, 0(r29)
-	ori	r10, r10, QIXIS_PWR_CTL2_PCTL
+	li	r3, QIXIS_PWR_CTL2_PCTL
+	PPC_LCMPI  0, r28, FPGA_FLAG
+	beq	22f
+	li	r3, CPLD_MISCCSR_SLEEPEN
+22:
+	or	r10, r10, r3
 	stb	r10, 0(r29)
 
 	/*

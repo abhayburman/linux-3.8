@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/of_platform.h>
 #include <asm/machdep.h>
+#include <asm/fsl_sleep.h>
 #include <sysdev/fsl_soc.h>
 
 #define SIZE_1MB	0x100000
@@ -33,7 +34,8 @@
 #define DDR_BUF_SIZE	128
 static u8 ddr_buff[DDR_BUF_SIZE] __aligned(64);
 
-static void *dcsr_base, *ccsr_base;
+static void *dcsr_base, *ccsr_base, *pld_base;
+static int pld_flag;
 
 int fsl_dp_iomap(void)
 {
@@ -84,13 +86,33 @@ int fsl_dp_iomap(void)
 		goto dcsr_err;
 	}
 
+	np = of_find_compatible_node(NULL, NULL, "fsl,fpga-qixis");
+	if (np) {
+		pld_flag = FPGA_FLAG;
+	} else {
+		np = of_find_compatible_node(NULL, NULL, "fsl,p104xrdb-cpld");
+		if (np) {
+			pld_flag = CPLD_FLAG;
+		} else {
+			pr_err("%s: Can't find the FPGA/CPLD node\n",
+					__func__);
+
+			ret = -EINVAL;
+			goto pld_err;
+		}
+	}
+	pld_base = of_iomap(np, 0);
+	of_node_put(np);
 	return 0;
 
+pld_err:
+	iounmap(dcsr_base);
 dcsr_err:
 	iounmap(ccsr_base);
 ccsr_err:
 	ccsr_base = NULL;
 	dcsr_base = NULL;
+	pld_base = NULL;
 	return ret;
 }
 
@@ -104,6 +126,11 @@ void fsl_dp_iounmap(void)
 	if (ccsr_base) {
 		iounmap(ccsr_base);
 		ccsr_base = NULL;
+	}
+
+	if (pld_base) {
+		iounmap(pld_base);
+		pld_base = NULL;
 	}
 }
 
@@ -162,7 +189,7 @@ int fsl_enter_epu_deepsleep(void)
 
 	fsl_dp_fsm_setup(dcsr_base);
 
-	fsl_dp_enter_low(ccsr_base, dcsr_base, qixis_base);
+	fsl_dp_enter_low(ccsr_base, dcsr_base, pld_base, pld_flag);
 
 	/* disable Warm Device Reset request */
 	clrbits32(ccsr_base + CCSR_SCFG_DPSLPCR, CCSR_SCFG_DPSLPCR_WDRR_EN);

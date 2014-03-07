@@ -82,6 +82,9 @@
 #define SR_DAC1			0x2c0
 #define FSL_CPU_SR_SIZE		(SR_DAC1 + 0x10)
 
+#define CPLD_FLAG	1
+#define FPGA_FLAG	2
+
 #ifndef __ASSEMBLY__
 
 enum core_save_type {
