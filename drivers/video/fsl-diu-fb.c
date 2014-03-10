@@ -1473,9 +1473,19 @@ static int fsl_diu_suspend(struct platform_device *ofdev, pm_message_t state)
 static int fsl_diu_resume(struct platform_device *ofdev)
 {
 	struct fsl_diu_data *data;
+	struct fb_info *info;
+	struct mfb_info *mfbi;
+	int i;
 
 	data = dev_get_drvdata(&ofdev->dev);
-	enable_lcdc(data->fsl_diu_info);
+	fsl_diu_enable_interrupts(data);
+	update_lcdc(data->fsl_diu_info);
+
+	for (i = 0; i < NUM_AOIS; i++) {
+		mfbi = &data->mfb[i];
+		if (mfbi->count)
+			fsl_diu_enable_panel(&data->fsl_diu_info[i]);
+	}
 
 	return 0;
 }
