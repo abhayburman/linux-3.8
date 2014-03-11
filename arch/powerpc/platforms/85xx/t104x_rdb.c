@@ -33,12 +33,147 @@
 
 #include "corenet_ds.h"
 
+#if defined(CONFIG_FB_FSL_DIU) || defined(CONFIG_FB_FSL_DIU_MODULE)
+/*DIU Pixel ClockCR offset in scfg*/
+#define CCSR_SCFG_PIXCLKCR      0x28
+
+/* DIU Pixel Clock bits of the PIXCLKCR */
+#define PIXCLKCR_PXCKEN		0x80000000
+#define PIXCLKCR_PXCKINV	0x40000000
+#define PIXCLKCR_PXCKDLY	0x0000FF00
+#define PIXCLKCR_PXCLK_MASK	0x00FF0000
+
+/* Some CPLD register definitions */
+#define CPLD_DIUCSR		0x16
+
+#define CPLD_DIUCSR_DVIEN	0x80
+#define CPLD_DIUCSR_BACKLIGHT	0x0f
+
+/**
+ * t104xrdb_set_monitor_port: switch the output to a different monitor port
+ */
+static void t104xrdb_set_monitor_port(enum fsl_diu_monitor_port port)
+{
+	struct device_node *cpld_node;
+	static void __iomem *cpld_base;
+
+	cpld_node = of_find_compatible_node(NULL, NULL, "fsl,t104xrdb-cpld");
+	if (!cpld_node) {
+		pr_err("T104xRDB: missing CPLD node\n");
+		return;
+	}
+
+	cpld_base = of_iomap(cpld_node, 0);
+	if (!cpld_base) {
+		pr_err("T104xRDB: could not map cpld registers\n");
+		goto exit;
+	}
+
+	switch (port) {
+	case FSL_DIU_PORT_DVI:
+		/* Enable the DVI(HDMI) port, disable the DFP and
+		 * the backlight
+		 */
+		clrbits8(cpld_base + CPLD_DIUCSR, CPLD_DIUCSR_DVIEN);
+		break;
+	case FSL_DIU_PORT_LVDS:
+		/*
+		 * LVDS also needs backlight enabled, otherwise the display
+		 * will be blank.
+		 */
+		/* Enable the DFP port, disable the DVI*/
+		setbits8(cpld_base + CPLD_DIUCSR, 0x01 << 8);
+		setbits8(cpld_base + CPLD_DIUCSR, 0x01 << 4);
+		setbits8(cpld_base + CPLD_DIUCSR, CPLD_DIUCSR_BACKLIGHT);
+		break;
+	default:
+		pr_err("T104xRDB: unsupported monitor port %i\n", port);
+	}
+
+exit:
+	of_node_put(cpld_node);
+}
+
+/**
+ * t104xrdb_set_pixel_clock: program the DIU's clock
+ *
+ * @pixclock: the wavelength, in picoseconds, of the clock
+ */
+void t104xrdb_set_pixel_clock(unsigned int pixclock)
+{
+	struct device_node *scfg_np = NULL;
+	void __iomem *scfg;
+	unsigned long freq;
+	u64 temp;
+	u32 pxclk;
+
+	/* Map the global utilities registers. */
+	scfg_np = of_find_compatible_node(NULL, NULL, "fsl,t104x-scfg");
+	if (!scfg_np) {
+		freq = temp;
+		pr_err("T104xRDB: missing supplemental configuration unit device node\n");
+		return;
+	}
+
+	scfg = of_iomap(scfg_np, 0);
+	of_node_put(scfg_np);
+	if (!scfg) {
+		pr_err("T104xRDB: could not map device\n");
+		return;
+	}
+
+	/* Convert pixclock from a wavelength to a frequency */
+	temp = 1000000000000ULL;
+	do_div(temp, pixclock);
+	freq = temp;
+
+	/*
+	 * 'pxclk' is the ratio of the platform clock to the pixel clock.
+	 * This number is programmed into the PIXCLKCR register, and the valid
+	 * range of values is 2-255.
+	 */
+	pxclk = DIV_ROUND_CLOSEST(fsl_get_sys_freq(), freq);
+	pxclk = clamp_t(u32, pxclk, 2, 255);
+
+	/* Disable the pixel clock, and set it to non-inverted and no delay */
+	clrbits32(scfg + CCSR_SCFG_PIXCLKCR,
+		  PIXCLKCR_PXCKEN | PIXCLKCR_PXCKDLY | PIXCLKCR_PXCLK_MASK);
+
+	/* Enable the clock and set the pxclk */
+	setbits32(scfg + CCSR_SCFG_PIXCLKCR, PIXCLKCR_PXCKEN | (pxclk << 16));
+
+	iounmap(scfg);
+}
+
+/**
+ * t104xrdb_valid_monitor_port: set the monitor port for sysfs
+ */
+enum fsl_diu_monitor_port
+t104xrdb_valid_monitor_port(enum fsl_diu_monitor_port port)
+{
+	switch (port) {
+	case FSL_DIU_PORT_DVI:
+	case FSL_DIU_PORT_LVDS:
+		return port;
+	default:
+		return FSL_DIU_PORT_DVI; /* Dual-link LVDS is not supported */
+	}
+}
+
+#endif
+
 /*
  * Called very early, device-tree isn't unflattened
  */
 static int __init t104x_rdb_probe(void)
 {
 	unsigned long root = of_get_flat_dt_root();
+
+#if defined(CONFIG_FB_FSL_DIU) || defined(CONFIG_FB_FSL_DIU_MODULE)
+	diu_ops.set_monitor_port	= t104xrdb_set_monitor_port;
+	diu_ops.set_pixel_clock		= t104xrdb_set_pixel_clock;
+	diu_ops.valid_monitor_port	= t104xrdb_valid_monitor_port;
+#endif
 
 	if (of_flat_dt_is_compatible(root, "fsl,T1040RDB") ||
 		of_flat_dt_is_compatible(root, "fsl,T1042RDB") ||
