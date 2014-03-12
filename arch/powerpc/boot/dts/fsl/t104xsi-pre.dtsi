@@ -46,6 +46,8 @@
 		ccsr = &soc;
 		dcsr = &dcsr;
 
+		dma0 = &dma0;
+		dma1 = &dma1;
 		serial0 = &serial0;
 		serial1 = &serial1;
 		serial2 = &serial2;

@@ -517,6 +517,9 @@
 		reg = <0xfc000 0x1000>;
 	};
 
+/include/ "elo3-dma-0.dtsi"
+/include/ "elo3-dma-1.dtsi"
+
 /include/ "qoriq-espi-0.dtsi"
 	spi@110000 {
 		fsl,espi-num-chipselects = <4>;
