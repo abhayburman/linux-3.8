@@ -611,6 +611,7 @@ static void __cold setup_dtsec(struct mac_device *mac_dev)
 	mac_dev->fm_rtc_set_drift	= fm_rtc_set_drift;
 	mac_dev->fm_rtc_set_alarm	= fm_rtc_set_alarm;
 	mac_dev->fm_rtc_set_fiper	= fm_rtc_set_fiper;
+	mac_dev->set_wol		= fm_mac_set_wol;
 	mac_dev->dump_mac_regs		= dtsec_dump_regs;
 }
 
@@ -627,6 +628,7 @@ static void __cold setup_xgmac(struct mac_device *mac_dev)
 	mac_dev->get_mac_handle	= get_mac_handle;
 	mac_dev->set_tx_pause	= fm_mac_set_tx_pause_frames;
 	mac_dev->set_rx_pause	= fm_mac_set_rx_pause_frames;
+	mac_dev->set_wol	= fm_mac_set_wol;
 	mac_dev->dump_mac_regs	= xgmac_dump_regs;
 }
 
@@ -651,6 +653,7 @@ static void __cold setup_memac(struct mac_device *mac_dev)
 	mac_dev->fm_rtc_set_drift	= fm_rtc_set_drift;
 	mac_dev->fm_rtc_set_alarm	= fm_rtc_set_alarm;
 	mac_dev->fm_rtc_set_fiper	= fm_rtc_set_fiper;
+	mac_dev->set_wol		= fm_mac_set_wol;
 	mac_dev->dump_mac_regs		= memac_dump_regs;
 }
 
