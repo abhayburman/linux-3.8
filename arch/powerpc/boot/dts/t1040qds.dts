@@ -102,8 +102,8 @@
 
 		tdma: ucc@2000 {
 			compatible = "fsl,ucc-tdm";
-			rx-clock-name = "clk3";
-			tx-clock-name = "clk4";
+			rx-clock-name = "clk8";
+			tx-clock-name = "clk9";
 			fsl,rx-sync-clock = "rsync_pin";
 			fsl,tx-sync-clock = "tsync_pin";
 			fsl,tx-timeslot = <0xfffffffe>;
