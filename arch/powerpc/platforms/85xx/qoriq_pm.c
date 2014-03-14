@@ -29,6 +29,22 @@ int sleep_pm_state;
 /* supported sleep modes by the present platform */
 static unsigned int sleep_modes;
 
+void qoriq_enable_wakeup_source(struct device *dev, void *data)
+{
+	u32 value[2];
+	u32 pw_mask;
+
+	if (!device_may_wakeup(dev))
+		return;
+
+	if (of_property_read_u32_array(dev->of_node, "sleep", value, 2))
+		return;
+
+	/* get the second value, it is a mask */
+	pw_mask = value[1];
+	qoriq_pm_ops->set_ip_power(1, pw_mask);
+}
+
 static int qoriq_suspend_enter(suspend_state_t state)
 {
 	int ret = 0;
@@ -76,6 +92,8 @@ static int qoriq_suspend_valid(suspend_state_t state)
 
 static int qoriq_suspend_begin(suspend_state_t state)
 {
+	dpm_for_each_dev(NULL, qoriq_enable_wakeup_source);
+
 	set_pm_suspend_state(state);
 
 	if (state == PM_SUSPEND_MEM)
