@@ -619,6 +619,7 @@ mpc85xx_deep_resume:
 #endif
 
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 #define do_save_gpr_reg(reg, addr) \
 	PPC_STL reg, addr(r10)
 
@@ -1303,3 +1304,4 @@ _GLOBAL(__entry_deep_sleep)
 	blr
 
 #endif /* CONFIG_PPC32 */
+#endif /* CONFIG_T104x_DEEPSLEEP */

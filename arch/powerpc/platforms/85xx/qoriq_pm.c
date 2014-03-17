@@ -48,7 +48,9 @@ void qoriq_enable_wakeup_source(struct device *dev, void *data)
 static int qoriq_suspend_enter(suspend_state_t state)
 {
 	int ret = 0;
+#ifdef CONFIG_T104x_DEEPSLEEP
 	int cpu;
+#endif
 
 	switch (state) {
 	case PM_SUSPEND_STANDBY:
@@ -60,6 +62,7 @@ static int qoriq_suspend_enter(suspend_state_t state)
 
 		break;
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 	case PM_SUSPEND_MEM:
 
 		cpu = smp_processor_id();
@@ -70,6 +73,7 @@ static int qoriq_suspend_enter(suspend_state_t state)
 		qoriq_pm_ops->irq_unmask(cpu);
 
 		break;
+#endif
 
 	default:
 		ret = -EINVAL;
@@ -96,8 +100,10 @@ static int qoriq_suspend_begin(suspend_state_t state)
 
 	set_pm_suspend_state(state);
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 	if (state == PM_SUSPEND_MEM)
 		return fsl_dp_iomap();
+#endif
 
 	return 0;
 }
@@ -106,7 +112,9 @@ static void qoriq_suspend_end(void)
 {
 	set_pm_suspend_state(PM_SUSPEND_ON);
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 	fsl_dp_iounmap();
+#endif
 }
 
 static const struct platform_suspend_ops qoriq_suspend_ops = {
@@ -127,11 +135,13 @@ static int __init qoriq_suspend_init(void)
 	if (np)
 		sleep_pm_state = PLAT_PM_LPM20;
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 	np = of_find_compatible_node(NULL, NULL, "fsl,t1040-rcpm");
 	if (np) {
 		fsl_enter_deepsleep = fsl_enter_epu_deepsleep;
 		sleep_modes |= FSL_DEEP_SLEEP;
 	}
+#endif
 
 	suspend_set_ops(&qoriq_suspend_ops);
 	set_pm_suspend_state(PM_SUSPEND_ON);

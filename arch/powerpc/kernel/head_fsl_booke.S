@@ -113,7 +113,7 @@ _ENTRY(__early_start)
 #include "fsl_booke_entry_mapping.S"
 #undef ENTRY_MAPPING_BOOT_SETUP
 
-#ifdef CONFIG_SUSPEND
+#ifdef CONFIG_T104x_DEEPSLEEP
 	/* if deep_sleep_flag != 0, jump to the deep sleep resume entry */
 	LOAD_REG_ADDR(r4, deep_sleep_flag)
 	lwz	r3, 0(r4)
@@ -301,7 +301,7 @@ _ENTRY(__early_start)
 	lwz	r11, 0(r12);		/* Get Linux PTE */
 #endif
 
-#ifdef CONFIG_SUSPEND
+#ifdef CONFIG_T104x_DEEPSLEEP
 _ENTRY(__entry_deep_sleep)
 /*
  * Bootloader will jump to here when resuming from deep sleep.

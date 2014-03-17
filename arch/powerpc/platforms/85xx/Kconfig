@@ -328,7 +328,7 @@ config T104x_QDS
 	select HAS_FSL_QBMAN
 	select MDIO_BUS_MUX if FSL_DPAA_ETH
 	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
-	select FSL_SLEEP_FSM if SUSPEND
+	select T104x_DEEPSLEEP
 	help
 	  This option enables support for the T04x QDS board
 	  The T104x application development system T104x QDS is a complete
@@ -349,6 +349,7 @@ config T104x_RDB
 	select HAS_FSL_QBMAN
 	select MDIO_BUS_MUX if FSL_DPAA_ETH
 	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
+	select T104x_DEEPSLEEP
 	help
 	  This option enables support for the T04x RDB board
 	  The T104x application development system T104x RDB is a complete
@@ -450,3 +451,8 @@ endif # FSL_SOC_BOOKE
 
 config TQM85xx
 	bool
+
+config T104x_DEEPSLEEP
+	bool
+	depends on SUSPEND
+	select FSL_SLEEP_FSM

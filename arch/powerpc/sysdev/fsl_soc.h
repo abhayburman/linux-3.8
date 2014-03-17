@@ -94,16 +94,20 @@ extern int sleep_pm_state;
 #define PLAT_PM_SLEEP	20
 #define PLAT_PM_LPM20	30
 
+#ifdef CONFIG_T104x_DEEPSLEEP
 extern int fsl_dp_iomap(void);
 extern void fsl_dp_iounmap(void);
 
-extern int fsl_rcpm_init(void);
 extern int fsl_enter_epu_deepsleep(void);
-extern void fsl_dp_enter_low(void *ccsr_base, void *dcsr_base,
-				void *pld_base, int pld_flag);
 extern void __entry_deep_sleep(void);
 
 extern void fsl_dp_fsm_setup(void *dcsr_base);
 extern void fsl_dp_fsm_clean(void *dcsr_base);
+
+extern void fsl_dp_enter_low(void *ccsr_base, void *dcsr_base,
+				void *pld_base, int pld_flag);
+#endif
+
+extern int fsl_rcpm_init(void);
 #endif
 #endif
