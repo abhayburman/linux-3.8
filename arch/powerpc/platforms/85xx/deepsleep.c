@@ -90,7 +90,7 @@ int fsl_dp_iomap(void)
 	if (np) {
 		pld_flag = FPGA_FLAG;
 	} else {
-		np = of_find_compatible_node(NULL, NULL, "fsl,p104xrdb-cpld");
+		np = of_find_compatible_node(NULL, NULL, "fsl,t104xrdb-cpld");
 		if (np) {
 			pld_flag = CPLD_FLAG;
 		} else {
