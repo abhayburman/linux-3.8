@@ -19,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <sysdev/fsl_soc.h>
 
 /**
  * struct cpu_data - per CPU data struct
@@ -122,7 +123,8 @@ static int corenet_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	cpumask_copy(policy->cpus, cpu_core_mask(cpu));
 #endif
 
-	policy->cpuinfo.transition_latency = CPUFREQ_ETERNAL;
+	policy->cpuinfo.transition_latency =
+				(12 * NSEC_PER_SEC) / fsl_get_sys_freq();
 	policy->cur = corenet_cpufreq_get_speed(policy->cpu);
 
 	cpufreq_frequency_table_get_attr(table, cpu);
