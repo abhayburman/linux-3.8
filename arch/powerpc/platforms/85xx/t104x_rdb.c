@@ -108,7 +108,7 @@ void t104xrdb_set_pixel_clock(unsigned int pixclock)
 	u32 pxclk;
 
 	/* Map the global utilities registers. */
-	scfg_np = of_find_compatible_node(NULL, NULL, "fsl,t104x-scfg");
+	scfg_np = of_find_compatible_node(NULL, NULL, "fsl,t1040-scfg");
 	if (!scfg_np) {
 		freq = temp;
 		pr_err("T104xRDB: missing supplemental configuration unit device node\n");
