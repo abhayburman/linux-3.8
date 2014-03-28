@@ -49,7 +49,7 @@ struct dpa_oh_config_s {
 	uint32_t		default_fqid;
 	struct fm_port		*oh_port;
 	uint32_t		egress_cnt;
-	struct dpa_fq		*egress_fqs;
+	struct qman_fq		*egress_fqs;
 	uint16_t		channel;
 
 	struct list_head fqs_ingress_list;

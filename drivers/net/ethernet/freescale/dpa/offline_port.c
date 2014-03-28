@@ -637,7 +637,7 @@ oh_port_probe(struct platform_device *_of_dev)
 	/* Allocate TX queues */
 	dev_dbg(dpa_oh_dev, "Allocating %d queues for TX...\n", crt_fq_count);
 	oh_config->egress_fqs = devm_kzalloc(dpa_oh_dev,
-		crt_fq_count * sizeof(struct dpa_fq), GFP_KERNEL);
+		crt_fq_count * sizeof(struct qman_fq), GFP_KERNEL);
 	if (oh_config->egress_fqs == NULL) {
 		dev_err(dpa_oh_dev,
 			"Can't allocate private data for TX queues for OH node %s referenced from node %s!\n",
@@ -648,7 +648,7 @@ oh_port_probe(struct platform_device *_of_dev)
 
 	/* Create TX queues */
 	for (i = 0; i < crt_fq_count; i++) {
-		ret = oh_fq_create(&oh_config->egress_fqs[i].fq_base,
+		ret = oh_fq_create(oh_config->egress_fqs + i,
 			crt_fqid_base + i, *channel_id, 3);
 		if (ret != 0) {
 			dev_err(dpa_oh_dev,
@@ -813,7 +813,7 @@ static int __cold oh_port_remove(struct platform_device *_of_dev)
 
 	if (oh_config->egress_fqs)
 		for (i = 0; i < oh_config->egress_cnt; i++)
-			oh_fq_destroy(&oh_config->egress_fqs[i].fq_base);
+			oh_fq_destroy(oh_config->egress_fqs + i);
 
 	if (oh_config->oh_port == NULL) {
 		pr_err(KBUILD_MODNAME
