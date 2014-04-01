@@ -109,6 +109,12 @@
 		};
 
 		i2c@118000 {
+			rtc@68 {
+				compatible = "dallas,ds1339";
+				reg = <0x68>;
+				interrupts = <0x1 0x1 0 0>;
+			};
+
 			pca9547@77 {
 				compatible = "nxp,pca9547";
 				reg = <0x77>;
@@ -128,12 +134,6 @@
 					eeprom@51 {
 						compatible = "at24,24c02";
 						reg = <0x51>;
-					};
-
-					rtc@68 {
-						compatible = "dallas,ds3232";
-						reg = <0x68>;
-						interrupts = <0x1 0x1 0 0>;
 					};
 				};
 
