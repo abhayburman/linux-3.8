@@ -318,12 +318,6 @@ static int __cpuinit smp_85xx_kick_cpu(int nr)
 		out_be32(&spin_table->addr_l, 0);
 		flush_spin_table(spin_table);
 
-#ifdef CONFIG_PPC_E500MC
-		/* Due to an erratum, wake the core before reset. */
-		if (qoriq_pm_ops->cpu_exit_state)
-			qoriq_pm_ops->cpu_exit_state(nr, qoriq_cpu_die_state);
-#endif
-
 		/*
 		 * We don't set the BPTR register here since it already points
 		 * to the boot page properly.
