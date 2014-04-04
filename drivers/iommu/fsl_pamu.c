@@ -46,6 +46,9 @@ static struct pamu_info {
 	unsigned int count;		/* The number of PAMUs */
 } pamu_info_data;
 
+/* Pointer to the device configuration space*/
+static struct ccsr_guts __iomem *guts_regs;
+
 static struct paace *ppaact;
 static struct paace *spaact;
 static struct ome *omt;
@@ -110,6 +113,34 @@ static struct paace *pamu_get_ppaace(int liodn)
 	}
 
 	return &ppaact[liodn];
+}
+
+/**
+ * set_dcfg_liodn() - set the device LIODN in DCFG
+ * @np: device tree node pointer
+ * @liodn: liodn value to program
+ *
+ * Returns 0 upon success else error code < 0 returned
+ */
+static int set_dcfg_liodn(struct device_node *np, int liodn)
+{
+	const __be32 *prop;
+	u32 liodn_reg_offset;
+	int len;
+	void __iomem *dcfg_region = (void *)guts_regs;
+
+	if (!dcfg_region)
+		return -ENODEV;
+
+	prop = of_get_property(np, "fsl,liodn-reg", &len);
+	if (!prop || len != 8)
+		return -EINVAL;
+
+	liodn_reg_offset = be32_to_cpup(&prop[1]);
+
+	out_be32((u32 *)(dcfg_region + liodn_reg_offset), liodn);
+
+	return 0;
 }
 
 /**
@@ -1194,7 +1225,6 @@ static const struct {
 static int __init fsl_pamu_probe(struct platform_device *pdev)
 {
 	void __iomem *pamu_regs = NULL;
-	struct ccsr_guts __iomem *guts_regs = NULL;
 	u32 pamubypenr, pamu_counter;
 	unsigned long pamu_reg_off;
 	void __iomem *pamu_reg_base;
@@ -1348,8 +1378,6 @@ static int __init fsl_pamu_probe(struct platform_device *pdev)
 	/* Enable all relevant PAMU(s) */
 	out_be32(&guts_regs->pamubypenr, pamubypenr);
 
-	iounmap(guts_regs);
-
 	/* Enable DMA for the LIODNs in the device tree*/
 
 	setup_liodns();
@@ -1402,18 +1430,42 @@ static int iommu_suspend(void)
 	return 0;
 }
 
+static void restore_dcfg_liodns(void)
+{
+	struct device_node *node;
+	const __be32 *prop;
+	int ret, liodn;
+
+	for_each_node_with_property(node, "fsl,liodn-reg") {
+		prop = of_get_property(node, "fsl,liodn", 0);
+		if (!prop)
+			continue;
+		liodn = be32_to_cpup(prop);
+		ret = set_dcfg_liodn(node, liodn);
+		if (ret)
+			pr_debug("LIODN restore failed for %s\n",
+					node->full_name);
+	}
+}
+
 static void iommu_resume(void)
 {
 	int i;
+	u32 pamubypenr, pamu_counter;
 
-	for (i = 0; i < pamu_info_data.count; i++) {
+	restore_dcfg_liodns();
+	pamubypenr = in_be32(&guts_regs->pamubypenr);
+	for (i = 0, pamu_counter = 0x80000000; i < pamu_info_data.count;
+		 i++, pamu_counter >>= 1) {
 		void __iomem *p;
 
 		p = pamu_info_data.pamu_reg_base + i * PAMU_OFFSET;
 		/* setup PAMU tables for authorization and translation */
 		setup_one_pamu(p, virt_to_phys(ppaact), virt_to_phys(spaact),
 				virt_to_phys(omt));
+		pamubypenr &= ~pamu_counter;
 	}
+	out_be32(&guts_regs->pamubypenr, pamubypenr);
 }
 
 static struct syscore_ops iommu_syscore_ops = {
