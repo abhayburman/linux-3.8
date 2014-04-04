@@ -28,12 +28,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include "bman_private.h"
 #ifdef CONFIG_HOTPLUG_CPU
 #include <linux/cpu.h>
 #endif
-
 /*
  * Global variables of the max portal/pool number this bman version supported
  */
@@ -186,6 +184,10 @@ static struct bm_portal_config * __init parse_pcfg(struct device_node *node)
 				pcfg->addr_phys[DPA_PORTAL_CI].start,
 				resource_size(&pcfg->addr_phys[DPA_PORTAL_CI]),
 				_PAGE_GUARDED | _PAGE_NO_CACHE);
+
+	/* disable bp depletion */
+	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + 0x200);
+	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + 0x204);
 	return pcfg;
 err:
 	kfree(pcfg);
