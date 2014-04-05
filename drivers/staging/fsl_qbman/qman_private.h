@@ -182,6 +182,8 @@ struct qm_portal_config {
 	struct list_head list;
 	/* User-visible portal configuration settings */
 	struct qman_portal_config public_cfg;
+	/* power management saved data */
+	u32 saved_isdr;
 };
 
 /* Revision info (for errata and feature handling) */
@@ -393,3 +395,9 @@ int qman_ceetm_get_xsfdr(enum qm_dc_portal portal, unsigned int *num);
 extern void *affine_portals[NR_CPUS];
 const struct qm_portal_config *qman_get_qm_portal_config(
 						struct qman_portal *portal);
+
+/* power management */
+#ifdef CONFIG_SUSPEND
+void suspend_unused_qportal(void);
+void resume_unused_qportal(void);
+#endif

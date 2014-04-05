@@ -1185,17 +1185,15 @@ MODULE_DEVICE_TABLE(of, of_fsl_qman_ids);
 
 #ifdef CONFIG_PM
 
-/* static u32 saved_isdr; */
-
+static u32 saved_isdr;
 static int qman_pm_suspend_noirq(struct device *dev)
 {
-#if 0
+	suspend_unused_qportal();
 	/* save isdr, disable all, clear isr */
 	saved_isdr = qm_err_isr_disable_read(qm);
 	qm_err_isr_disable_write(qm, 0xffffffff);
 	qm_err_isr_status_clear(qm, 0xffffffff);
 	/* should be idle, otherwise abort ? */
-#endif
 #ifdef CONFIG_PM_DEBUG
 	pr_info("Qman suspend code, IDLE_STAT = 0x%x\n", qm_in(IDLE_STAT));
 #endif
@@ -1205,9 +1203,8 @@ static int qman_pm_suspend_noirq(struct device *dev)
 static int qman_pm_resume_noirq(struct device *dev)
 {
 	/* restore isdr */
-#if 0
 	qm_err_isr_disable_write(qm, saved_isdr);
-#endif
+	resume_unused_qportal();
 	return 0;
 }
 #else

@@ -204,7 +204,6 @@ static int _bman_portal_suspend_noirq(struct device *dev)
 #ifdef CONFIG_PM_DEBUG
 	struct platform_device *pdev = to_platform_device(dev);
 #endif
-
 	p->save_isdr = bm_isr_disable_read(&p->p);
 	bm_isr_disable_write(&p->p, 0xffffffff);
 	bm_isr_status_clear(&p->p, 0xffffffff);

@@ -679,19 +679,17 @@ static struct of_device_id of_fsl_bman_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, of_fsl_bman_ids);
 
-#ifdef CONFIG_PM
-
-/* static u32 saved_isdr; */
+#ifdef CONFIG_SUSPEND
+static u32 saved_isdr;
 
 static int bman_pm_suspend_noirq(struct device *dev)
 {
-#if 0
+	suspend_unused_bportal();
 	/* save isdr, disable all, clear isr */
 	saved_isdr = bm_err_isr_disable_read(bm);
 	bm_err_isr_disable_write(bm, 0xffffffff);
 	bm_err_isr_status_clear(bm, 0xffffffff);
 	/* should be idle, otherwise abort ? */
-#endif
 #ifdef CONFIG_PM_DEBUG
 	pr_info("Bman suspend code, IDLE_STAT = 0x%x\n", bm_in(STATE_IDLE));
 #endif
@@ -701,9 +699,8 @@ static int bman_pm_suspend_noirq(struct device *dev)
 static int bman_pm_resume_noirq(struct device *dev)
 {
 	/* restore isdr */
-#if 0
 	bm_err_isr_disable_write(bm, saved_isdr);
-#endif
+	resume_unused_bportal();
 	return 0;
 }
 #else
