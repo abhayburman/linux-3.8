@@ -49,10 +49,10 @@
 
 static struct ucc_tdm_info utdm_primary_info = {
 	.uf_info = {
-		.tsa = 1,
-		.cdp = 1,
+		.tsa = 0,
+		.cdp = 0,
 		.cds = 1,
-		.ctsp = 1,
+		.ctsp = 0,
 		.ctss = 1,
 		.revd = 0,
 		.urfs = 256,
@@ -66,7 +66,8 @@ static struct ucc_tdm_info utdm_primary_info = {
 		.tenc = UCC_FAST_TX_ENCODING_NRZ,
 		.renc = UCC_FAST_RX_ENCODING_NRZ,
 		.tcrc = UCC_FAST_16_BIT_CRC,
-		.synl = UCC_FAST_SYNC_LEN_NOT_USED,
+		.synl = UCC_FAST_SYNC_LEN_AUTOMATIC,
+		.diag = UCC_FAST_DIAGNOSTIC_LOCAL_LOOP_BACK,
 	},
 
 	.si_info = {

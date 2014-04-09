@@ -156,6 +156,7 @@ struct ucc_fast_info {
 	enum ucc_fast_rx_decoding_method renc;
 	enum ucc_fast_transparent_tcrc tcrc;
 	enum ucc_fast_sync_len synl;
+	enum ucc_fast_diag_mode diag;
 };
 
 struct ucc_fast_private {

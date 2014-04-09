@@ -264,6 +264,8 @@ int ucc_fast_init(struct ucc_fast_info * uf_info, struct ucc_fast_private ** ucc
 	gumr |= uf_info->tenc;
 	gumr |= uf_info->tcrc;
 	gumr |= uf_info->mode;
+	gumr |= uf_info->diag;
+
 	out_be32(&uf_regs->gumr, gumr);
 
 	/* Allocate memory for Tx Virtual Fifo */
