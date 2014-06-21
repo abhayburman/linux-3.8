@@ -27,6 +27,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/list.h>
 #include "lm75.h"
 
 
@@ -140,6 +141,107 @@ static const struct attribute_group lm75_group = {
 	.attrs = lm75_attributes,
 };
 
+static LIST_HEAD(lm75_client_list);
+static struct mutex     list_lock;
+
+struct lm75_client_node {
+    struct i2c_client *client;
+    struct list_head list;
+};
+
+static void lm75_add_client_node(struct i2c_client *client)
+{
+    struct lm75_client_node *node = kzalloc(sizeof(struct lm75_client_node), GFP_KERNEL);
+	
+    if (!node) {
+	    dev_dbg(&client->dev, "Can't allocate lm75_client_node (0x%x)\n", client->addr);
+        return;
+    }
+	
+    node->client = client;
+	
+	mutex_lock(&list_lock);
+    list_add(&node->list, &lm75_client_list);
+	mutex_unlock(&list_lock);
+}
+
+static void lm75_remove_client_node(struct i2c_client *client)
+{
+    struct list_head        *list_node = NULL;
+    struct lm75_client_node *lm75_node = NULL;
+    int found = 0;
+
+    mutex_lock(&list_lock);
+	
+    list_for_each(list_node, &lm75_client_list)
+    {
+        lm75_node = list_entry(list_node, struct lm75_client_node, list);
+        
+        if (lm75_node->client == client) {
+            found = 1;
+            break;
+        }
+    }
+    
+    if (found) {
+        list_del(list_node);
+        kfree(lm75_node);
+    }
+	
+	mutex_unlock(&list_lock);
+}
+
+int lm75_read_reg_value(unsigned short lm75_addr, u8 reg, int *value)
+{
+    struct list_head   *list_node = NULL;
+    struct lm75_client_node *lm75_node = NULL;
+	int ret = -EINVAL;
+    
+    /* make sure the register is valid */
+    if (reg > 0x3)
+        return -EINVAL;
+
+	mutex_lock(&list_lock);
+		
+    list_for_each(list_node, &lm75_client_list)
+    {
+        lm75_node = list_entry(list_node, struct lm75_client_node, list);
+        
+        if (lm75_node->client->addr == lm75_addr) {
+            int i;
+            struct lm75_data *data = lm75_update_device(&lm75_node->client->dev);
+            
+	    if (IS_ERR(data)) {
+	        ret = -EIO;
+	       break;
+     	    }
+
+            for (i = 0; i < ARRAY_SIZE(LM75_REG_TEMP); i++) {
+                if (LM75_REG_TEMP[i] == reg)
+                    break;
+            }
+            
+            if (i == ARRAY_SIZE(LM75_REG_TEMP)) {
+				ret = -EINVAL;
+				break;
+            }
+            
+			if (!data->valid) {
+				ret = -EIO;
+				break;
+			}
+            
+            *value = LM75_TEMP_FROM_REG(data->temp[i]);
+			ret = 0;
+			break;
+        }
+    }
+	
+	mutex_unlock(&list_lock);
+
+	return ret;
+}
+
 /*-----------------------------------------------------------------------*/
 
 /* device probe and removal */
@@ -197,6 +299,8 @@ lm75_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	dev_info(&client->dev, "%s: sensor '%s'\n",
 		 dev_name(data->hwmon_dev), client->name);
 
+	lm75_add_client_node(client);
+
 	return 0;
 
 exit_remove:
@@ -211,6 +315,9 @@ static int lm75_remove(struct i2c_client *client)
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &lm75_group);
 	lm75_write_value(client, LM75_REG_CONF, data->orig_conf);
+			 
+	lm75_remove_client_node(client);
+
 	return 0;
 }
 
@@ -435,8 +542,24 @@ abort:
 	return ret;
 }
 
-module_i2c_driver(lm75_driver);
+/*-----------------------------------------------------------------------*/
+
+/* module glue */
+
+static int __init sensors_lm75_init(void)
+{
+    mutex_init(&list_lock);
+	return i2c_add_driver(&lm75_driver);
+}
+
+static void __exit sensors_lm75_exit(void)
+{
+	i2c_del_driver(&lm75_driver);
+}
 
 MODULE_AUTHOR("Frodo Looijaard <frodol@dds.nl>");
 MODULE_DESCRIPTION("LM75 driver");
 MODULE_LICENSE("GPL");
+
+module_init(sensors_lm75_init);
+module_exit(sensors_lm75_exit);
