@@ -48,8 +48,8 @@
  * The new code replaces the old recursive symlink resolution with
  * an iterative one (in case of non-nested symlink chains).  It does
  * this with calls to <fs>_follow_link().
- * As a side effect, dir_namei(), _namei() and follow_link() are now 
- * replaced with a single function lookup_dentry() that can handle all 
+ * As a side effect, dir_namei(), _namei() and follow_link() are now
+ * replaced with a single function lookup_dentry() that can handle all
  * the special cases of the former code.
  *
  * With the new dcache, the pathname is stored at each inode, at least as
@@ -402,6 +402,7 @@ int __inode_permission(struct inode *inode, int mask)
 
 	return security_inode_permission(inode, mask);
 }
+EXPORT_SYMBOL(__inode_permission);
 
 /**
  * sb_permission - Check superblock-level permissions
@@ -1758,7 +1759,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 {
 	struct path next;
 	int err;
-	
+
 	while (*name=='/')
 		name++;
 	if (!*name)
@@ -1824,7 +1825,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		}
 		if (can_lookup(nd->inode))
 			continue;
-		err = -ENOTDIR; 
+		err = -ENOTDIR;
 		break;
 		/* here ends the main loop */
 
@@ -2876,9 +2877,12 @@ finish_open_created:
 	error = may_open(&nd->path, acc_mode, open_flag);
 	if (error)
 		goto out;
-	file->f_path.mnt = nd->path.mnt;
-	error = finish_open(file, nd->path.dentry, NULL, opened);
-	if (error) {
+
+	BUG_ON(*opened & FILE_OPENED); /* once it's opened, it's opened */
+	error = vfs_open(&nd->path, file, current_cred());
+	if (!error) {
+		*opened |= FILE_OPENED;
+	} else {
 		if (error == -EOPENSTALE)
 			goto stale_open;
 		goto out;
@@ -3800,7 +3804,7 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (old_dentry->d_inode == new_dentry->d_inode)
  		return 0;
- 
+
 	error = may_delete(old_dir, old_dentry, is_dir);
 	if (error)
 		return error;

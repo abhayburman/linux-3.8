@@ -47,3 +47,5 @@ static inline int LM75_TEMP_FROM_REG(u16 reg)
 	   guarantee arithmetic shift and preserve the sign */
 	return ((s16)reg / 128) * 500;
 }
+
+int lm75_read_reg_value(unsigned short lm75_addr, u8 reg, int *value);
