@@ -1440,6 +1440,36 @@ config SENSORS_MC13783_ADC
         help
           Support for the A/D converter on MC13783 and MC13892 PMIC.
 
+config SENSORS_G657_S40
+	tristate "Etasis G657_S40 Redundant Power Module"
+	depends on I2C
+	help
+	  If you say yes here you get support for Etasis EFRP-G657-S40
+	  Redundant Power Module.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called g657_s40.
+	  
+config SENSORS_ACCTON_AS5700_96x_CPLD
+	tristate "Accton as5700 96x cpld"
+	depends on I2C && AS5700_96X
+	help
+	  If you say yes here you get support for Accton as5700 96x cpld.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called accton_as5700_96x_cpld.
+
+
+config SENSORS_ACCTON_AS5700_96x_FANCTL
+	tristate "Accton as5700 96x fan control"
+	depends on SENSORS_ACCTON_AS5700_96x_CPLD
+	help
+	  If you say yes here, support for automatic fan speed control
+	  will be included in the driver.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called accton_as5700_96x_fanctl.
+
 if ACPI
 
 comment "ACPI drivers"

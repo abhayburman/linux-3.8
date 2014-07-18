@@ -132,6 +132,9 @@ obj-$(CONFIG_SENSORS_W83L785TS)	+= w83l785ts.o
 obj-$(CONFIG_SENSORS_W83L786NG)	+= w83l786ng.o
 obj-$(CONFIG_SENSORS_WM831X)	+= wm831x-hwmon.o
 obj-$(CONFIG_SENSORS_WM8350)	+= wm8350-hwmon.o
+obj-$(CONFIG_SENSORS_G657_S40)  += g657_s40.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5700_96x_CPLD) += accton_as5700_96x_cpld.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5700_96x_FANCTL) += accton_as5700_96x_fanctl.o
 
 obj-$(CONFIG_PMBUS)		+= pmbus/
 
