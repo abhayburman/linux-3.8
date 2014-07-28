@@ -217,9 +217,9 @@ static void setup_pci_atmu(struct pci_controller *hose)
 	     fsl_svr_older_than(2, 1)) {
 		if (of_device_is_compatible(hose->dn, "fsl,mpc8540-pci")) {
 			/* disable OWMSV and ORMSV error capture */
-			setbits32(&pci->pcier.pecdr, OWMSV | ORMSV);
+			setbits32(&pci->pex_err_cap_dr, OWMSV | ORMSV);
 			/* disable OWMSV and ORMSV error reporting */
-			clrbits32(&pci->pcier.peer, OWMSV | ORMSV);
+			clrbits32(&pci->pex_err_en, OWMSV | ORMSV);
 		}
 	}
 
@@ -1206,4 +1206,16 @@ static int __init fsl_pci_init(void)
 	return platform_driver_register(&fsl_pci_driver);
 }
 arch_initcall(fsl_pci_init);
+
+static int __init fsl_pci_err_en(void)
+{
+    struct device_node *np;
+
+    for_each_node_by_type(np, "pci")
+        if (of_match_node(pci_ids, np))
+            mpc85xx_pci_err_en(np);
+
+    return 0;
+}
+device_initcall(fsl_pci_err_en);
 #endif
