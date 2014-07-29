@@ -47,9 +47,6 @@
 #define	OPCODE_CHIP_ERASE	0xc7	/* Erase whole flash chip */
 #define	OPCODE_SE		0xd8	/* Sector erase (usually 64KiB) */
 #define	OPCODE_RDID		0x9f	/* Read JEDEC ID */
-#define OPCODE_RDFSR		0x70	/* Read Flag Status Register */
-#define OPCODE_RSTEN		0x66	/* Reset Enable */
-#define OPCODE_RSTMEM		0x99	/* Reset Memory */
 
 /* Used for SST flashes only. */
 #define	OPCODE_BP		0x02	/* Byte program */
@@ -72,9 +69,6 @@
 #define	SR_BP2			0x10	/* Block protect 2 */
 #define	SR_SRWD			0x80	/* SR write protect */
 
-/* Flag Status Register bits. */
-#define FSR_RDY			0x80	/* Ready/Busy program erase controller */
-
 /* Define max times to check status register before we give up. */
 #define	MAX_READY_WAIT_JIFFIES	(40 * HZ)	/* M25P16 specs 40s max chip erase */
 #define	MAX_CMD_SIZE		5
@@ -89,7 +83,6 @@ struct m25p {
 	struct mtd_info		mtd;
 	u16			page_size;
 	u16			addr_width;
-        bool			check_fsr;
 	u8			erase_opcode;
 	u8			*command;
 	bool			fast_read;
@@ -105,28 +98,6 @@ static inline struct m25p *mtd_to_m25p(struct mtd_info *mtd)
 /*
  * Internal helper functions
  */
-
-/*
- * Read the Flag Status Register (required for some Micron chips).
- * Return the Flag Status Register value.
- * Returns negative if error occurred.
- */
-static int read_fsr(struct m25p *flash)
-{
-	ssize_t retval;
-	u8 code = OPCODE_RDFSR;
-	u8 val;
-
-	retval = spi_write_then_read(flash->spi, &code, 1, &val, 1);
-
-	if (retval < 0) {
-		dev_err(&flash->spi->dev, "error %d reading FSR\n",
-				(int) retval);
-		return retval;
-	}
-
-	return val;
-}
 
 /*
  * Read the status register, returning its value in the location
@@ -188,19 +159,11 @@ static inline int write_disable(struct m25p *flash)
  */
 static inline int set_4byte(struct m25p *flash, u32 jedec_id, int enable)
 {
-	int status;
-
 	switch (JEDEC_MFR(jedec_id)) {
 	case CFI_MFR_MACRONIX:
 	case 0xEF /* winbond */:
 		flash->command[0] = enable ? OPCODE_EN4B : OPCODE_EX4B;
 		return spi_write(flash->spi, flash->command, 1);
-	case CFI_MFR_ST:
-		flash->command[0] = enable ? OPCODE_EN4B : OPCODE_EX4B;
-		write_enable(flash);
-		status = spi_write(flash->spi, flash->command, 1);
-		write_disable(flash);
-		return status;
 	default:
 		/* Spansion style */
 		flash->command[0] = OPCODE_BRWR;
@@ -216,21 +179,15 @@ static inline int set_4byte(struct m25p *flash, u32 jedec_id, int enable)
 static int wait_till_ready(struct m25p *flash)
 {
 	unsigned long deadline;
-	int sr, fsr;
+	int sr;
 
 	deadline = jiffies + MAX_READY_WAIT_JIFFIES;
 
 	do {
 		if ((sr = read_sr(flash)) < 0)
 			break;
-		else if (!(sr & SR_WIP)) {
-			if (flash->check_fsr) {
-				fsr = read_fsr(flash);
-				if (!(fsr & FSR_RDY))
-					return 1;
-			}
+		else if (!(sr & SR_WIP))
 			return 0;
-		}
 
 		cond_resched();
 
@@ -634,7 +591,6 @@ struct flash_info {
 	u16		flags;
 #define	SECT_4K		0x01		/* OPCODE_BE_4K works uniformly */
 #define	M25P_NO_ERASE	0x02		/* No erase command needed */
-#define	E_FSR		0x08		/* Flag SR exists for flash */
 };
 
 #define INFO(_jedec_id, _ext_id, _sector_size, _n_sectors, _flags)	\
@@ -708,7 +664,6 @@ static const struct spi_device_id m25p_ids[] = {
 	{ "n25q128a11",  INFO(0x20bb18, 0, 64 * 1024, 256, 0) },
 	{ "n25q128a13",  INFO(0x20ba18, 0, 64 * 1024, 256, 0) },
 	{ "n25q256a", INFO(0x20ba19, 0, 64 * 1024, 512, SECT_4K) },
-	{ "n25q512a13", INFO(0x20ba20,  0, 64 * 1024, 1024, E_FSR) },
 
 	/* Spansion -- single (large) sector size only, at least
 	 * for the chips listed here (without boot sectors).
@@ -962,9 +917,6 @@ static int m25p_probe(struct spi_device *spi)
 	if (info->flags & M25P_NO_ERASE)
 		flash->mtd.flags |= MTD_NO_ERASE;
 
-        if (info->flags & E_FSR)
-		flash->check_fsr = 1;
-
 	ppdata.of_node = spi->dev.of_node;
 	flash->mtd.dev.parent = &spi->dev;
 	flash->page_size = info->page_size;
@@ -1035,33 +987,6 @@ static int m25p_remove(struct spi_device *spi)
 	return 0;
 }
 
-static void m25p_shutdown(struct spi_device *spi)
-{
-	struct m25p *flash		= dev_get_drvdata(&spi->dev);
-	const struct spi_device_id *id	= spi_get_device_id(spi);
-	struct flash_info *info		= (void *)id->driver_data;
-	ssize_t retval;
-	u8 code;
-
-	code = OPCODE_RSTEN;
-	retval = spi_write_then_read(spi, &code, 1, NULL, 0);
-
-	if (retval < 0) {
-		dev_err(&spi->dev, "error %d Reset Enable\n",
-				(int) retval);
-	}
-
-	code = OPCODE_RSTMEM;
-	retval = spi_write_then_read(spi, &code, 1, NULL, 0);
-
-	if (retval < 0) {
-		dev_err(&spi->dev, "error %d Reset Memory\n",
-				(int) retval);
-	}
-
-	while (wait_till_ready(flash));
-}
-
 
 static struct spi_driver m25p80_driver = {
 	.driver = {
@@ -1071,7 +996,6 @@ static struct spi_driver m25p80_driver = {
 	.id_table	= m25p_ids,
 	.probe	= m25p_probe,
 	.remove	= m25p_remove,
-	.shutdown = m25p_shutdown,
 
 	/* REVISIT: many of these chips have deep power-down modes, which
 	 * should clearly be entered on suspend() to minimize power use.

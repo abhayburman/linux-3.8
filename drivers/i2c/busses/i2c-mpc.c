@@ -20,7 +20,6 @@
 #include <linux/of_platform.h>
 #include <linux/of_i2c.h>
 #include <linux/slab.h>
-
 #include <linux/io.h>
 #include <linux/fsl_devices.h>
 #include <linux/i2c.h>
@@ -36,6 +35,8 @@
 #define MPC_I2C_CLOCK_PRESERVE (~0U)
 
 #define MPC_I2C_FDR   0x04
+//#define MPC_I2C_FDR   0x15
+
 #define MPC_I2C_CR    0x08
 #define MPC_I2C_SR    0x0c
 #define MPC_I2C_DR    0x10
@@ -259,6 +260,8 @@ static void mpc_i2c_setup_52xx(struct device_node *node,
 	if (ret >= 0)
 		dev_info(i2c->dev, "clock %u Hz (fdr=%d)\n", i2c->real_clk,
 			 fdr);
+
+        printk("clock %u Hz (fdr=%d)\n", i2c->real_clk, fdr);
 }
 #else /* !(CONFIG_PPC_MPC52xx || CONFIG_PPC_MPC512x) */
 static void mpc_i2c_setup_52xx(struct device_node *node,

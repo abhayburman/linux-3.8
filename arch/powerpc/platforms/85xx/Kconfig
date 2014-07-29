@@ -246,8 +246,22 @@ config AS5700_96X
 	help
 	  This option enables support for the Accton AS5700_96X board
 
+config AS6710_32X
+	bool "Accton AS6710_32X"
+	select DEFAULT_UIMAGE
+	select PPC_E500MC
+	select PHYS_64BIT
+	select SWIOTLB
+	select ARCH_REQUIRE_GPIOLIB
+	select GPIO_MPC8XXX
+	select HAS_RAPIDIO
+	select PPC_EPAPR_HV_PIC
+        select HAS_FSL_QBMAN
+	help
+	  This option enables support for the Accton AS6710_32X board
+
 config AS5710_96X
-	bool "Accton AS5700_96X"
+	bool "Accton AS5710_96X"
 	select DEFAULT_UIMAGE
 	select PPC_E500MC
 	select PHYS_64BIT
@@ -259,34 +273,6 @@ config AS5710_96X
         select HAS_FSL_QBMAN
 	help
 	  This option enables support for the Accton AS5710_96X board
-
-config AS5710_54X
-	bool "Accton AS5710_54X"
-	select DEFAULT_UIMAGE
-	select PPC_E500MC
-	select PHYS_64BIT
-	select SWIOTLB
-	select ARCH_REQUIRE_GPIOLIB
-	select GPIO_MPC8XXX
-	select HAS_RAPIDIO
-	select PPC_EPAPR_HV_PIC
-        select HAS_FSL_QBMAN
-	help
-	  This option enables support for the Accton AS5710_54X board
-
-config AS6700_32X
-	bool "Accton AS6700_32X"
-	select DEFAULT_UIMAGE
-	select PPC_E500MC
-	select PHYS_64BIT
-	select SWIOTLB
-	select ARCH_REQUIRE_GPIOLIB
-	select GPIO_MPC8XXX
-	select HAS_RAPIDIO
-	select PPC_EPAPR_HV_PIC
-        select HAS_FSL_QBMAN
-	help
-	  This option enables support for the Accton AS6700_32X board
 
 config P2041_RDB
 	bool "Freescale P2041 RDB"

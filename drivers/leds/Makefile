@@ -52,6 +52,7 @@ obj-$(CONFIG_LEDS_MAX8997)		+= leds-max8997.o
 obj-$(CONFIG_LEDS_LM355x)		+= leds-lm355x.o
 obj-$(CONFIG_LEDS_BLINKM)		+= leds-blinkm.o
 obj-$(CONFIG_LEDS_ACCTON_AS5700_96x_LED) += leds-accton_as5700_96x_led.o
+obj-$(CONFIG_LEDS_ACCTON_AS6710_32x) += leds-accton_as6710_32x.o
 
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_DAC124S085)		+= leds-dac124s085.o

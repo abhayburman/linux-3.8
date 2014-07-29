@@ -299,6 +299,7 @@ struct phy_device {
 
 	struct phy_c45_device_ids c45_ids;
 	bool is_c45;
+	bool is_internal;
 
 	enum phy_state state;
 
@@ -532,6 +533,15 @@ static inline int phy_write_mmd(struct phy_device *phydev, int devad, u32 regnum
 	regnum = MII_ADDR_C45 | ((devad & 0x1f) << 16) | (regnum & 0xffff);
 
 	return mdiobus_write(phydev->bus, phydev->addr, regnum, val);
+}
+
+/*
+ * phy_is_internal - Convenience function for testing if a PHY is internal
+ * @phydev: the phy_device struct
+ */
+static inline bool phy_is_internal(struct phy_device *phydev)
+{
+	return phydev->is_internal;
 }
 
 struct phy_device *phy_device_create(struct mii_bus *bus, int addr, int phy_id,

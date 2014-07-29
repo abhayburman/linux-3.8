@@ -458,6 +458,13 @@ config LEDS_ACCTON_AS5700_96x_LED
 	  This option enables support for the LEDs on the Accton as5700 96x.
 	  Say Y to enable LEDs on the Accton as5700 96x.
 	  
+config LEDS_ACCTON_AS6710_32x
+	tristate "LED support for the Accton as6710 32x"
+	depends on LEDS_CLASS && SENSORS_ACCTON_I2C_CPLD
+	help
+	  This option enables support for the LEDs on the Accton as6710 32x.
+	  Say Y to enable LEDs on the Accton as6710 32x.
+	  
 config LEDS_BLINKM
 	tristate "LED support for the BlinkM I2C RGB LED"
 	depends on LEDS_CLASS

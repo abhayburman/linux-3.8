@@ -719,6 +719,9 @@ int genphy_setup_forced(struct phy_device *phydev)
 	if (DUPLEX_FULL == phydev->duplex)
 		ctl |= BMCR_FULLDPLX;
 	
+	if (phydev->is_internal == true)
+		ctl |= BMCR_LOOPBACK;
+
 	err = phy_write(phydev, MII_BMCR, ctl);
 
 	return err;
@@ -830,7 +833,7 @@ int genphy_update_link(struct phy_device *phydev)
 		return status;
 
 	if ((status & BMSR_LSTATUS) == 0)
-		phydev->link = 0;
+		phydev->link = (phydev->is_internal == true) ? 1 : 0; /* Remap link status to 1 for PHY internal loopback mode. */
 	else
 		phydev->link = 1;
 

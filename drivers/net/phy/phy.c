@@ -271,9 +271,15 @@ int phy_ethtool_sset(struct phy_device *phydev, struct ethtool_cmd *cmd)
 	phydev->advertising = cmd->advertising;
 
 	if (AUTONEG_ENABLE == cmd->autoneg)
+	{
 		phydev->advertising |= ADVERTISED_Autoneg;
+		phydev->is_internal = false;
+	}
 	else
+	{
 		phydev->advertising &= ~ADVERTISED_Autoneg;
+		phydev->is_internal = (cmd->transceiver == XCVR_INTERNAL) ? true : false;
+	}
 
 	phydev->duplex = cmd->duplex;
 
@@ -294,7 +300,7 @@ int phy_ethtool_gset(struct phy_device *phydev, struct ethtool_cmd *cmd)
 	cmd->duplex = phydev->duplex;
 	cmd->port = PORT_MII;
 	cmd->phy_address = phydev->addr;
-	cmd->transceiver = XCVR_EXTERNAL;
+	cmd->transceiver = phy_is_internal(phydev) ? XCVR_INTERNAL : XCVR_EXTERNAL;
 	cmd->autoneg = phydev->autoneg;
 
 	return 0;

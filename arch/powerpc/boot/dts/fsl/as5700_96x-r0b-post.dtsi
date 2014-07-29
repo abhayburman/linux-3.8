@@ -420,39 +420,22 @@
 	rman: rman@1e0000 {
 		fsl,qman-channels-id = <0x62 0x63>;
 	};
-/*
 /include/ "qoriq-usb2-mph-0.dtsi"
-*/
-    usb0: usb@210000 {
-        reg = <0x210000 0x1000>;
-        #address-cells = <1>;
-        #size-cells = <0>;
-        interrupts = <44 0x2 0 0>;
-
-        /*compatible = "fsl-usb2-mph-v1.6", "fsl,mpc85xx-usb2-mph", "fsl-usb2-mph";*/
-        compatible = "fsl-usb2-dr-v1.6", "fsl,mpc85xx-usb2-dr", "fsl-usb2-dr";
-        phy_type = "utmi";
-        fsl,iommu-parent = <&pamu1>;
-        fsl,liodn-reg = <&guts 0x520>; /* USB1LIODNR */
-        /*port0;*/
-        dr_mode = "host";
-    };
-
-/*
+	usb0: usb@210000 {
+		compatible = "fsl-usb2-mph-v1.6", "fsl,mpc85xx-usb2-mph", "fsl-usb2-mph";
+		phy_type = "utmi";
+		fsl,iommu-parent = <&pamu1>;
+		fsl,liodn-reg = <&guts 0x520>; /* USB1LIODNR */
+		port0;
+	};
 /include/ "qoriq-usb2-dr-0.dtsi"
-*/
-    usb1: usb@211000 {
-        reg = <0x211000 0x1000>;
-        #address-cells = <1>;
-        #size-cells = <0>;
-        interrupts = <45 0x2 0 0>;
-
-        compatible = "fsl-usb2-dr-v1.6", "fsl,mpc85xx-usb2-dr", "fsl-usb2-dr";
-        fsl,iommu-parent = <&pamu1>;
-        fsl,liodn-reg = <&guts 0x524>; /* USB2LIODNR */
-        dr_mode = "host";
-        phy_type = "utmi";
-    };
+	usb1: usb@211000 {
+		compatible = "fsl-usb2-dr-v1.6", "fsl,mpc85xx-usb2-dr", "fsl-usb2-dr";
+		fsl,iommu-parent = <&pamu1>;
+		fsl,liodn-reg = <&guts 0x524>; /* USB2LIODNR */
+		dr_mode = "host";
+		phy_type = "utmi";
+	};
 
 /*
 /include/ "qoriq-sata2-0.dtsi"
