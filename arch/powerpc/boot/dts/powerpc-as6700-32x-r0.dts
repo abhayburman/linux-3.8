@@ -42,10 +42,8 @@
 	interrupt-parent = <&mpic>;
 
 	aliases {
-        ethernet0 = &enet0;
-        ethernet2 = &enet2;
-        ethernet3 = &enet3;
-		phy_sgmii_2 = &phy_sgmii_2;
+        ethernet0 = &enet3;
+        ethernet1 = &enet2;
         phy_sgmii_1e = &phy_sgmii_1e;
         phy_sgmii_1 = &phy_sgmii_1;
 	};
@@ -102,17 +100,20 @@
                 };
                 partition@diag {
                     label = "diag";
-                    reg = <0x00930000 0x01600000>;
+                    reg = <0x00930000 0x02000000>;
                 };
                 partition@reserved {
                     label = "reserved";
-                    reg = <0x01f30000 0x020d0000>;
+                    reg = <0x02930000 0x016d0000>;
                 };
             };
         };
 
 		i2c@118000 {
-
+			rtc@68 {
+				compatible = "dallas,ds1672";
+				reg = <0x68>;
+			};
 		};
 
 		i2c@118100 {
@@ -149,7 +150,7 @@
 				reg = <0x35>;
 			};
 		};
-		
+
 		i2c@119000 {
 
 		};
@@ -211,20 +212,14 @@
 		};
 
 		fman0: fman@400000 {
-			enet0: ethernet@e0000 {
-				tbi-handle = <&tbi0>;
-				phy-handle = <&phy_sgmii_2>;
-				phy-connection-type = "sgmii";
-			};
-
 			mdio0: mdio@e1120 {
-				tbi0: tbi-phy@8 {
-					reg = <0x8>;
-					device_type = "tbi-phy";
-				};
-				phy_sgmii_2: ethernet-phy@2 {
-					reg = <0x2>;
-				};
+
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "fsl,fman-mdio";
+				reg = <0xe1120 0xee0>;
+				interrupts = <100 1 0 0>;
+
                                 phy_sgmii_1e: ethernet-phy@1e {
                                         reg = <0x1e>;
                                 };
@@ -258,7 +253,6 @@
                                device_type = "tbi-phy";
                            };
                        };
-
 		};
 	};
 
@@ -277,6 +271,7 @@
 	lbc: localbus@ffe124000 {
 
 		reg = <0xf 0xfe124000 0 0x1000>;
+/*
 		ranges = <0 0 0xf 0xec000000 0x04000000>;
 
         flash@0,0 {
@@ -287,6 +282,7 @@
             bank-width = <2>;
             device-width = <2>;
         };
+*/
 	};
 
 	pci0: pcie@ffe200000 {
@@ -355,15 +351,11 @@
 
 		ethernet@0 {
 			compatible = "fsl,p2041-dpa-ethernet", "fsl,dpa-ethernet";
-            fsl,fman-mac = <&enet0>;
-		};
-        ethernet@2 {
-			compatible = "fsl,p2041-dpa-ethernet", "fsl,dpa-ethernet";
-            fsl,fman-mac = <&enet2>;
-        };
-        ethernet@3 {
-            compatible = "fsl,p2041-dpa-ethernet", "fsl,dpa-ethernet";
             fsl,fman-mac = <&enet3>;
+        };
+        ethernet@1 {
+            compatible = "fsl,p2041-dpa-ethernet", "fsl,dpa-ethernet";
+            fsl,fman-mac = <&enet2>;
 		};
 	};
 };
