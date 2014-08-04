@@ -135,6 +135,15 @@ obj-$(CONFIG_SENSORS_WM8350)	+= wm8350-hwmon.o
 obj-$(CONFIG_SENSORS_G657_S40)  += g657_s40.o
 obj-$(CONFIG_SENSORS_ACCTON_AS5700_96x_CPLD) += accton_as5700_96x_cpld.o
 obj-$(CONFIG_SENSORS_ACCTON_AS5700_96x_FANCTL) += accton_as5700_96x_fanctl.o
+obj-$(CONFIG_SENSORS_CPR_4011_4MXX) += cpr_4011_4mxx.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5710_48x_CPLD)   += accton_as5710_48x_cpld.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5710_48x_FANCTL) += accton_as5710_48x_fanctl.o
+obj-$(CONFIG_SENSORS_ACCTON_I2C_CPLD)          += accton_i2c_cpld.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5710_54x_PSU)    += accton_as5710_54x_psu.o
+obj-$(CONFIG_SENSORS_ACCTON_AS6700_32x_PSU)    += accton_as6700_32x_psu.o
+obj-$(CONFIG_SENSORS_ACCTON_AS5710_54x_FAN)    += accton_as5710_54x_fan.o
+obj-$(CONFIG_SENSORS_ACCTON_AS6700_32x_FAN)    += accton_as6700_32x_fan.o
+obj-$(CONFIG_SENSORS_MAX6697) += max6697.o
 
 obj-$(CONFIG_PMBUS)		+= pmbus/
 
